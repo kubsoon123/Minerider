@@ -6,9 +6,7 @@
 
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
-#![allow(clippy::all, unused_parens, unused_variables)]
-pub type String = std::string::String;
-
+#![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PacketDisconnect {
     pub reason: super::types::String,
@@ -151,25 +149,6 @@ impl crate::traits::Decode for PacketLoginPluginRequest {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PacketCommonCookieRequest {
-    pub cookie: super::types::String,
-}
-
-impl crate::traits::Encode for PacketCommonCookieRequest {
-    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
-        crate::traits::Encode::encode(&self.cookie, out)?;
-        Ok(())
-    }
-}
-
-impl crate::traits::Decode for PacketCommonCookieRequest {
-    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
-        let cookie = <super::types::String as crate::traits::Decode>::decode(input)?;
-        Ok(Self { cookie })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct PacketLoginStart {
     pub username: super::types::String,
     pub player_uuid: u128,
@@ -213,30 +192,6 @@ impl crate::traits::Decode for PacketLoginPluginResponse {
         let message_id = input.get_varint()?;
         let data = { if input.get_bool()? { Some({ let bytes = input.rest().to_vec(); input.skip_all(); bytes }) } else { None } };
         Ok(Self { message_id, data })
-    }
-}
-
-pub type ByteArray = Vec<u8>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PacketCommonCookieResponse {
-    pub key: super::types::String,
-    pub value: Option<super::types::ByteArray>,
-}
-
-impl crate::traits::Encode for PacketCommonCookieResponse {
-    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
-        crate::traits::Encode::encode(&self.key, out)?;
-        crate::traits::Encode::encode(&self.value, out)?;
-        Ok(())
-    }
-}
-
-impl crate::traits::Decode for PacketCommonCookieResponse {
-    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
-        let key = <super::types::String as crate::traits::Decode>::decode(input)?;
-        let value = <Option<super::types::ByteArray> as crate::traits::Decode>::decode(input)?;
-        Ok(Self { key, value })
     }
 }
 

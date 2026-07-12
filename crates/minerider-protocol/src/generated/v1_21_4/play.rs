@@ -6,5 +6,10023 @@
 
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
-#![allow(clippy::all, unused_parens, unused_variables)]
-// generated in next milestone
+#![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSpawnEntity {
+    pub entity_id: i32,
+    pub object_uuid: u128,
+    pub r#type: i32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub pitch: i8,
+    pub yaw: i8,
+    pub head_pitch: i8,
+    pub object_data: i32,
+    pub velocity: super::types::Vec3i16,
+}
+
+impl crate::traits::Encode for PacketSpawnEntity {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.object_uuid, out)?;
+        out.put_varint(self.r#type);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.head_pitch, out)?;
+        out.put_varint(self.object_data);
+        crate::traits::Encode::encode(&self.velocity, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSpawnEntity {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let object_uuid = <u128 as crate::traits::Decode>::decode(input)?;
+        let r#type = input.get_varint()?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let pitch = <i8 as crate::traits::Decode>::decode(input)?;
+        let yaw = <i8 as crate::traits::Decode>::decode(input)?;
+        let head_pitch = <i8 as crate::traits::Decode>::decode(input)?;
+        let object_data = input.get_varint()?;
+        let velocity = <super::types::Vec3i16 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, object_uuid, r#type, x, y, z, pitch, yaw, head_pitch, object_data, velocity })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSpawnEntityExperienceOrb {
+    pub entity_id: i32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub count: i16,
+}
+
+impl crate::traits::Encode for PacketSpawnEntityExperienceOrb {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.count, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSpawnEntityExperienceOrb {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let count = <i16 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, x, y, z, count })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAnimation {
+    pub entity_id: i32,
+    pub animation: u8,
+}
+
+impl crate::traits::Encode for PacketAnimation {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.animation, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAnimation {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let animation = <u8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, animation })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketStatisticsEntriesItem {
+    pub category_id: i32,
+    pub statistic_id: i32,
+    pub value: i32,
+}
+
+impl crate::traits::Encode for PacketStatisticsEntriesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.category_id);
+        out.put_varint(self.statistic_id);
+        out.put_varint(self.value);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketStatisticsEntriesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let category_id = input.get_varint()?;
+        let statistic_id = input.get_varint()?;
+        let value = input.get_varint()?;
+        Ok(Self { category_id, statistic_id, value })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketStatistics {
+    pub entries: Vec<PacketStatisticsEntriesItem>,
+}
+
+impl crate::traits::Encode for PacketStatistics {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.entries, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketStatistics {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entries = <Vec<PacketStatisticsEntriesItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entries })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAcknowledgePlayerDigging {
+    pub sequence_id: i32,
+}
+
+impl crate::traits::Encode for PacketAcknowledgePlayerDigging {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.sequence_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAcknowledgePlayerDigging {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let sequence_id = input.get_varint()?;
+        Ok(Self { sequence_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketBlockBreakAnimation {
+    pub entity_id: i32,
+    pub location: super::types::Position,
+    pub destroy_stage: i8,
+}
+
+impl crate::traits::Encode for PacketBlockBreakAnimation {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.destroy_stage, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketBlockBreakAnimation {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let destroy_stage = <i8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, location, destroy_stage })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTileEntityData {
+    pub location: super::types::Position,
+    pub action: i32,
+    pub nbt_data: Option<crate::nbt::Nbt>,
+}
+
+impl crate::traits::Encode for PacketTileEntityData {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        out.put_varint(self.action);
+        crate::nbt::write_optional(out, (self.nbt_data).as_ref())?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTileEntityData {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let action = input.get_varint()?;
+        let nbt_data = crate::nbt::read_optional(input)?;
+        Ok(Self { location, action, nbt_data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketBlockAction {
+    pub location: super::types::Position,
+    pub byte1: u8,
+    pub byte2: u8,
+    pub block_id: i32,
+}
+
+impl crate::traits::Encode for PacketBlockAction {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.byte1, out)?;
+        crate::traits::Encode::encode(&self.byte2, out)?;
+        out.put_varint(self.block_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketBlockAction {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let byte1 = <u8 as crate::traits::Decode>::decode(input)?;
+        let byte2 = <u8 as crate::traits::Decode>::decode(input)?;
+        let block_id = input.get_varint()?;
+        Ok(Self { location, byte1, byte2, block_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketBlockChange {
+    pub location: super::types::Position,
+    pub r#type: i32,
+}
+
+impl crate::traits::Encode for PacketBlockChange {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        out.put_varint(self.r#type);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketBlockChange {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let r#type = input.get_varint()?;
+        Ok(Self { location, r#type })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketBossBarTitle {
+    V0(crate::nbt::Nbt),
+    V3(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketBossBarTitle {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V3(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketBossBarTitle {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            3 => Ok(Self::V3(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketBossBarHealth {
+    V0(f32),
+    V2(f32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketBossBarHealth {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketBossBarHealth {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<f32 as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<f32 as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketBossBarColor {
+    V0(i32),
+    V4(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketBossBarColor {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                out.put_varint(*v);
+            }
+            Self::V4(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketBossBarColor {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(input.get_varint()?)),
+            4 => Ok(Self::V4(input.get_varint()?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketBossBarDividers {
+    V0(i32),
+    V4(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketBossBarDividers {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                out.put_varint(*v);
+            }
+            Self::V4(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketBossBarDividers {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(input.get_varint()?)),
+            4 => Ok(Self::V4(input.get_varint()?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketBossBarFlags {
+    V0(u8),
+    V5(u8),
+    Default,
+}
+
+impl crate::traits::Encode for PacketBossBarFlags {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V5(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketBossBarFlags {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<u8 as crate::traits::Decode>::decode(input)?)),
+            5 => Ok(Self::V5(<u8 as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketBossBar {
+    pub entity_uuid: u128,
+    pub action: i32,
+    pub title: PacketBossBarTitle,
+    pub health: PacketBossBarHealth,
+    pub color: PacketBossBarColor,
+    pub dividers: PacketBossBarDividers,
+    pub flags: PacketBossBarFlags,
+}
+
+impl crate::traits::Encode for PacketBossBar {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.entity_uuid, out)?;
+        out.put_varint(self.action);
+        match (self.action, &self.title) {
+            (0, PacketBossBarTitle::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (3, PacketBossBarTitle::V3(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (3, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `title` does not match its discriminant".into())); }
+            (_, PacketBossBarTitle::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `title` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.health) {
+            (0, PacketBossBarHealth::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketBossBarHealth::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `health` does not match its discriminant".into())); }
+            (_, PacketBossBarHealth::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `health` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.color) {
+            (0, PacketBossBarColor::V0(v)) => {
+                out.put_varint(*v);
+            }
+            (4, PacketBossBarColor::V4(v)) => {
+                out.put_varint(*v);
+            }
+            (0, _) | (4, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `color` does not match its discriminant".into())); }
+            (_, PacketBossBarColor::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `color` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.dividers) {
+            (0, PacketBossBarDividers::V0(v)) => {
+                out.put_varint(*v);
+            }
+            (4, PacketBossBarDividers::V4(v)) => {
+                out.put_varint(*v);
+            }
+            (0, _) | (4, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `dividers` does not match its discriminant".into())); }
+            (_, PacketBossBarDividers::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `dividers` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.flags) {
+            (0, PacketBossBarFlags::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (5, PacketBossBarFlags::V5(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (5, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `flags` does not match its discriminant".into())); }
+            (_, PacketBossBarFlags::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketBossBar: field `flags` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketBossBar {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_uuid = <u128 as crate::traits::Decode>::decode(input)?;
+        let action = input.get_varint()?;
+        let title = PacketBossBarTitle::decode_from(input, action)?;
+        let health = PacketBossBarHealth::decode_from(input, action)?;
+        let color = PacketBossBarColor::decode_from(input, action)?;
+        let dividers = PacketBossBarDividers::decode_from(input, action)?;
+        let flags = PacketBossBarFlags::decode_from(input, action)?;
+        Ok(Self { entity_uuid, action, title, health, color, dividers, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDifficulty {
+    pub difficulty: u8,
+    pub difficulty_locked: bool,
+}
+
+impl crate::traits::Encode for PacketDifficulty {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.difficulty, out)?;
+        crate::traits::Encode::encode(&self.difficulty_locked, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDifficulty {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let difficulty = <u8 as crate::traits::Decode>::decode(input)?;
+        let difficulty_locked = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { difficulty, difficulty_locked })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChunkBatchFinished {
+    pub batch_size: i32,
+}
+
+impl crate::traits::Encode for PacketChunkBatchFinished {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.batch_size);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChunkBatchFinished {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let batch_size = input.get_varint()?;
+        Ok(Self { batch_size })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChunkBiomesBiomesItem {
+    pub position: super::types::PackedChunkPos,
+    pub data: super::types::ByteArray,
+}
+
+impl crate::traits::Encode for PacketChunkBiomesBiomesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.position, out)?;
+        crate::traits::Encode::encode(&self.data, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChunkBiomesBiomesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let position = <super::types::PackedChunkPos as crate::traits::Decode>::decode(input)?;
+        let data = <super::types::ByteArray as crate::traits::Decode>::decode(input)?;
+        Ok(Self { position, data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChunkBiomes {
+    pub biomes: Vec<PacketChunkBiomesBiomesItem>,
+}
+
+impl crate::traits::Encode for PacketChunkBiomes {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.biomes, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChunkBiomes {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let biomes = <Vec<PacketChunkBiomesBiomesItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { biomes })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketClearTitles {
+    pub reset: bool,
+}
+
+impl crate::traits::Encode for PacketClearTitles {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.reset, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketClearTitles {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let reset = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { reset })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTabCompleteMatchesItem {
+    pub r#match: super::types::String,
+    pub tooltip: Option<crate::nbt::Nbt>,
+}
+
+impl crate::traits::Encode for PacketTabCompleteMatchesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.r#match, out)?;
+        crate::traits::Encode::encode(&self.tooltip, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTabCompleteMatchesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let r#match = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let tooltip = <Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { r#match, tooltip })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTabComplete {
+    pub transaction_id: i32,
+    pub start: i32,
+    pub length: i32,
+    pub matches: Vec<PacketTabCompleteMatchesItem>,
+}
+
+impl crate::traits::Encode for PacketTabComplete {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.transaction_id);
+        out.put_varint(self.start);
+        out.put_varint(self.length);
+        crate::traits::Encode::encode(&self.matches, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTabComplete {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let transaction_id = input.get_varint()?;
+        let start = input.get_varint()?;
+        let length = input.get_varint()?;
+        let matches = <Vec<PacketTabCompleteMatchesItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { transaction_id, start, length, matches })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDeclareCommands {
+    pub nodes: Vec<super::types::CommandNode>,
+    pub root_index: i32,
+}
+
+impl crate::traits::Encode for PacketDeclareCommands {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.nodes, out)?;
+        out.put_varint(self.root_index);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDeclareCommands {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let nodes = <Vec<super::types::CommandNode> as crate::traits::Decode>::decode(input)?;
+        let root_index = input.get_varint()?;
+        Ok(Self { nodes, root_index })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCloseWindow {
+    pub window_id: i32,
+}
+
+impl crate::traits::Encode for PacketCloseWindow {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCloseWindow {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        Ok(Self { window_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWindowItems {
+    pub window_id: i32,
+    pub state_id: i32,
+    pub items: Vec<super::types::Slot>,
+    pub carried_item: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketWindowItems {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.state_id);
+        crate::traits::Encode::encode(&self.items, out)?;
+        crate::traits::Encode::encode(&self.carried_item, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWindowItems {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let state_id = input.get_varint()?;
+        let items = <Vec<super::types::Slot> as crate::traits::Decode>::decode(input)?;
+        let carried_item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, state_id, items, carried_item })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCraftProgressBar {
+    pub window_id: i32,
+    pub property: i16,
+    pub value: i16,
+}
+
+impl crate::traits::Encode for PacketCraftProgressBar {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        crate::traits::Encode::encode(&self.property, out)?;
+        crate::traits::Encode::encode(&self.value, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCraftProgressBar {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let property = <i16 as crate::traits::Decode>::decode(input)?;
+        let value = <i16 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, property, value })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetSlot {
+    pub window_id: i32,
+    pub state_id: i32,
+    pub slot: i16,
+    pub item: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketSetSlot {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.state_id);
+        crate::traits::Encode::encode(&self.slot, out)?;
+        crate::traits::Encode::encode(&self.item, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetSlot {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let state_id = input.get_varint()?;
+        let slot = <i16 as crate::traits::Decode>::decode(input)?;
+        let item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, state_id, slot, item })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetCooldown {
+    pub cooldown_group: super::types::String,
+    pub cooldown_ticks: i32,
+}
+
+impl crate::traits::Encode for PacketSetCooldown {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.cooldown_group, out)?;
+        out.put_varint(self.cooldown_ticks);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetCooldown {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let cooldown_group = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let cooldown_ticks = input.get_varint()?;
+        Ok(Self { cooldown_group, cooldown_ticks })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChatSuggestions {
+    pub action: i32,
+    pub entries: Vec<super::types::String>,
+}
+
+impl crate::traits::Encode for PacketChatSuggestions {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.action);
+        crate::traits::Encode::encode(&self.entries, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChatSuggestions {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let action = input.get_varint()?;
+        let entries = <Vec<super::types::String> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { action, entries })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCustomPayload {
+    pub channel: super::types::String,
+    pub data: Vec<u8>,
+}
+
+impl crate::traits::Encode for PacketCustomPayload {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.channel, out)?;
+        out.put_bytes(&self.data);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCustomPayload {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let channel = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let data = { let bytes = input.rest().to_vec(); input.skip_all(); bytes };
+        Ok(Self { channel, data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDamageEvent {
+    pub entity_id: i32,
+    pub source_type_id: i32,
+    pub source_cause_id: i32,
+    pub source_direct_id: i32,
+    pub source_position: Option<super::types::Vec3f64>,
+}
+
+impl crate::traits::Encode for PacketDamageEvent {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        out.put_varint(self.source_type_id);
+        out.put_varint(self.source_cause_id);
+        out.put_varint(self.source_direct_id);
+        crate::traits::Encode::encode(&self.source_position, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDamageEvent {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let source_type_id = input.get_varint()?;
+        let source_cause_id = input.get_varint()?;
+        let source_direct_id = input.get_varint()?;
+        let source_position = <Option<super::types::Vec3f64> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, source_type_id, source_cause_id, source_direct_id, source_position })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDebugSample {
+    pub sample: Vec<i64>,
+    pub r#type: i32,
+}
+
+impl crate::traits::Encode for PacketDebugSample {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint((self.sample).len() as i32);
+        for item in &self.sample {
+        out.put_i64(*item);
+        }
+        out.put_varint(self.r#type);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDebugSample {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let sample = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let r#type = input.get_varint()?;
+        Ok(Self { sample, r#type })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketHideMessageSignature {
+    V0(Vec<u8>),
+    Default,
+}
+
+impl crate::traits::Encode for PacketHideMessageSignature {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                if (*v).len() != 256 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_hide_message`.signature: expected exactly 256 bytes"))); }
+                out.put_bytes(&*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketHideMessageSignature {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(input.read_bytes(256)?.to_vec())),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketHideMessage {
+    pub id: i32,
+    pub signature: PacketHideMessageSignature,
+}
+
+impl crate::traits::Encode for PacketHideMessage {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.id);
+        match (self.id, &self.signature) {
+            (0, PacketHideMessageSignature::V0(v)) => {
+                if (*v).len() != 256 { return Err(crate::error::ProtocolError::InvalidData(format!("PacketHideMessage: field `signature` does not match its discriminant: expected exactly 256 bytes"))); }
+                out.put_bytes(&*v);
+            }
+            (0, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketHideMessage: field `signature` does not match its discriminant".into())); }
+            (_, PacketHideMessageSignature::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketHideMessage: field `signature` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketHideMessage {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = input.get_varint()?;
+        let signature = PacketHideMessageSignature::decode_from(input, id)?;
+        Ok(Self { id, signature })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketKickDisconnect {
+    pub reason: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketKickDisconnect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.reason, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketKickDisconnect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let reason = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { reason })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatTypeParameterType {
+    Content,
+    Sender,
+    Target,
+}
+
+impl crate::traits::Encode for ChatTypeParameterType {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::Content => out.put_varint(0),
+            Self::Sender => out.put_varint(1),
+            Self::Target => out.put_varint(2),
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for ChatTypeParameterType {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let value = input.get_varint()?;
+        match value {
+            0 => Ok(Self::Content),
+            1 => Ok(Self::Sender),
+            2 => Ok(Self::Target),
+            _ => Err(crate::error::ProtocolError::UnknownEnumValue { type_name: "ChatTypeParameterType", value: i64::from(value) }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatType {
+    pub translation_key: super::types::String,
+    pub parameters: Vec<ChatTypeParameterType>,
+    pub style: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for ChatType {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.translation_key, out)?;
+        crate::traits::Encode::encode(&self.parameters, out)?;
+        crate::traits::Encode::encode(&self.style, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for ChatType {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let translation_key = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let parameters = <Vec<ChatTypeParameterType> as crate::traits::Decode>::decode(input)?;
+        let style = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { translation_key, parameters, style })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatTypes {
+    pub chat: ChatType,
+    pub narration: ChatType,
+}
+
+impl crate::traits::Encode for ChatTypes {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.chat, out)?;
+        crate::traits::Encode::encode(&self.narration, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for ChatTypes {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let chat = <ChatType as crate::traits::Decode>::decode(input)?;
+        let narration = <ChatType as crate::traits::Decode>::decode(input)?;
+        Ok(Self { chat, narration })
+    }
+}
+
+pub type ChatTypesHolder = crate::holder::Holder<ChatTypes>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketProfilelessChat {
+    pub message: crate::nbt::Nbt,
+    pub r#type: ChatTypesHolder,
+    pub name: crate::nbt::Nbt,
+    pub target: Option<crate::nbt::Nbt>,
+}
+
+impl crate::traits::Encode for PacketProfilelessChat {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.message, out)?;
+        crate::traits::Encode::encode(&self.r#type, out)?;
+        crate::traits::Encode::encode(&self.name, out)?;
+        crate::traits::Encode::encode(&self.target, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketProfilelessChat {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let message = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let r#type = <ChatTypesHolder as crate::traits::Decode>::decode(input)?;
+        let name = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let target = <Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { message, r#type, name, target })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityStatus {
+    pub entity_id: i32,
+    pub entity_status: i8,
+}
+
+impl crate::traits::Encode for PacketEntityStatus {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.entity_id);
+        crate::traits::Encode::encode(&self.entity_status, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityStatus {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_i32()?;
+        let entity_status = <i8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, entity_status })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSyncEntityPosition {
+    pub entity_id: i32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub dx: f64,
+    pub dy: f64,
+    pub dz: f64,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub on_ground: bool,
+}
+
+impl crate::traits::Encode for PacketSyncEntityPosition {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.dx, out)?;
+        crate::traits::Encode::encode(&self.dy, out)?;
+        crate::traits::Encode::encode(&self.dz, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.on_ground, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSyncEntityPosition {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let dx = <f64 as crate::traits::Decode>::decode(input)?;
+        let dy = <f64 as crate::traits::Decode>::decode(input)?;
+        let dz = <f64 as crate::traits::Decode>::decode(input)?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let on_ground = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, x, y, z, dx, dy, dz, yaw, pitch, on_ground })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketExplosion {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub player_knockback: Option<super::types::Vec3f64>,
+    pub explosion_particle: super::types::Particle,
+    pub sound: super::types::ItemSoundHolder,
+}
+
+impl crate::traits::Encode for PacketExplosion {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.player_knockback, out)?;
+        crate::traits::Encode::encode(&self.explosion_particle, out)?;
+        crate::traits::Encode::encode(&self.sound, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketExplosion {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let player_knockback = <Option<super::types::Vec3f64> as crate::traits::Decode>::decode(input)?;
+        let explosion_particle = <super::types::Particle as crate::traits::Decode>::decode(input)?;
+        let sound = <super::types::ItemSoundHolder as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, y, z, player_knockback, explosion_particle, sound })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUnloadChunk {
+    pub chunk_z: i32,
+    pub chunk_x: i32,
+}
+
+impl crate::traits::Encode for PacketUnloadChunk {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.chunk_z);
+        out.put_i32(self.chunk_x);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUnloadChunk {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let chunk_z = input.get_i32()?;
+        let chunk_x = input.get_i32()?;
+        Ok(Self { chunk_z, chunk_x })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketGameStateChange {
+    pub reason: u8,
+    pub game_mode: f32,
+}
+
+impl crate::traits::Encode for PacketGameStateChange {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.reason, out)?;
+        crate::traits::Encode::encode(&self.game_mode, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketGameStateChange {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let reason = <u8 as crate::traits::Decode>::decode(input)?;
+        let game_mode = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { reason, game_mode })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketOpenHorseWindow {
+    pub window_id: i32,
+    pub nb_slots: i32,
+    pub entity_id: i32,
+}
+
+impl crate::traits::Encode for PacketOpenHorseWindow {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.nb_slots);
+        out.put_i32(self.entity_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketOpenHorseWindow {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let nb_slots = input.get_varint()?;
+        let entity_id = input.get_i32()?;
+        Ok(Self { window_id, nb_slots, entity_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketHurtAnimation {
+    pub entity_id: i32,
+    pub yaw: f32,
+}
+
+impl crate::traits::Encode for PacketHurtAnimation {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketHurtAnimation {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, yaw })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketInitializeWorldBorder {
+    pub x: f64,
+    pub z: f64,
+    pub old_diameter: f64,
+    pub new_diameter: f64,
+    pub speed: i32,
+    pub portal_teleport_boundary: i32,
+    pub warning_blocks: i32,
+    pub warning_time: i32,
+}
+
+impl crate::traits::Encode for PacketInitializeWorldBorder {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.old_diameter, out)?;
+        crate::traits::Encode::encode(&self.new_diameter, out)?;
+        out.put_varint(self.speed);
+        out.put_varint(self.portal_teleport_boundary);
+        out.put_varint(self.warning_blocks);
+        out.put_varint(self.warning_time);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketInitializeWorldBorder {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let old_diameter = <f64 as crate::traits::Decode>::decode(input)?;
+        let new_diameter = <f64 as crate::traits::Decode>::decode(input)?;
+        let speed = input.get_varint()?;
+        let portal_teleport_boundary = input.get_varint()?;
+        let warning_blocks = input.get_varint()?;
+        let warning_time = input.get_varint()?;
+        Ok(Self { x, z, old_diameter, new_diameter, speed, portal_teleport_boundary, warning_blocks, warning_time })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketKeepAlive {
+    pub keep_alive_id: i64,
+}
+
+impl crate::traits::Encode for PacketKeepAlive {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i64(self.keep_alive_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketKeepAlive {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let keep_alive_id = input.get_i64()?;
+        Ok(Self { keep_alive_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMapChunk {
+    pub x: i32,
+    pub z: i32,
+    pub heightmaps: crate::nbt::Nbt,
+    pub chunk_data: Vec<u8>,
+    pub block_entities: Vec<super::types::ChunkBlockEntity>,
+    pub sky_light_mask: Vec<i64>,
+    pub block_light_mask: Vec<i64>,
+    pub empty_sky_light_mask: Vec<i64>,
+    pub empty_block_light_mask: Vec<i64>,
+    pub sky_light: Vec<Vec<u8>>,
+    pub block_light: Vec<Vec<u8>>,
+}
+
+impl crate::traits::Encode for PacketMapChunk {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.x);
+        out.put_i32(self.z);
+        crate::traits::Encode::encode(&self.heightmaps, out)?;
+        crate::traits::Encode::encode(&self.chunk_data, out)?;
+        crate::traits::Encode::encode(&self.block_entities, out)?;
+        out.put_varint((self.sky_light_mask).len() as i32);
+        for item in &self.sky_light_mask {
+        out.put_i64(*item);
+        }
+        out.put_varint((self.block_light_mask).len() as i32);
+        for item in &self.block_light_mask {
+        out.put_i64(*item);
+        }
+        out.put_varint((self.empty_sky_light_mask).len() as i32);
+        for item in &self.empty_sky_light_mask {
+        out.put_i64(*item);
+        }
+        out.put_varint((self.empty_block_light_mask).len() as i32);
+        for item in &self.empty_block_light_mask {
+        out.put_i64(*item);
+        }
+        crate::traits::Encode::encode(&self.sky_light, out)?;
+        crate::traits::Encode::encode(&self.block_light, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMapChunk {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = input.get_i32()?;
+        let z = input.get_i32()?;
+        let heightmaps = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let chunk_data = <Vec<u8> as crate::traits::Decode>::decode(input)?;
+        let block_entities = <Vec<super::types::ChunkBlockEntity> as crate::traits::Decode>::decode(input)?;
+        let sky_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let block_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let empty_sky_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let empty_block_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let sky_light = <Vec<Vec<u8>> as crate::traits::Decode>::decode(input)?;
+        let block_light = <Vec<Vec<u8>> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, z, heightmaps, chunk_data, block_entities, sky_light_mask, block_light_mask, empty_sky_light_mask, empty_block_light_mask, sky_light, block_light })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldEvent {
+    pub effect_id: i32,
+    pub location: super::types::Position,
+    pub data: i32,
+    pub global: bool,
+}
+
+impl crate::traits::Encode for PacketWorldEvent {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.effect_id);
+        crate::traits::Encode::encode(&self.location, out)?;
+        out.put_i32(self.data);
+        crate::traits::Encode::encode(&self.global, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldEvent {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let effect_id = input.get_i32()?;
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let data = input.get_i32()?;
+        let global = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { effect_id, location, data, global })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldParticles {
+    pub long_distance: bool,
+    pub always_show: bool,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub offset_z: f32,
+    pub velocity_offset: f32,
+    pub amount: i32,
+    pub particle: super::types::Particle,
+}
+
+impl crate::traits::Encode for PacketWorldParticles {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.long_distance, out)?;
+        crate::traits::Encode::encode(&self.always_show, out)?;
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.offset_x, out)?;
+        crate::traits::Encode::encode(&self.offset_y, out)?;
+        crate::traits::Encode::encode(&self.offset_z, out)?;
+        crate::traits::Encode::encode(&self.velocity_offset, out)?;
+        out.put_i32(self.amount);
+        crate::traits::Encode::encode(&self.particle, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldParticles {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let long_distance = <bool as crate::traits::Decode>::decode(input)?;
+        let always_show = <bool as crate::traits::Decode>::decode(input)?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let offset_x = <f32 as crate::traits::Decode>::decode(input)?;
+        let offset_y = <f32 as crate::traits::Decode>::decode(input)?;
+        let offset_z = <f32 as crate::traits::Decode>::decode(input)?;
+        let velocity_offset = <f32 as crate::traits::Decode>::decode(input)?;
+        let amount = input.get_i32()?;
+        let particle = <super::types::Particle as crate::traits::Decode>::decode(input)?;
+        Ok(Self { long_distance, always_show, x, y, z, offset_x, offset_y, offset_z, velocity_offset, amount, particle })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateLight {
+    pub chunk_x: i32,
+    pub chunk_z: i32,
+    pub sky_light_mask: Vec<i64>,
+    pub block_light_mask: Vec<i64>,
+    pub empty_sky_light_mask: Vec<i64>,
+    pub empty_block_light_mask: Vec<i64>,
+    pub sky_light: Vec<Vec<u8>>,
+    pub block_light: Vec<Vec<u8>>,
+}
+
+impl crate::traits::Encode for PacketUpdateLight {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.chunk_x);
+        out.put_varint(self.chunk_z);
+        out.put_varint((self.sky_light_mask).len() as i32);
+        for item in &self.sky_light_mask {
+        out.put_i64(*item);
+        }
+        out.put_varint((self.block_light_mask).len() as i32);
+        for item in &self.block_light_mask {
+        out.put_i64(*item);
+        }
+        out.put_varint((self.empty_sky_light_mask).len() as i32);
+        for item in &self.empty_sky_light_mask {
+        out.put_i64(*item);
+        }
+        out.put_varint((self.empty_block_light_mask).len() as i32);
+        for item in &self.empty_block_light_mask {
+        out.put_i64(*item);
+        }
+        crate::traits::Encode::encode(&self.sky_light, out)?;
+        crate::traits::Encode::encode(&self.block_light, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateLight {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let chunk_x = input.get_varint()?;
+        let chunk_z = input.get_varint()?;
+        let sky_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let block_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let empty_sky_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let empty_block_light_mask = input.read_array(|input| { Ok(input.get_i64()?) })?;
+        let sky_light = <Vec<Vec<u8>> as crate::traits::Decode>::decode(input)?;
+        let block_light = <Vec<Vec<u8>> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { chunk_x, chunk_z, sky_light_mask, block_light_mask, empty_sky_light_mask, empty_block_light_mask, sky_light, block_light })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpawnInfoGamemode {
+    Survival,
+    Creative,
+    Adventure,
+    Spectator,
+}
+
+impl crate::traits::Encode for SpawnInfoGamemode {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::Survival => out.put_i8(0),
+            Self::Creative => out.put_i8(1),
+            Self::Adventure => out.put_i8(2),
+            Self::Spectator => out.put_i8(3),
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SpawnInfoGamemode {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let value = input.get_i8()?;
+        match value {
+            0 => Ok(Self::Survival),
+            1 => Ok(Self::Creative),
+            2 => Ok(Self::Adventure),
+            3 => Ok(Self::Spectator),
+            _ => Err(crate::error::ProtocolError::UnknownEnumValue { type_name: "SpawnInfoGamemode", value: i64::from(value) }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpawnInfoDeathValue {
+    pub dimension_name: super::types::String,
+    pub location: super::types::Position,
+}
+
+impl crate::traits::Encode for SpawnInfoDeathValue {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.dimension_name, out)?;
+        crate::traits::Encode::encode(&self.location, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SpawnInfoDeathValue {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let dimension_name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        Ok(Self { dimension_name, location })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpawnInfo {
+    pub dimension: i32,
+    pub name: super::types::String,
+    pub hashed_seed: i64,
+    pub gamemode: SpawnInfoGamemode,
+    pub previous_gamemode: u8,
+    pub is_debug: bool,
+    pub is_flat: bool,
+    pub death: Option<SpawnInfoDeathValue>,
+    pub portal_cooldown: i32,
+    pub sea_level: i32,
+}
+
+impl crate::traits::Encode for SpawnInfo {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.dimension);
+        crate::traits::Encode::encode(&self.name, out)?;
+        out.put_i64(self.hashed_seed);
+        crate::traits::Encode::encode(&self.gamemode, out)?;
+        crate::traits::Encode::encode(&self.previous_gamemode, out)?;
+        crate::traits::Encode::encode(&self.is_debug, out)?;
+        crate::traits::Encode::encode(&self.is_flat, out)?;
+        crate::traits::Encode::encode(&self.death, out)?;
+        out.put_varint(self.portal_cooldown);
+        out.put_varint(self.sea_level);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SpawnInfo {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let dimension = input.get_varint()?;
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let hashed_seed = input.get_i64()?;
+        let gamemode = <SpawnInfoGamemode as crate::traits::Decode>::decode(input)?;
+        let previous_gamemode = <u8 as crate::traits::Decode>::decode(input)?;
+        let is_debug = <bool as crate::traits::Decode>::decode(input)?;
+        let is_flat = <bool as crate::traits::Decode>::decode(input)?;
+        let death = <Option<SpawnInfoDeathValue> as crate::traits::Decode>::decode(input)?;
+        let portal_cooldown = input.get_varint()?;
+        let sea_level = input.get_varint()?;
+        Ok(Self { dimension, name, hashed_seed, gamemode, previous_gamemode, is_debug, is_flat, death, portal_cooldown, sea_level })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketLogin {
+    pub entity_id: i32,
+    pub is_hardcore: bool,
+    pub world_names: Vec<super::types::String>,
+    pub max_players: i32,
+    pub view_distance: i32,
+    pub simulation_distance: i32,
+    pub reduced_debug_info: bool,
+    pub enable_respawn_screen: bool,
+    pub do_limited_crafting: bool,
+    pub world_state: SpawnInfo,
+    pub enforces_secure_chat: bool,
+}
+
+impl crate::traits::Encode for PacketLogin {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.entity_id);
+        crate::traits::Encode::encode(&self.is_hardcore, out)?;
+        crate::traits::Encode::encode(&self.world_names, out)?;
+        out.put_varint(self.max_players);
+        out.put_varint(self.view_distance);
+        out.put_varint(self.simulation_distance);
+        crate::traits::Encode::encode(&self.reduced_debug_info, out)?;
+        crate::traits::Encode::encode(&self.enable_respawn_screen, out)?;
+        crate::traits::Encode::encode(&self.do_limited_crafting, out)?;
+        crate::traits::Encode::encode(&self.world_state, out)?;
+        crate::traits::Encode::encode(&self.enforces_secure_chat, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketLogin {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_i32()?;
+        let is_hardcore = <bool as crate::traits::Decode>::decode(input)?;
+        let world_names = <Vec<super::types::String> as crate::traits::Decode>::decode(input)?;
+        let max_players = input.get_varint()?;
+        let view_distance = input.get_varint()?;
+        let simulation_distance = input.get_varint()?;
+        let reduced_debug_info = <bool as crate::traits::Decode>::decode(input)?;
+        let enable_respawn_screen = <bool as crate::traits::Decode>::decode(input)?;
+        let do_limited_crafting = <bool as crate::traits::Decode>::decode(input)?;
+        let world_state = <SpawnInfo as crate::traits::Decode>::decode(input)?;
+        let enforces_secure_chat = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, is_hardcore, world_names, max_players, view_distance, simulation_distance, reduced_debug_info, enable_respawn_screen, do_limited_crafting, world_state, enforces_secure_chat })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMapIconsValueItem {
+    pub r#type: i32,
+    pub x: i8,
+    pub z: i8,
+    pub direction: u8,
+    pub display_name: Option<crate::nbt::Nbt>,
+}
+
+impl crate::traits::Encode for PacketMapIconsValueItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.r#type);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.direction, out)?;
+        crate::traits::Encode::encode(&self.display_name, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMapIconsValueItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let r#type = input.get_varint()?;
+        let x = <i8 as crate::traits::Decode>::decode(input)?;
+        let z = <i8 as crate::traits::Decode>::decode(input)?;
+        let direction = <u8 as crate::traits::Decode>::decode(input)?;
+        let display_name = <Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { r#type, x, z, direction, display_name })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketMapRows {
+    V0,
+    Default(u8),
+}
+
+impl crate::traits::Encode for PacketMapRows {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0 => {}
+            Self::Default(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PacketMapRows {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: u8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0),
+            _ => Ok(Self::Default(<u8 as crate::traits::Decode>::decode(input)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketMapX {
+    V0,
+    Default(u8),
+}
+
+impl crate::traits::Encode for PacketMapX {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0 => {}
+            Self::Default(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PacketMapX {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: u8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0),
+            _ => Ok(Self::Default(<u8 as crate::traits::Decode>::decode(input)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketMapY {
+    V0,
+    Default(u8),
+}
+
+impl crate::traits::Encode for PacketMapY {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0 => {}
+            Self::Default(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PacketMapY {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: u8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0),
+            _ => Ok(Self::Default(<u8 as crate::traits::Decode>::decode(input)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketMapData {
+    V0,
+    Default(Vec<u8>),
+}
+
+impl crate::traits::Encode for PacketMapData {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0 => {}
+            Self::Default(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PacketMapData {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: u8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0),
+            _ => Ok(Self::Default(<Vec<u8> as crate::traits::Decode>::decode(input)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMap {
+    pub item_damage: i32,
+    pub scale: i8,
+    pub locked: bool,
+    pub icons: Option<Vec<PacketMapIconsValueItem>>,
+    pub columns: u8,
+    pub rows: PacketMapRows,
+    pub x: PacketMapX,
+    pub y: PacketMapY,
+    pub data: PacketMapData,
+}
+
+impl crate::traits::Encode for PacketMap {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.item_damage);
+        crate::traits::Encode::encode(&self.scale, out)?;
+        crate::traits::Encode::encode(&self.locked, out)?;
+        crate::traits::Encode::encode(&self.icons, out)?;
+        crate::traits::Encode::encode(&self.columns, out)?;
+        match (self.columns, &self.rows) {
+            (0, PacketMapRows::V0) => {},
+            (0, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `rows` does not match its discriminant".into())); }
+            (_, PacketMapRows::Default(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `rows` does not match its discriminant".into())); }
+        }
+        match (self.columns, &self.x) {
+            (0, PacketMapX::V0) => {},
+            (0, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `x` does not match its discriminant".into())); }
+            (_, PacketMapX::Default(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `x` does not match its discriminant".into())); }
+        }
+        match (self.columns, &self.y) {
+            (0, PacketMapY::V0) => {},
+            (0, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `y` does not match its discriminant".into())); }
+            (_, PacketMapY::Default(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `y` does not match its discriminant".into())); }
+        }
+        match (self.columns, &self.data) {
+            (0, PacketMapData::V0) => {},
+            (0, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `data` does not match its discriminant".into())); }
+            (_, PacketMapData::Default(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketMap: field `data` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMap {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let item_damage = input.get_varint()?;
+        let scale = <i8 as crate::traits::Decode>::decode(input)?;
+        let locked = <bool as crate::traits::Decode>::decode(input)?;
+        let icons = <Option<Vec<PacketMapIconsValueItem>> as crate::traits::Decode>::decode(input)?;
+        let columns = <u8 as crate::traits::Decode>::decode(input)?;
+        let rows = PacketMapRows::decode_from(input, columns)?;
+        let x = PacketMapX::decode_from(input, columns)?;
+        let y = PacketMapY::decode_from(input, columns)?;
+        let data = PacketMapData::decode_from(input, columns)?;
+        Ok(Self { item_damage, scale, locked, icons, columns, rows, x, y, data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTradeListTradesItemInputItem1 {
+    pub item_id: i32,
+    pub item_count: i32,
+    pub added_component_count: i32,
+    pub components: Vec<super::types::SlotComponent>,
+}
+
+impl crate::traits::Encode for PacketTradeListTradesItemInputItem1 {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.item_id);
+        out.put_varint(self.item_count);
+        out.put_varint(self.added_component_count);
+        if (self.components).len() as i64 != self.added_component_count as i64 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_trade_list`.trades.inputItem1.components: array length does not match `addedComponentCount`"))); }
+        for item in &self.components {
+        crate::traits::Encode::encode(&*item, out)?;
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTradeListTradesItemInputItem1 {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let item_id = input.get_varint()?;
+        let item_count = input.get_varint()?;
+        let added_component_count = input.get_varint()?;
+        let components = { let n = i64::from(added_component_count); if n < 0 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_trade_list`.trades.inputItem1.components: negative array count"))); } let n = n as usize; if n > input.remaining() { return Err(crate::error::ProtocolError::BufferUnderflow { needed: n, remaining: input.remaining() }); } let mut items = Vec::with_capacity(n); for _ in 0..n { items.push(<super::types::SlotComponent as crate::traits::Decode>::decode(input)?); } items };
+        Ok(Self { item_id, item_count, added_component_count, components })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTradeListTradesItemInputItem2Value {
+    pub item_id: i32,
+    pub item_count: i32,
+    pub added_component_count: i32,
+    pub components: Vec<super::types::SlotComponent>,
+}
+
+impl crate::traits::Encode for PacketTradeListTradesItemInputItem2Value {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.item_id);
+        out.put_varint(self.item_count);
+        out.put_varint(self.added_component_count);
+        if (self.components).len() as i64 != self.added_component_count as i64 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_trade_list`.trades.inputItem2.components: array length does not match `addedComponentCount`"))); }
+        for item in &self.components {
+        crate::traits::Encode::encode(&*item, out)?;
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTradeListTradesItemInputItem2Value {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let item_id = input.get_varint()?;
+        let item_count = input.get_varint()?;
+        let added_component_count = input.get_varint()?;
+        let components = { let n = i64::from(added_component_count); if n < 0 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_trade_list`.trades.inputItem2.components: negative array count"))); } let n = n as usize; if n > input.remaining() { return Err(crate::error::ProtocolError::BufferUnderflow { needed: n, remaining: input.remaining() }); } let mut items = Vec::with_capacity(n); for _ in 0..n { items.push(<super::types::SlotComponent as crate::traits::Decode>::decode(input)?); } items };
+        Ok(Self { item_id, item_count, added_component_count, components })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTradeListTradesItem {
+    pub input_item1: PacketTradeListTradesItemInputItem1,
+    pub output_item: super::types::Slot,
+    pub input_item2: Option<PacketTradeListTradesItemInputItem2Value>,
+    pub trade_disabled: bool,
+    pub nb_trade_uses: i32,
+    pub maximum_nb_trade_uses: i32,
+    pub xp: i32,
+    pub special_price: i32,
+    pub price_multiplier: f32,
+    pub demand: i32,
+}
+
+impl crate::traits::Encode for PacketTradeListTradesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.input_item1, out)?;
+        crate::traits::Encode::encode(&self.output_item, out)?;
+        crate::traits::Encode::encode(&self.input_item2, out)?;
+        crate::traits::Encode::encode(&self.trade_disabled, out)?;
+        out.put_i32(self.nb_trade_uses);
+        out.put_i32(self.maximum_nb_trade_uses);
+        out.put_i32(self.xp);
+        out.put_i32(self.special_price);
+        crate::traits::Encode::encode(&self.price_multiplier, out)?;
+        out.put_i32(self.demand);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTradeListTradesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let input_item1 = <PacketTradeListTradesItemInputItem1 as crate::traits::Decode>::decode(input)?;
+        let output_item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        let input_item2 = <Option<PacketTradeListTradesItemInputItem2Value> as crate::traits::Decode>::decode(input)?;
+        let trade_disabled = <bool as crate::traits::Decode>::decode(input)?;
+        let nb_trade_uses = input.get_i32()?;
+        let maximum_nb_trade_uses = input.get_i32()?;
+        let xp = input.get_i32()?;
+        let special_price = input.get_i32()?;
+        let price_multiplier = <f32 as crate::traits::Decode>::decode(input)?;
+        let demand = input.get_i32()?;
+        Ok(Self { input_item1, output_item, input_item2, trade_disabled, nb_trade_uses, maximum_nb_trade_uses, xp, special_price, price_multiplier, demand })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTradeList {
+    pub window_id: i32,
+    pub trades: Vec<PacketTradeListTradesItem>,
+    pub villager_level: i32,
+    pub experience: i32,
+    pub is_regular_villager: bool,
+    pub can_restock: bool,
+}
+
+impl crate::traits::Encode for PacketTradeList {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        crate::traits::Encode::encode(&self.trades, out)?;
+        out.put_varint(self.villager_level);
+        out.put_varint(self.experience);
+        crate::traits::Encode::encode(&self.is_regular_villager, out)?;
+        crate::traits::Encode::encode(&self.can_restock, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTradeList {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let trades = <Vec<PacketTradeListTradesItem> as crate::traits::Decode>::decode(input)?;
+        let villager_level = input.get_varint()?;
+        let experience = input.get_varint()?;
+        let is_regular_villager = <bool as crate::traits::Decode>::decode(input)?;
+        let can_restock = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, trades, villager_level, experience, is_regular_villager, can_restock })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRelEntityMove {
+    pub entity_id: i32,
+    pub d_x: i16,
+    pub d_y: i16,
+    pub d_z: i16,
+    pub on_ground: bool,
+}
+
+impl crate::traits::Encode for PacketRelEntityMove {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.d_x, out)?;
+        crate::traits::Encode::encode(&self.d_y, out)?;
+        crate::traits::Encode::encode(&self.d_z, out)?;
+        crate::traits::Encode::encode(&self.on_ground, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRelEntityMove {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let d_x = <i16 as crate::traits::Decode>::decode(input)?;
+        let d_y = <i16 as crate::traits::Decode>::decode(input)?;
+        let d_z = <i16 as crate::traits::Decode>::decode(input)?;
+        let on_ground = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, d_x, d_y, d_z, on_ground })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityMoveLook {
+    pub entity_id: i32,
+    pub d_x: i16,
+    pub d_y: i16,
+    pub d_z: i16,
+    pub yaw: i8,
+    pub pitch: i8,
+    pub on_ground: bool,
+}
+
+impl crate::traits::Encode for PacketEntityMoveLook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.d_x, out)?;
+        crate::traits::Encode::encode(&self.d_y, out)?;
+        crate::traits::Encode::encode(&self.d_z, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.on_ground, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityMoveLook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let d_x = <i16 as crate::traits::Decode>::decode(input)?;
+        let d_y = <i16 as crate::traits::Decode>::decode(input)?;
+        let d_z = <i16 as crate::traits::Decode>::decode(input)?;
+        let yaw = <i8 as crate::traits::Decode>::decode(input)?;
+        let pitch = <i8 as crate::traits::Decode>::decode(input)?;
+        let on_ground = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, d_x, d_y, d_z, yaw, pitch, on_ground })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMoveMinecartStepsItem {
+    pub position: super::types::Vec3f,
+    pub movement: super::types::Vec3f,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub weight: f32,
+}
+
+impl crate::traits::Encode for PacketMoveMinecartStepsItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.position, out)?;
+        crate::traits::Encode::encode(&self.movement, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.weight, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMoveMinecartStepsItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let position = <super::types::Vec3f as crate::traits::Decode>::decode(input)?;
+        let movement = <super::types::Vec3f as crate::traits::Decode>::decode(input)?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let weight = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { position, movement, yaw, pitch, weight })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMoveMinecart {
+    pub entity_id: i32,
+    pub steps: Vec<PacketMoveMinecartStepsItem>,
+}
+
+impl crate::traits::Encode for PacketMoveMinecart {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.steps, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMoveMinecart {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let steps = <Vec<PacketMoveMinecartStepsItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, steps })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityLook {
+    pub entity_id: i32,
+    pub yaw: i8,
+    pub pitch: i8,
+    pub on_ground: bool,
+}
+
+impl crate::traits::Encode for PacketEntityLook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.on_ground, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityLook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let yaw = <i8 as crate::traits::Decode>::decode(input)?;
+        let pitch = <i8 as crate::traits::Decode>::decode(input)?;
+        let on_ground = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, yaw, pitch, on_ground })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketVehicleMove {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+impl crate::traits::Encode for PacketVehicleMove {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketVehicleMove {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, y, z, yaw, pitch })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketOpenBook {
+    pub hand: i32,
+}
+
+impl crate::traits::Encode for PacketOpenBook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.hand);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketOpenBook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let hand = input.get_varint()?;
+        Ok(Self { hand })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketOpenWindow {
+    pub window_id: i32,
+    pub inventory_type: i32,
+    pub window_title: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketOpenWindow {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.inventory_type);
+        crate::traits::Encode::encode(&self.window_title, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketOpenWindow {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let inventory_type = input.get_varint()?;
+        let window_title = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, inventory_type, window_title })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketOpenSignEntity {
+    pub location: super::types::Position,
+    pub is_front_text: bool,
+}
+
+impl crate::traits::Encode for PacketOpenSignEntity {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.is_front_text, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketOpenSignEntity {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let is_front_text = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, is_front_text })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPing {
+    pub id: i32,
+}
+
+impl crate::traits::Encode for PacketPing {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPing {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = input.get_i32()?;
+        Ok(Self { id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPingResponse {
+    pub id: i64,
+}
+
+impl crate::traits::Encode for PacketPingResponse {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i64(self.id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPingResponse {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = input.get_i64()?;
+        Ok(Self { id })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecipeDisplayType {
+    CraftingShapeless,
+    CraftingShaped,
+    Furnace,
+    Stonecutter,
+    Smithing,
+}
+
+impl crate::traits::Encode for RecipeDisplayType {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::CraftingShapeless => out.put_varint(0),
+            Self::CraftingShaped => out.put_varint(1),
+            Self::Furnace => out.put_varint(2),
+            Self::Stonecutter => out.put_varint(3),
+            Self::Smithing => out.put_varint(4),
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplayType {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let value = input.get_varint()?;
+        match value {
+            0 => Ok(Self::CraftingShapeless),
+            1 => Ok(Self::CraftingShaped),
+            2 => Ok(Self::Furnace),
+            3 => Ok(Self::Stonecutter),
+            4 => Ok(Self::Smithing),
+            _ => Err(crate::error::ProtocolError::UnknownEnumValue { type_name: "RecipeDisplayType", value: i64::from(value) }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotDisplayType {
+    Empty,
+    AnyFuel,
+    Item,
+    ItemStack,
+    Tag,
+    SmithingTrim,
+    WithRemainder,
+    Composite,
+}
+
+impl crate::traits::Encode for SlotDisplayType {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::Empty => out.put_varint(0),
+            Self::AnyFuel => out.put_varint(1),
+            Self::Item => out.put_varint(2),
+            Self::ItemStack => out.put_varint(3),
+            Self::Tag => out.put_varint(4),
+            Self::SmithingTrim => out.put_varint(5),
+            Self::WithRemainder => out.put_varint(6),
+            Self::Composite => out.put_varint(7),
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SlotDisplayType {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let value = input.get_varint()?;
+        match value {
+            0 => Ok(Self::Empty),
+            1 => Ok(Self::AnyFuel),
+            2 => Ok(Self::Item),
+            3 => Ok(Self::ItemStack),
+            4 => Ok(Self::Tag),
+            5 => Ok(Self::SmithingTrim),
+            6 => Ok(Self::WithRemainder),
+            7 => Ok(Self::Composite),
+            _ => Err(crate::error::ProtocolError::UnknownEnumValue { type_name: "SlotDisplayType", value: i64::from(value) }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotDisplayDataSmithingTrim {
+    pub base: Box<SlotDisplay>,
+    pub material: Box<SlotDisplay>,
+    pub pattern: Box<SlotDisplay>,
+}
+
+impl crate::traits::Encode for SlotDisplayDataSmithingTrim {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.base, out)?;
+        crate::traits::Encode::encode(&self.material, out)?;
+        crate::traits::Encode::encode(&self.pattern, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SlotDisplayDataSmithingTrim {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let base = <Box<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        let material = <Box<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        let pattern = <Box<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { base, material, pattern })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotDisplayDataWithRemainder {
+    pub input_: Box<SlotDisplay>,
+    pub remainder: Box<SlotDisplay>,
+}
+
+impl crate::traits::Encode for SlotDisplayDataWithRemainder {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.input_, out)?;
+        crate::traits::Encode::encode(&self.remainder, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SlotDisplayDataWithRemainder {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let input_ = <Box<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        let remainder = <Box<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { input_, remainder })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SlotDisplayData {
+    AnyFuel,
+    Composite(Vec<Box<SlotDisplay>>),
+    Empty,
+    Item(i32),
+    ItemStack(super::types::Slot),
+    SmithingTrim(SlotDisplayDataSmithingTrim),
+    Tag(super::types::String),
+    WithRemainder(SlotDisplayDataWithRemainder),
+}
+
+impl crate::traits::Encode for SlotDisplayData {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::AnyFuel => {}
+            Self::Composite(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Empty => {}
+            Self::Item(v) => {
+                out.put_varint(*v);
+            }
+            Self::ItemStack(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::SmithingTrim(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Tag(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::WithRemainder(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl SlotDisplayData {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: SlotDisplayType,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            SlotDisplayType::AnyFuel => Ok(Self::AnyFuel),
+            SlotDisplayType::Composite => Ok(Self::Composite(<Vec<Box<SlotDisplay>> as crate::traits::Decode>::decode(input)?)),
+            SlotDisplayType::Empty => Ok(Self::Empty),
+            SlotDisplayType::Item => Ok(Self::Item(input.get_varint()?)),
+            SlotDisplayType::ItemStack => Ok(Self::ItemStack(<super::types::Slot as crate::traits::Decode>::decode(input)?)),
+            SlotDisplayType::SmithingTrim => Ok(Self::SmithingTrim(<SlotDisplayDataSmithingTrim as crate::traits::Decode>::decode(input)?)),
+            SlotDisplayType::Tag => Ok(Self::Tag(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            SlotDisplayType::WithRemainder => Ok(Self::WithRemainder(<SlotDisplayDataWithRemainder as crate::traits::Decode>::decode(input)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotDisplay {
+    pub r#type: SlotDisplayType,
+    pub data: SlotDisplayData,
+}
+
+impl crate::traits::Encode for SlotDisplay {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.r#type, out)?;
+        match (self.r#type, &self.data) {
+            (SlotDisplayType::AnyFuel, SlotDisplayData::AnyFuel) => {},
+            (SlotDisplayType::Composite, SlotDisplayData::Composite(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (SlotDisplayType::Empty, SlotDisplayData::Empty) => {},
+            (SlotDisplayType::Item, SlotDisplayData::Item(v)) => {
+                out.put_varint(*v);
+            }
+            (SlotDisplayType::ItemStack, SlotDisplayData::ItemStack(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (SlotDisplayType::SmithingTrim, SlotDisplayData::SmithingTrim(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (SlotDisplayType::Tag, SlotDisplayData::Tag(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (SlotDisplayType::WithRemainder, SlotDisplayData::WithRemainder(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (SlotDisplayType::AnyFuel, _) | (SlotDisplayType::Composite, _) | (SlotDisplayType::Empty, _) | (SlotDisplayType::Item, _) | (SlotDisplayType::ItemStack, _) | (SlotDisplayType::SmithingTrim, _) | (SlotDisplayType::Tag, _) | (SlotDisplayType::WithRemainder, _) => { return Err(crate::error::ProtocolError::InvalidData("SlotDisplay: field `data` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for SlotDisplay {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let r#type = <SlotDisplayType as crate::traits::Decode>::decode(input)?;
+        let data = SlotDisplayData::decode_from(input, r#type)?;
+        Ok(Self { r#type, data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeDisplayDataCraftingShaped {
+    pub width: i32,
+    pub height: i32,
+    pub ingredients: Vec<SlotDisplay>,
+    pub result: SlotDisplay,
+    pub crafting_station: SlotDisplay,
+}
+
+impl crate::traits::Encode for RecipeDisplayDataCraftingShaped {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.width);
+        out.put_varint(self.height);
+        crate::traits::Encode::encode(&self.ingredients, out)?;
+        crate::traits::Encode::encode(&self.result, out)?;
+        crate::traits::Encode::encode(&self.crafting_station, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplayDataCraftingShaped {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let width = input.get_varint()?;
+        let height = input.get_varint()?;
+        let ingredients = <Vec<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        let result = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let crafting_station = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        Ok(Self { width, height, ingredients, result, crafting_station })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeDisplayDataCraftingShapeless {
+    pub ingredients: Vec<SlotDisplay>,
+    pub result: SlotDisplay,
+    pub crafting_station: SlotDisplay,
+}
+
+impl crate::traits::Encode for RecipeDisplayDataCraftingShapeless {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.ingredients, out)?;
+        crate::traits::Encode::encode(&self.result, out)?;
+        crate::traits::Encode::encode(&self.crafting_station, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplayDataCraftingShapeless {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let ingredients = <Vec<SlotDisplay> as crate::traits::Decode>::decode(input)?;
+        let result = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let crafting_station = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        Ok(Self { ingredients, result, crafting_station })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeDisplayDataFurnace {
+    pub ingredient: SlotDisplay,
+    pub fuel: SlotDisplay,
+    pub result: SlotDisplay,
+    pub crafting_station: SlotDisplay,
+    pub duration: i32,
+    pub experience: f32,
+}
+
+impl crate::traits::Encode for RecipeDisplayDataFurnace {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.ingredient, out)?;
+        crate::traits::Encode::encode(&self.fuel, out)?;
+        crate::traits::Encode::encode(&self.result, out)?;
+        crate::traits::Encode::encode(&self.crafting_station, out)?;
+        out.put_varint(self.duration);
+        crate::traits::Encode::encode(&self.experience, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplayDataFurnace {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let ingredient = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let fuel = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let result = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let crafting_station = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let duration = input.get_varint()?;
+        let experience = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { ingredient, fuel, result, crafting_station, duration, experience })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeDisplayDataSmithing {
+    pub template: SlotDisplay,
+    pub base: SlotDisplay,
+    pub addition: SlotDisplay,
+    pub result: SlotDisplay,
+    pub crafting_station: SlotDisplay,
+}
+
+impl crate::traits::Encode for RecipeDisplayDataSmithing {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.template, out)?;
+        crate::traits::Encode::encode(&self.base, out)?;
+        crate::traits::Encode::encode(&self.addition, out)?;
+        crate::traits::Encode::encode(&self.result, out)?;
+        crate::traits::Encode::encode(&self.crafting_station, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplayDataSmithing {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let template = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let base = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let addition = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let result = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let crafting_station = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        Ok(Self { template, base, addition, result, crafting_station })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeDisplayDataStonecutter {
+    pub ingredient: SlotDisplay,
+    pub result: SlotDisplay,
+    pub crafting_station: SlotDisplay,
+}
+
+impl crate::traits::Encode for RecipeDisplayDataStonecutter {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.ingredient, out)?;
+        crate::traits::Encode::encode(&self.result, out)?;
+        crate::traits::Encode::encode(&self.crafting_station, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplayDataStonecutter {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let ingredient = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let result = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        let crafting_station = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        Ok(Self { ingredient, result, crafting_station })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RecipeDisplayData {
+    CraftingShaped(RecipeDisplayDataCraftingShaped),
+    CraftingShapeless(RecipeDisplayDataCraftingShapeless),
+    Furnace(RecipeDisplayDataFurnace),
+    Smithing(RecipeDisplayDataSmithing),
+    Stonecutter(RecipeDisplayDataStonecutter),
+}
+
+impl crate::traits::Encode for RecipeDisplayData {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::CraftingShaped(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::CraftingShapeless(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Furnace(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Smithing(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Stonecutter(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl RecipeDisplayData {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: RecipeDisplayType,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            RecipeDisplayType::CraftingShaped => Ok(Self::CraftingShaped(<RecipeDisplayDataCraftingShaped as crate::traits::Decode>::decode(input)?)),
+            RecipeDisplayType::CraftingShapeless => Ok(Self::CraftingShapeless(<RecipeDisplayDataCraftingShapeless as crate::traits::Decode>::decode(input)?)),
+            RecipeDisplayType::Furnace => Ok(Self::Furnace(<RecipeDisplayDataFurnace as crate::traits::Decode>::decode(input)?)),
+            RecipeDisplayType::Smithing => Ok(Self::Smithing(<RecipeDisplayDataSmithing as crate::traits::Decode>::decode(input)?)),
+            RecipeDisplayType::Stonecutter => Ok(Self::Stonecutter(<RecipeDisplayDataStonecutter as crate::traits::Decode>::decode(input)?)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeDisplay {
+    pub r#type: RecipeDisplayType,
+    pub data: RecipeDisplayData,
+}
+
+impl crate::traits::Encode for RecipeDisplay {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.r#type, out)?;
+        match (self.r#type, &self.data) {
+            (RecipeDisplayType::CraftingShaped, RecipeDisplayData::CraftingShaped(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (RecipeDisplayType::CraftingShapeless, RecipeDisplayData::CraftingShapeless(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (RecipeDisplayType::Furnace, RecipeDisplayData::Furnace(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (RecipeDisplayType::Smithing, RecipeDisplayData::Smithing(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (RecipeDisplayType::Stonecutter, RecipeDisplayData::Stonecutter(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (RecipeDisplayType::CraftingShaped, _) | (RecipeDisplayType::CraftingShapeless, _) | (RecipeDisplayType::Furnace, _) | (RecipeDisplayType::Smithing, _) | (RecipeDisplayType::Stonecutter, _) => { return Err(crate::error::ProtocolError::InvalidData("RecipeDisplay: field `data` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for RecipeDisplay {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let r#type = <RecipeDisplayType as crate::traits::Decode>::decode(input)?;
+        let data = RecipeDisplayData::decode_from(input, r#type)?;
+        Ok(Self { r#type, data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCraftRecipeResponse {
+    pub window_id: i32,
+    pub recipe_display: RecipeDisplay,
+}
+
+impl crate::traits::Encode for PacketCraftRecipeResponse {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        crate::traits::Encode::encode(&self.recipe_display, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCraftRecipeResponse {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let recipe_display = <RecipeDisplay as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, recipe_display })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAbilities {
+    pub flags: i8,
+    pub flying_speed: f32,
+    pub walking_speed: f32,
+}
+
+impl crate::traits::Encode for PacketAbilities {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.flags, out)?;
+        crate::traits::Encode::encode(&self.flying_speed, out)?;
+        crate::traits::Encode::encode(&self.walking_speed, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAbilities {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let flags = <i8 as crate::traits::Decode>::decode(input)?;
+        let flying_speed = <f32 as crate::traits::Decode>::decode(input)?;
+        let walking_speed = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { flags, flying_speed, walking_speed })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerChatFilterTypeMask {
+    V2(Vec<i64>),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerChatFilterTypeMask {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V2(v) => {
+                out.put_varint((*v).len() as i32);
+                for item in &*v {
+                out.put_i64(*item);
+                }
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerChatFilterTypeMask {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            2 => Ok(Self::V2(input.read_array(|input| { Ok(input.get_i64()?) })?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerChat {
+    pub sender_uuid: u128,
+    pub index: i32,
+    pub signature: Option<Vec<u8>>,
+    pub plain_message: super::types::String,
+    pub timestamp: i64,
+    pub salt: i64,
+    pub previous_messages: super::types::PreviousMessages,
+    pub unsigned_chat_content: Option<crate::nbt::Nbt>,
+    pub filter_type: i32,
+    pub filter_type_mask: PacketPlayerChatFilterTypeMask,
+    pub r#type: ChatTypesHolder,
+    pub network_name: crate::nbt::Nbt,
+    pub network_target_name: Option<crate::nbt::Nbt>,
+}
+
+impl crate::traits::Encode for PacketPlayerChat {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.sender_uuid, out)?;
+        out.put_varint(self.index);
+        out.put_bool(self.signature.is_some());
+        if let Some(v) = &self.signature {
+        if ((*v)).len() != 256 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_player_chat`.signature: expected exactly 256 bytes"))); }
+        out.put_bytes(&(*v));
+        }
+        crate::traits::Encode::encode(&self.plain_message, out)?;
+        out.put_i64(self.timestamp);
+        out.put_i64(self.salt);
+        crate::traits::Encode::encode(&self.previous_messages, out)?;
+        crate::traits::Encode::encode(&self.unsigned_chat_content, out)?;
+        out.put_varint(self.filter_type);
+        match (self.filter_type, &self.filter_type_mask) {
+            (2, PacketPlayerChatFilterTypeMask::V2(v)) => {
+                out.put_varint((*v).len() as i32);
+                for item in &*v {
+                out.put_i64(*item);
+                }
+            }
+            (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketPlayerChat: field `filterTypeMask` does not match its discriminant".into())); }
+            (_, PacketPlayerChatFilterTypeMask::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketPlayerChat: field `filterTypeMask` does not match its discriminant".into())); }
+        }
+        crate::traits::Encode::encode(&self.r#type, out)?;
+        crate::traits::Encode::encode(&self.network_name, out)?;
+        crate::traits::Encode::encode(&self.network_target_name, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerChat {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let sender_uuid = <u128 as crate::traits::Decode>::decode(input)?;
+        let index = input.get_varint()?;
+        let signature = { if input.get_bool()? { Some(input.read_bytes(256)?.to_vec()) } else { None } };
+        let plain_message = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let timestamp = input.get_i64()?;
+        let salt = input.get_i64()?;
+        let previous_messages = <super::types::PreviousMessages as crate::traits::Decode>::decode(input)?;
+        let unsigned_chat_content = <Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?;
+        let filter_type = input.get_varint()?;
+        let filter_type_mask = PacketPlayerChatFilterTypeMask::decode_from(input, filter_type)?;
+        let r#type = <ChatTypesHolder as crate::traits::Decode>::decode(input)?;
+        let network_name = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let network_target_name = <Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { sender_uuid, index, signature, plain_message, timestamp, salt, previous_messages, unsigned_chat_content, filter_type, filter_type_mask, r#type, network_name, network_target_name })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEndCombatEvent {
+    pub duration: i32,
+}
+
+impl crate::traits::Encode for PacketEndCombatEvent {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.duration);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEndCombatEvent {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let duration = input.get_varint()?;
+        Ok(Self { duration })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDeathCombatEvent {
+    pub player_id: i32,
+    pub message: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketDeathCombatEvent {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.player_id);
+        crate::traits::Encode::encode(&self.message, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDeathCombatEvent {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let player_id = input.get_varint()?;
+        let message = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { player_id, message })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerRemove {
+    pub players: Vec<u128>,
+}
+
+impl crate::traits::Encode for PacketPlayerRemove {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.players, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerRemove {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let players = <Vec<u128> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { players })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketPlayerInfoAction(pub u8);
+
+impl PacketPlayerInfoAction {
+    pub const ADD_PLAYER: u8 = 0x1;
+    pub const INITIALIZE_CHAT: u8 = 0x2;
+    pub const UPDATE_GAME_MODE: u8 = 0x4;
+    pub const UPDATE_LISTED: u8 = 0x8;
+    pub const UPDATE_LATENCY: u8 = 0x10;
+    pub const UPDATE_DISPLAY_NAME: u8 = 0x20;
+    pub const UPDATE_HAT: u8 = 0x40;
+    pub const UPDATE_LIST_ORDER: u8 = 0x80;
+    pub fn contains(&self, flag: u8) -> bool { self.0 & flag != 0 }
+}
+
+impl crate::traits::Encode for PacketPlayerInfoAction {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_u8(self.0);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerInfoAction {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        Ok(Self(input.get_u8()?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemPlayer {
+    True(super::types::GameProfile),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemPlayer {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemPlayer {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(<super::types::GameProfile as crate::traits::Decode>::decode(input)?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemChatSession {
+    True(super::types::ChatSession),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemChatSession {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemChatSession {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(<super::types::ChatSession as crate::traits::Decode>::decode(input)?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemGamemode {
+    True(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemGamemode {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemGamemode {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(input.get_varint()?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemListed {
+    True(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemListed {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemListed {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(input.get_varint()?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemLatency {
+    True(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemLatency {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemLatency {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(input.get_varint()?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemDisplayName {
+    True(Option<crate::nbt::Nbt>),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemDisplayName {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemDisplayName {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(<Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemListPriority {
+    True(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemListPriority {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemListPriority {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(input.get_varint()?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketPlayerInfoDataItemShowHat {
+    True(bool),
+    Default,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItemShowHat {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItemShowHat {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(<bool as crate::traits::Decode>::decode(input)?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerInfoDataItem {
+    pub uuid: u128,
+    pub player: PacketPlayerInfoDataItemPlayer,
+    pub chat_session: PacketPlayerInfoDataItemChatSession,
+    pub gamemode: PacketPlayerInfoDataItemGamemode,
+    pub listed: PacketPlayerInfoDataItemListed,
+    pub latency: PacketPlayerInfoDataItemLatency,
+    pub display_name: PacketPlayerInfoDataItemDisplayName,
+    pub list_priority: PacketPlayerInfoDataItemListPriority,
+    pub show_hat: PacketPlayerInfoDataItemShowHat,
+}
+
+impl crate::traits::Encode for PacketPlayerInfoDataItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.uuid, out)?;
+        crate::traits::Encode::encode(&self.player, out)?;
+        crate::traits::Encode::encode(&self.chat_session, out)?;
+        crate::traits::Encode::encode(&self.gamemode, out)?;
+        crate::traits::Encode::encode(&self.listed, out)?;
+        crate::traits::Encode::encode(&self.latency, out)?;
+        crate::traits::Encode::encode(&self.display_name, out)?;
+        crate::traits::Encode::encode(&self.list_priority, out)?;
+        crate::traits::Encode::encode(&self.show_hat, out)?;
+        Ok(())
+    }
+}
+
+impl PacketPlayerInfoDataItem {
+    pub fn decode_ctx(
+        input: &mut crate::buffer::PacketReader<'_>,
+        add_player: bool,
+        initialize_chat: bool,
+        update_game_mode: bool,
+        update_listed: bool,
+        update_latency: bool,
+        update_display_name: bool,
+        update_list_order: bool,
+        update_hat: bool,
+    ) -> crate::error::Result<Self> {
+        let uuid = <u128 as crate::traits::Decode>::decode(input)?;
+        let player = PacketPlayerInfoDataItemPlayer::decode_from(input, add_player)?;
+        let chat_session = PacketPlayerInfoDataItemChatSession::decode_from(input, initialize_chat)?;
+        let gamemode = PacketPlayerInfoDataItemGamemode::decode_from(input, update_game_mode)?;
+        let listed = PacketPlayerInfoDataItemListed::decode_from(input, update_listed)?;
+        let latency = PacketPlayerInfoDataItemLatency::decode_from(input, update_latency)?;
+        let display_name = PacketPlayerInfoDataItemDisplayName::decode_from(input, update_display_name)?;
+        let list_priority = PacketPlayerInfoDataItemListPriority::decode_from(input, update_list_order)?;
+        let show_hat = PacketPlayerInfoDataItemShowHat::decode_from(input, update_hat)?;
+        Ok(Self { uuid, player, chat_session, gamemode, listed, latency, display_name, list_priority, show_hat })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerInfo {
+    pub action: PacketPlayerInfoAction,
+    pub data: Vec<PacketPlayerInfoDataItem>,
+}
+
+impl crate::traits::Encode for PacketPlayerInfo {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.action, out)?;
+        out.put_varint((self.data).len() as i32);
+        for item in &self.data {
+        crate::traits::Encode::encode(&*item, out)?;
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerInfo {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let action = <PacketPlayerInfoAction as crate::traits::Decode>::decode(input)?;
+        let data = { let n = input.get_varint()?; if n < 0 { return Err(crate::error::ProtocolError::NegativeLength(n)); } let n = n as usize; if n > input.remaining() { return Err(crate::error::ProtocolError::BufferUnderflow { needed: n, remaining: input.remaining() }); } let mut items = Vec::with_capacity(n); for _ in 0..n { items.push(PacketPlayerInfoDataItem::decode_ctx(input, action.contains(PacketPlayerInfoAction::ADD_PLAYER), action.contains(PacketPlayerInfoAction::INITIALIZE_CHAT), action.contains(PacketPlayerInfoAction::UPDATE_GAME_MODE), action.contains(PacketPlayerInfoAction::UPDATE_LISTED), action.contains(PacketPlayerInfoAction::UPDATE_LATENCY), action.contains(PacketPlayerInfoAction::UPDATE_DISPLAY_NAME), action.contains(PacketPlayerInfoAction::UPDATE_LIST_ORDER), action.contains(PacketPlayerInfoAction::UPDATE_HAT))?); } items };
+        Ok(Self { action, data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketFacePlayerEntityId {
+    True(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketFacePlayerEntityId {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketFacePlayerEntityId {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(input.get_varint()?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketFacePlayerEntityFeetEyes {
+    True(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketFacePlayerEntityFeetEyes {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketFacePlayerEntityFeetEyes {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(input.get_varint()?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketFacePlayer {
+    pub feet_eyes: i32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub is_entity: bool,
+    pub entity_id: PacketFacePlayerEntityId,
+    pub entity_feet_eyes: PacketFacePlayerEntityFeetEyes,
+}
+
+impl crate::traits::Encode for PacketFacePlayer {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.feet_eyes);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.is_entity, out)?;
+        match (self.is_entity, &self.entity_id) {
+            (true, PacketFacePlayerEntityId::True(v)) => {
+                out.put_varint(*v);
+            }
+            (true, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketFacePlayer: field `entityId` does not match its discriminant".into())); }
+            (_, PacketFacePlayerEntityId::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketFacePlayer: field `entityId` does not match its discriminant".into())); }
+        }
+        match (self.is_entity, &self.entity_feet_eyes) {
+            (true, PacketFacePlayerEntityFeetEyes::True(v)) => {
+                out.put_varint(*v);
+            }
+            (true, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketFacePlayer: field `entity_feet_eyes` does not match its discriminant".into())); }
+            (_, PacketFacePlayerEntityFeetEyes::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketFacePlayer: field `entity_feet_eyes` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketFacePlayer {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let feet_eyes = input.get_varint()?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let is_entity = <bool as crate::traits::Decode>::decode(input)?;
+        let entity_id = PacketFacePlayerEntityId::decode_from(input, is_entity)?;
+        let entity_feet_eyes = PacketFacePlayerEntityFeetEyes::decode_from(input, is_entity)?;
+        Ok(Self { feet_eyes, x, y, z, is_entity, entity_id, entity_feet_eyes })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PositionUpdateRelatives(pub u32);
+
+impl PositionUpdateRelatives {
+    pub const X: u32 = 0x1;
+    pub const Y: u32 = 0x2;
+    pub const Z: u32 = 0x4;
+    pub const YAW: u32 = 0x8;
+    pub const PITCH: u32 = 0x10;
+    pub const DX: u32 = 0x20;
+    pub const DY: u32 = 0x40;
+    pub const DZ: u32 = 0x80;
+    pub const YAW_DELTA: u32 = 0x100;
+    pub fn contains(&self, flag: u32) -> bool { self.0 & flag != 0 }
+}
+
+impl crate::traits::Encode for PositionUpdateRelatives {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_u32(self.0);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PositionUpdateRelatives {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        Ok(Self(input.get_u32()?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPosition {
+    pub teleport_id: i32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub dx: f64,
+    pub dy: f64,
+    pub dz: f64,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub flags: PositionUpdateRelatives,
+}
+
+impl crate::traits::Encode for PacketPosition {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.teleport_id);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.dx, out)?;
+        crate::traits::Encode::encode(&self.dy, out)?;
+        crate::traits::Encode::encode(&self.dz, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPosition {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let teleport_id = input.get_varint()?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let dx = <f64 as crate::traits::Decode>::decode(input)?;
+        let dy = <f64 as crate::traits::Decode>::decode(input)?;
+        let dz = <f64 as crate::traits::Decode>::decode(input)?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let flags = <PositionUpdateRelatives as crate::traits::Decode>::decode(input)?;
+        Ok(Self { teleport_id, x, y, z, dx, dy, dz, yaw, pitch, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerRotation {
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+impl crate::traits::Encode for PacketPlayerRotation {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerRotation {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { yaw, pitch })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PacketRecipeBookAddEntriesItemRecipeCategory {
+    CraftingBuildingBlocks,
+    CraftingRedstone,
+    Stonecutter,
+    Smithing,
+    Campfire,
+    CraftingEquipment,
+    CraftingMisc,
+    FurnaceFood,
+    FurnaceBlocks,
+    FurnaceMisc,
+    BlastFurnaceBlocks,
+    BlastFurnaceMisc,
+    SmokerFood,
+}
+
+impl crate::traits::Encode for PacketRecipeBookAddEntriesItemRecipeCategory {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::CraftingBuildingBlocks => out.put_varint(0),
+            Self::CraftingRedstone => out.put_varint(1),
+            Self::Stonecutter => out.put_varint(10),
+            Self::Smithing => out.put_varint(11),
+            Self::Campfire => out.put_varint(12),
+            Self::CraftingEquipment => out.put_varint(2),
+            Self::CraftingMisc => out.put_varint(3),
+            Self::FurnaceFood => out.put_varint(4),
+            Self::FurnaceBlocks => out.put_varint(5),
+            Self::FurnaceMisc => out.put_varint(6),
+            Self::BlastFurnaceBlocks => out.put_varint(7),
+            Self::BlastFurnaceMisc => out.put_varint(8),
+            Self::SmokerFood => out.put_varint(9),
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookAddEntriesItemRecipeCategory {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let value = input.get_varint()?;
+        match value {
+            0 => Ok(Self::CraftingBuildingBlocks),
+            1 => Ok(Self::CraftingRedstone),
+            10 => Ok(Self::Stonecutter),
+            11 => Ok(Self::Smithing),
+            12 => Ok(Self::Campfire),
+            2 => Ok(Self::CraftingEquipment),
+            3 => Ok(Self::CraftingMisc),
+            4 => Ok(Self::FurnaceFood),
+            5 => Ok(Self::FurnaceBlocks),
+            6 => Ok(Self::FurnaceMisc),
+            7 => Ok(Self::BlastFurnaceBlocks),
+            8 => Ok(Self::BlastFurnaceMisc),
+            9 => Ok(Self::SmokerFood),
+            _ => Err(crate::error::ProtocolError::UnknownEnumValue { type_name: "PacketRecipeBookAddEntriesItemRecipeCategory", value: i64::from(value) }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRecipeBookAddEntriesItemRecipe {
+    pub display_id: i32,
+    pub display: RecipeDisplay,
+    pub group: i32,
+    pub category: PacketRecipeBookAddEntriesItemRecipeCategory,
+    pub crafting_requirements: Option<Vec<super::types::IdSet>>,
+}
+
+impl crate::traits::Encode for PacketRecipeBookAddEntriesItemRecipe {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.display_id);
+        crate::traits::Encode::encode(&self.display, out)?;
+        out.put_varint(self.group);
+        crate::traits::Encode::encode(&self.category, out)?;
+        crate::traits::Encode::encode(&self.crafting_requirements, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookAddEntriesItemRecipe {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let display_id = input.get_varint()?;
+        let display = <RecipeDisplay as crate::traits::Decode>::decode(input)?;
+        let group = input.get_varint()?;
+        let category = <PacketRecipeBookAddEntriesItemRecipeCategory as crate::traits::Decode>::decode(input)?;
+        let crafting_requirements = <Option<Vec<super::types::IdSet>> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { display_id, display, group, category, crafting_requirements })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketRecipeBookAddEntriesItemFlags(pub u8);
+
+impl PacketRecipeBookAddEntriesItemFlags {
+    pub const NOTIFICATION: u8 = 0x1;
+    pub const HIGHLIGHT: u8 = 0x2;
+    pub fn contains(&self, flag: u8) -> bool { self.0 & flag != 0 }
+}
+
+impl crate::traits::Encode for PacketRecipeBookAddEntriesItemFlags {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_u8(self.0);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookAddEntriesItemFlags {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        Ok(Self(input.get_u8()?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRecipeBookAddEntriesItem {
+    pub recipe: PacketRecipeBookAddEntriesItemRecipe,
+    pub flags: PacketRecipeBookAddEntriesItemFlags,
+}
+
+impl crate::traits::Encode for PacketRecipeBookAddEntriesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.recipe, out)?;
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookAddEntriesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let recipe = <PacketRecipeBookAddEntriesItemRecipe as crate::traits::Decode>::decode(input)?;
+        let flags = <PacketRecipeBookAddEntriesItemFlags as crate::traits::Decode>::decode(input)?;
+        Ok(Self { recipe, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRecipeBookAdd {
+    pub entries: Vec<PacketRecipeBookAddEntriesItem>,
+    pub replace: bool,
+}
+
+impl crate::traits::Encode for PacketRecipeBookAdd {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.entries, out)?;
+        crate::traits::Encode::encode(&self.replace, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookAdd {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entries = <Vec<PacketRecipeBookAddEntriesItem> as crate::traits::Decode>::decode(input)?;
+        let replace = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entries, replace })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRecipeBookRemove {
+    pub recipe_ids: Vec<i32>,
+}
+
+impl crate::traits::Encode for PacketRecipeBookRemove {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint((self.recipe_ids).len() as i32);
+        for item in &self.recipe_ids {
+        out.put_varint(*item);
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookRemove {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let recipe_ids = input.read_array(|input| { Ok(input.get_varint()?) })?;
+        Ok(Self { recipe_ids })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRecipeBookSettings {
+    pub crafting_gui_open: bool,
+    pub crafting_filtering_craftable: bool,
+    pub smelting_gui_open: bool,
+    pub smelting_filtering_craftable: bool,
+    pub blast_gui_open: bool,
+    pub blast_filtering_craftable: bool,
+    pub smoker_gui_open: bool,
+    pub smoker_filtering_craftable: bool,
+}
+
+impl crate::traits::Encode for PacketRecipeBookSettings {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.crafting_gui_open, out)?;
+        crate::traits::Encode::encode(&self.crafting_filtering_craftable, out)?;
+        crate::traits::Encode::encode(&self.smelting_gui_open, out)?;
+        crate::traits::Encode::encode(&self.smelting_filtering_craftable, out)?;
+        crate::traits::Encode::encode(&self.blast_gui_open, out)?;
+        crate::traits::Encode::encode(&self.blast_filtering_craftable, out)?;
+        crate::traits::Encode::encode(&self.smoker_gui_open, out)?;
+        crate::traits::Encode::encode(&self.smoker_filtering_craftable, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBookSettings {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let crafting_gui_open = <bool as crate::traits::Decode>::decode(input)?;
+        let crafting_filtering_craftable = <bool as crate::traits::Decode>::decode(input)?;
+        let smelting_gui_open = <bool as crate::traits::Decode>::decode(input)?;
+        let smelting_filtering_craftable = <bool as crate::traits::Decode>::decode(input)?;
+        let blast_gui_open = <bool as crate::traits::Decode>::decode(input)?;
+        let blast_filtering_craftable = <bool as crate::traits::Decode>::decode(input)?;
+        let smoker_gui_open = <bool as crate::traits::Decode>::decode(input)?;
+        let smoker_filtering_craftable = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { crafting_gui_open, crafting_filtering_craftable, smelting_gui_open, smelting_filtering_craftable, blast_gui_open, blast_filtering_craftable, smoker_gui_open, smoker_filtering_craftable })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityDestroy {
+    pub entity_ids: Vec<i32>,
+}
+
+impl crate::traits::Encode for PacketEntityDestroy {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint((self.entity_ids).len() as i32);
+        for item in &self.entity_ids {
+        out.put_varint(*item);
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityDestroy {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_ids = input.read_array(|input| { Ok(input.get_varint()?) })?;
+        Ok(Self { entity_ids })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRemoveEntityEffect {
+    pub entity_id: i32,
+    pub effect_id: i32,
+}
+
+impl crate::traits::Encode for PacketRemoveEntityEffect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        out.put_varint(self.effect_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRemoveEntityEffect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let effect_id = input.get_varint()?;
+        Ok(Self { entity_id, effect_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketResetScore {
+    pub entity_name: super::types::String,
+    pub objective_name: Option<super::types::String>,
+}
+
+impl crate::traits::Encode for PacketResetScore {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.entity_name, out)?;
+        crate::traits::Encode::encode(&self.objective_name, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketResetScore {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let objective_name = <Option<super::types::String> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_name, objective_name })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRespawn {
+    pub world_state: SpawnInfo,
+    pub copy_metadata: u8,
+}
+
+impl crate::traits::Encode for PacketRespawn {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.world_state, out)?;
+        crate::traits::Encode::encode(&self.copy_metadata, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRespawn {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let world_state = <SpawnInfo as crate::traits::Decode>::decode(input)?;
+        let copy_metadata = <u8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { world_state, copy_metadata })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityHeadRotation {
+    pub entity_id: i32,
+    pub head_yaw: i8,
+}
+
+impl crate::traits::Encode for PacketEntityHeadRotation {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.head_yaw, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityHeadRotation {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let head_yaw = <i8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, head_yaw })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketMultiBlockChangeChunkCoordinates {
+    pub x: i32,
+    pub z: i32,
+    pub y: i32,
+}
+
+impl crate::traits::Encode for PacketMultiBlockChangeChunkCoordinates {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        let raw = (((self.x as i64 & 0x3fffff) as u64) << 42) | (((self.z as i64 & 0x3fffff) as u64) << 20) | ((self.y as i64 & 0xfffff) as u64);
+        out.put_u64(raw);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMultiBlockChangeChunkCoordinates {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let raw = input.get_u64()?;
+        Ok(Self { x: (((((raw >> 42) & 0x3fffff)) as i64) << 42 >> 42) as i32, z: (((((raw >> 20) & 0x3fffff)) as i64) << 42 >> 42) as i32, y: ((((raw & 0xfffff)) as i64) << 44 >> 44) as i32 })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMultiBlockChange {
+    pub chunk_coordinates: PacketMultiBlockChangeChunkCoordinates,
+    pub records: Vec<i32>,
+}
+
+impl crate::traits::Encode for PacketMultiBlockChange {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.chunk_coordinates, out)?;
+        out.put_varint((self.records).len() as i32);
+        for item in &self.records {
+        out.put_varint(*item);
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMultiBlockChange {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let chunk_coordinates = <PacketMultiBlockChangeChunkCoordinates as crate::traits::Decode>::decode(input)?;
+        let records = input.read_array(|input| { Ok(input.get_varint()?) })?;
+        Ok(Self { chunk_coordinates, records })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSelectAdvancementTab {
+    pub id: Option<super::types::String>,
+}
+
+impl crate::traits::Encode for PacketSelectAdvancementTab {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.id, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSelectAdvancementTab {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = <Option<super::types::String> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketServerData {
+    pub motd: crate::nbt::Nbt,
+    pub icon_bytes: Option<super::types::ByteArray>,
+}
+
+impl crate::traits::Encode for PacketServerData {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.motd, out)?;
+        crate::traits::Encode::encode(&self.icon_bytes, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketServerData {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let motd = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let icon_bytes = <Option<super::types::ByteArray> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { motd, icon_bytes })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketActionBar {
+    pub text: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketActionBar {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.text, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketActionBar {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let text = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { text })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldBorderCenter {
+    pub x: f64,
+    pub z: f64,
+}
+
+impl crate::traits::Encode for PacketWorldBorderCenter {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldBorderCenter {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, z })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldBorderLerpSize {
+    pub old_diameter: f64,
+    pub new_diameter: f64,
+    pub speed: i32,
+}
+
+impl crate::traits::Encode for PacketWorldBorderLerpSize {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.old_diameter, out)?;
+        crate::traits::Encode::encode(&self.new_diameter, out)?;
+        out.put_varint(self.speed);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldBorderLerpSize {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let old_diameter = <f64 as crate::traits::Decode>::decode(input)?;
+        let new_diameter = <f64 as crate::traits::Decode>::decode(input)?;
+        let speed = input.get_varint()?;
+        Ok(Self { old_diameter, new_diameter, speed })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldBorderSize {
+    pub diameter: f64,
+}
+
+impl crate::traits::Encode for PacketWorldBorderSize {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.diameter, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldBorderSize {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let diameter = <f64 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { diameter })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldBorderWarningDelay {
+    pub warning_time: i32,
+}
+
+impl crate::traits::Encode for PacketWorldBorderWarningDelay {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.warning_time);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldBorderWarningDelay {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let warning_time = input.get_varint()?;
+        Ok(Self { warning_time })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWorldBorderWarningReach {
+    pub warning_blocks: i32,
+}
+
+impl crate::traits::Encode for PacketWorldBorderWarningReach {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.warning_blocks);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWorldBorderWarningReach {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let warning_blocks = input.get_varint()?;
+        Ok(Self { warning_blocks })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCamera {
+    pub camera_id: i32,
+}
+
+impl crate::traits::Encode for PacketCamera {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.camera_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCamera {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let camera_id = input.get_varint()?;
+        Ok(Self { camera_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateViewPosition {
+    pub chunk_x: i32,
+    pub chunk_z: i32,
+}
+
+impl crate::traits::Encode for PacketUpdateViewPosition {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.chunk_x);
+        out.put_varint(self.chunk_z);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateViewPosition {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let chunk_x = input.get_varint()?;
+        let chunk_z = input.get_varint()?;
+        Ok(Self { chunk_x, chunk_z })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateViewDistance {
+    pub view_distance: i32,
+}
+
+impl crate::traits::Encode for PacketUpdateViewDistance {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.view_distance);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateViewDistance {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let view_distance = input.get_varint()?;
+        Ok(Self { view_distance })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetCursorItem {
+    pub contents: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketSetCursorItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.contents, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetCursorItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let contents = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { contents })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSpawnPosition {
+    pub location: super::types::Position,
+    pub angle: f32,
+}
+
+impl crate::traits::Encode for PacketSpawnPosition {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.angle, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSpawnPosition {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let angle = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, angle })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketScoreboardDisplayObjective {
+    pub position: i32,
+    pub name: super::types::String,
+}
+
+impl crate::traits::Encode for PacketScoreboardDisplayObjective {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.position);
+        crate::traits::Encode::encode(&self.name, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketScoreboardDisplayObjective {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let position = input.get_varint()?;
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        Ok(Self { position, name })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityMetadata {
+    pub entity_id: i32,
+    pub metadata: super::types::EntityMetadata,
+}
+
+impl crate::traits::Encode for PacketEntityMetadata {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.metadata, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityMetadata {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let metadata = <super::types::EntityMetadata as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, metadata })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAttachEntity {
+    pub entity_id: i32,
+    pub vehicle_id: i32,
+}
+
+impl crate::traits::Encode for PacketAttachEntity {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.entity_id);
+        out.put_i32(self.vehicle_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAttachEntity {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_i32()?;
+        let vehicle_id = input.get_i32()?;
+        Ok(Self { entity_id, vehicle_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityVelocity {
+    pub entity_id: i32,
+    pub velocity: super::types::Vec3i16,
+}
+
+impl crate::traits::Encode for PacketEntityVelocity {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.velocity, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityVelocity {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let velocity = <super::types::Vec3i16 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, velocity })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityEquipmentEquipmentsItem {
+    pub slot: i8,
+    pub item: super::types::Slot,
+}
+
+impl PacketEntityEquipmentEquipmentsItem {
+    fn decode_topbit(
+        input: &mut crate::buffer::PacketReader<'_>,
+    ) -> crate::error::Result<(Self, bool)> {
+        let first_raw = input.get_u8()?;
+        let more = first_raw & 0x80 != 0;
+        let slot = (first_raw & 0x7f) as i8;
+        let item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok((Self { slot, item }, more))
+    }
+    fn encode_topbit(
+        &self,
+        out: &mut crate::buffer::PacketWriter,
+        more: bool,
+    ) -> crate::error::Result<()> {
+        if !(0..=0x7f).contains(&self.slot) { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_entity_equipment`.equipments: first field out of 7-bit range"))); }
+        out.put_u8((self.slot as u8 & 0x7f) | if more { 0x80 } else { 0 });
+        crate::traits::Encode::encode(&self.item, out)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PacketEntityEquipmentEquipments(pub Vec<PacketEntityEquipmentEquipmentsItem>);
+
+impl crate::traits::Encode for PacketEntityEquipmentEquipments {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        let len = self.0.len();
+        for (index, item) in self.0.iter().enumerate() {
+            item.encode_topbit(out, index + 1 < len)?;
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityEquipmentEquipments {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let mut items = Vec::new();
+        loop {
+            let (item, more) = PacketEntityEquipmentEquipmentsItem::decode_topbit(input)?;
+            items.push(item);
+            if !more {
+                break;
+            }
+        }
+        Ok(Self(items))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityEquipment {
+    pub entity_id: i32,
+    pub equipments: PacketEntityEquipmentEquipments,
+}
+
+impl crate::traits::Encode for PacketEntityEquipment {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.equipments, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityEquipment {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let equipments = <PacketEntityEquipmentEquipments as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, equipments })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketExperience {
+    pub experience_bar: f32,
+    pub level: i32,
+    pub total_experience: i32,
+}
+
+impl crate::traits::Encode for PacketExperience {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.experience_bar, out)?;
+        out.put_varint(self.level);
+        out.put_varint(self.total_experience);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketExperience {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let experience_bar = <f32 as crate::traits::Decode>::decode(input)?;
+        let level = input.get_varint()?;
+        let total_experience = input.get_varint()?;
+        Ok(Self { experience_bar, level, total_experience })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateHealth {
+    pub health: f32,
+    pub food: i32,
+    pub food_saturation: f32,
+}
+
+impl crate::traits::Encode for PacketUpdateHealth {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.health, out)?;
+        out.put_varint(self.food);
+        crate::traits::Encode::encode(&self.food_saturation, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateHealth {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let health = <f32 as crate::traits::Decode>::decode(input)?;
+        let food = input.get_varint()?;
+        let food_saturation = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { health, food, food_saturation })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketHeldItemSlot {
+    pub slot: i32,
+}
+
+impl crate::traits::Encode for PacketHeldItemSlot {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.slot);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketHeldItemSlot {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot = input.get_varint()?;
+        Ok(Self { slot })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardObjectiveDisplayText {
+    V0(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjectiveDisplayText {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardObjectiveDisplayText {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardObjectiveType {
+    V0(i32),
+    V2(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjectiveType {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                out.put_varint(*v);
+            }
+            Self::V2(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardObjectiveType {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(input.get_varint()?)),
+            2 => Ok(Self::V2(input.get_varint()?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardObjectiveNumberFormat {
+    V0(Option<i32>),
+    V2(Option<i32>),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjectiveNumberFormat {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                out.put_bool((*v).is_some());
+                if let Some(v) = *v { out.put_varint(v); }
+            }
+            Self::V2(v) => {
+                out.put_bool((*v).is_some());
+                if let Some(v) = *v { out.put_varint(v); }
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardObjectiveNumberFormat {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0({ if input.get_bool()? { Some(input.get_varint()?) } else { None } })),
+            2 => Ok(Self::V2({ if input.get_bool()? { Some(input.get_varint()?) } else { None } })),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardObjectiveStylingV0 {
+    V1(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjectiveStylingV0 {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V1(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardObjectiveStylingV0 {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: Option<i64>,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            Some(1) => Ok(Self::V1(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            Some(2) => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardObjectiveStylingV2 {
+    V1(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjectiveStylingV2 {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V1(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardObjectiveStylingV2 {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: Option<i64>,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            Some(1) => Ok(Self::V1(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            Some(2) => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardObjectiveStyling {
+    V0(PacketScoreboardObjectiveStylingV0),
+    V2(PacketScoreboardObjectiveStylingV2),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjectiveStyling {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardObjectiveStyling {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+        number_format: Option<i64>,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(PacketScoreboardObjectiveStylingV0::decode_from(input, number_format)?)),
+            2 => Ok(Self::V2(PacketScoreboardObjectiveStylingV2::decode_from(input, number_format)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketScoreboardObjective {
+    pub name: super::types::String,
+    pub action: i8,
+    pub display_text: PacketScoreboardObjectiveDisplayText,
+    pub r#type: PacketScoreboardObjectiveType,
+    pub number_format: PacketScoreboardObjectiveNumberFormat,
+    pub styling: PacketScoreboardObjectiveStyling,
+}
+
+impl crate::traits::Encode for PacketScoreboardObjective {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.name, out)?;
+        crate::traits::Encode::encode(&self.action, out)?;
+        match (self.action, &self.display_text) {
+            (0, PacketScoreboardObjectiveDisplayText::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketScoreboardObjectiveDisplayText::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `displayText` does not match its discriminant".into())); }
+            (_, PacketScoreboardObjectiveDisplayText::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `displayText` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.r#type) {
+            (0, PacketScoreboardObjectiveType::V0(v)) => {
+                out.put_varint(*v);
+            }
+            (2, PacketScoreboardObjectiveType::V2(v)) => {
+                out.put_varint(*v);
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `type` does not match its discriminant".into())); }
+            (_, PacketScoreboardObjectiveType::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `type` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.number_format) {
+            (0, PacketScoreboardObjectiveNumberFormat::V0(v)) => {
+                out.put_bool((*v).is_some());
+                if let Some(v) = *v { out.put_varint(v); }
+            }
+            (2, PacketScoreboardObjectiveNumberFormat::V2(v)) => {
+                out.put_bool((*v).is_some());
+                if let Some(v) = *v { out.put_varint(v); }
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `number_format` does not match its discriminant".into())); }
+            (_, PacketScoreboardObjectiveNumberFormat::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `number_format` does not match its discriminant".into())); }
+        }
+        match (self.action, &self.styling) {
+            (0, PacketScoreboardObjectiveStyling::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketScoreboardObjectiveStyling::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `styling` does not match its discriminant".into())); }
+            (_, PacketScoreboardObjectiveStyling::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardObjective: field `styling` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketScoreboardObjective {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let action = <i8 as crate::traits::Decode>::decode(input)?;
+        let display_text = PacketScoreboardObjectiveDisplayText::decode_from(input, action)?;
+        let r#type = PacketScoreboardObjectiveType::decode_from(input, action)?;
+        let number_format = PacketScoreboardObjectiveNumberFormat::decode_from(input, action)?;
+        let styling = PacketScoreboardObjectiveStyling::decode_from(input, action, match &number_format { PacketScoreboardObjectiveNumberFormat::V0(v) | PacketScoreboardObjectiveNumberFormat::V2(v) => (*v).map(|x| x as i64), PacketScoreboardObjectiveNumberFormat::Default => None,  })?;
+        Ok(Self { name, action, display_text, r#type, number_format, styling })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetPassengers {
+    pub entity_id: i32,
+    pub passengers: Vec<i32>,
+}
+
+impl crate::traits::Encode for PacketSetPassengers {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        out.put_varint((self.passengers).len() as i32);
+        for item in &self.passengers {
+        out.put_varint(*item);
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetPassengers {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let passengers = input.read_array(|input| { Ok(input.get_varint()?) })?;
+        Ok(Self { entity_id, passengers })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetPlayerInventory {
+    pub slot_id: i32,
+    pub contents: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketSetPlayerInventory {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.slot_id);
+        crate::traits::Encode::encode(&self.contents, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetPlayerInventory {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot_id = input.get_varint()?;
+        let contents = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { slot_id, contents })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsName {
+    V0(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsName {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsName {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsFriendlyFire {
+    V0(i8),
+    V2(i8),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsFriendlyFire {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsFriendlyFire {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<i8 as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<i8 as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsNameTagVisibility {
+    V0(super::types::String),
+    V2(super::types::String),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsNameTagVisibility {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsNameTagVisibility {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsCollisionRule {
+    V0(super::types::String),
+    V2(super::types::String),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsCollisionRule {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsCollisionRule {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsFormatting {
+    V0(i32),
+    V2(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsFormatting {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                out.put_varint(*v);
+            }
+            Self::V2(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsFormatting {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(input.get_varint()?)),
+            2 => Ok(Self::V2(input.get_varint()?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsPrefix {
+    V0(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsPrefix {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsPrefix {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsSuffix {
+    V0(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsSuffix {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsSuffix {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            2 => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketTeamsPlayers {
+    V0(Vec<super::types::String>),
+    V3(Vec<super::types::String>),
+    V4(Vec<super::types::String>),
+    Default,
+}
+
+impl crate::traits::Encode for PacketTeamsPlayers {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V3(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V4(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketTeamsPlayers {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<Vec<super::types::String> as crate::traits::Decode>::decode(input)?)),
+            3 => Ok(Self::V3(<Vec<super::types::String> as crate::traits::Decode>::decode(input)?)),
+            4 => Ok(Self::V4(<Vec<super::types::String> as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTeams {
+    pub team: super::types::String,
+    pub mode: i8,
+    pub name: PacketTeamsName,
+    pub friendly_fire: PacketTeamsFriendlyFire,
+    pub name_tag_visibility: PacketTeamsNameTagVisibility,
+    pub collision_rule: PacketTeamsCollisionRule,
+    pub formatting: PacketTeamsFormatting,
+    pub prefix: PacketTeamsPrefix,
+    pub suffix: PacketTeamsSuffix,
+    pub players: PacketTeamsPlayers,
+}
+
+impl crate::traits::Encode for PacketTeams {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.team, out)?;
+        crate::traits::Encode::encode(&self.mode, out)?;
+        match (self.mode, &self.name) {
+            (0, PacketTeamsName::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketTeamsName::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `name` does not match its discriminant".into())); }
+            (_, PacketTeamsName::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `name` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.friendly_fire) {
+            (0, PacketTeamsFriendlyFire::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketTeamsFriendlyFire::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `friendlyFire` does not match its discriminant".into())); }
+            (_, PacketTeamsFriendlyFire::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `friendlyFire` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.name_tag_visibility) {
+            (0, PacketTeamsNameTagVisibility::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketTeamsNameTagVisibility::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `nameTagVisibility` does not match its discriminant".into())); }
+            (_, PacketTeamsNameTagVisibility::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `nameTagVisibility` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.collision_rule) {
+            (0, PacketTeamsCollisionRule::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketTeamsCollisionRule::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `collisionRule` does not match its discriminant".into())); }
+            (_, PacketTeamsCollisionRule::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `collisionRule` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.formatting) {
+            (0, PacketTeamsFormatting::V0(v)) => {
+                out.put_varint(*v);
+            }
+            (2, PacketTeamsFormatting::V2(v)) => {
+                out.put_varint(*v);
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `formatting` does not match its discriminant".into())); }
+            (_, PacketTeamsFormatting::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `formatting` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.prefix) {
+            (0, PacketTeamsPrefix::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketTeamsPrefix::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `prefix` does not match its discriminant".into())); }
+            (_, PacketTeamsPrefix::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `prefix` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.suffix) {
+            (0, PacketTeamsSuffix::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, PacketTeamsSuffix::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `suffix` does not match its discriminant".into())); }
+            (_, PacketTeamsSuffix::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `suffix` does not match its discriminant".into())); }
+        }
+        match (self.mode, &self.players) {
+            (0, PacketTeamsPlayers::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (3, PacketTeamsPlayers::V3(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (4, PacketTeamsPlayers::V4(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (0, _) | (3, _) | (4, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `players` does not match its discriminant".into())); }
+            (_, PacketTeamsPlayers::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketTeams: field `players` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTeams {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let team = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let mode = <i8 as crate::traits::Decode>::decode(input)?;
+        let name = PacketTeamsName::decode_from(input, mode)?;
+        let friendly_fire = PacketTeamsFriendlyFire::decode_from(input, mode)?;
+        let name_tag_visibility = PacketTeamsNameTagVisibility::decode_from(input, mode)?;
+        let collision_rule = PacketTeamsCollisionRule::decode_from(input, mode)?;
+        let formatting = PacketTeamsFormatting::decode_from(input, mode)?;
+        let prefix = PacketTeamsPrefix::decode_from(input, mode)?;
+        let suffix = PacketTeamsSuffix::decode_from(input, mode)?;
+        let players = PacketTeamsPlayers::decode_from(input, mode)?;
+        Ok(Self { team, mode, name, friendly_fire, name_tag_visibility, collision_rule, formatting, prefix, suffix, players })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketScoreboardScoreStyling {
+    V1(crate::nbt::Nbt),
+    V2(crate::nbt::Nbt),
+    Default,
+}
+
+impl crate::traits::Encode for PacketScoreboardScoreStyling {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V1(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketScoreboardScoreStyling {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: Option<i64>,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            Some(1) => Ok(Self::V1(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            Some(2) => Ok(Self::V2(<crate::nbt::Nbt as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketScoreboardScore {
+    pub item_name: super::types::String,
+    pub score_name: super::types::String,
+    pub value: i32,
+    pub display_name: Option<crate::nbt::Nbt>,
+    pub number_format: Option<i32>,
+    pub styling: PacketScoreboardScoreStyling,
+}
+
+impl crate::traits::Encode for PacketScoreboardScore {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.item_name, out)?;
+        crate::traits::Encode::encode(&self.score_name, out)?;
+        out.put_varint(self.value);
+        crate::traits::Encode::encode(&self.display_name, out)?;
+        out.put_bool((self.number_format).is_some());
+        if let Some(v) = self.number_format { out.put_varint(v); }
+        match (self.number_format.map(|x| x as i64), &self.styling) {
+            (Some(1), PacketScoreboardScoreStyling::V1(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (Some(2), PacketScoreboardScoreStyling::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (Some(1), _) | (Some(2), _) => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardScore: field `styling` does not match its discriminant".into())); }
+            (_, PacketScoreboardScoreStyling::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketScoreboardScore: field `styling` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketScoreboardScore {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let item_name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let score_name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let value = input.get_varint()?;
+        let display_name = <Option<crate::nbt::Nbt> as crate::traits::Decode>::decode(input)?;
+        let number_format = { if input.get_bool()? { Some(input.get_varint()?) } else { None } };
+        let styling = PacketScoreboardScoreStyling::decode_from(input, number_format.map(|x| x as i64))?;
+        Ok(Self { item_name, score_name, value, display_name, number_format, styling })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSimulationDistance {
+    pub distance: i32,
+}
+
+impl crate::traits::Encode for PacketSimulationDistance {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.distance);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSimulationDistance {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let distance = input.get_varint()?;
+        Ok(Self { distance })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetTitleSubtitle {
+    pub text: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketSetTitleSubtitle {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.text, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetTitleSubtitle {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let text = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { text })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateTime {
+    pub age: i64,
+    pub time: i64,
+    pub tick_day_time: bool,
+}
+
+impl crate::traits::Encode for PacketUpdateTime {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i64(self.age);
+        out.put_i64(self.time);
+        crate::traits::Encode::encode(&self.tick_day_time, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateTime {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let age = input.get_i64()?;
+        let time = input.get_i64()?;
+        let tick_day_time = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { age, time, tick_day_time })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetTitleText {
+    pub text: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketSetTitleText {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.text, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetTitleText {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let text = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { text })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetTitleTime {
+    pub fade_in: i32,
+    pub stay: i32,
+    pub fade_out: i32,
+}
+
+impl crate::traits::Encode for PacketSetTitleTime {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.fade_in);
+        out.put_i32(self.stay);
+        out.put_i32(self.fade_out);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetTitleTime {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let fade_in = input.get_i32()?;
+        let stay = input.get_i32()?;
+        let fade_out = input.get_i32()?;
+        Ok(Self { fade_in, stay, fade_out })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntitySoundEffect {
+    pub sound: super::types::ItemSoundHolder,
+    pub sound_category: super::types::SoundSource,
+    pub entity_id: i32,
+    pub volume: f32,
+    pub pitch: f32,
+    pub seed: i64,
+}
+
+impl crate::traits::Encode for PacketEntitySoundEffect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.sound, out)?;
+        crate::traits::Encode::encode(&self.sound_category, out)?;
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.volume, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        out.put_i64(self.seed);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntitySoundEffect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let sound = <super::types::ItemSoundHolder as crate::traits::Decode>::decode(input)?;
+        let sound_category = <super::types::SoundSource as crate::traits::Decode>::decode(input)?;
+        let entity_id = input.get_varint()?;
+        let volume = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let seed = input.get_i64()?;
+        Ok(Self { sound, sound_category, entity_id, volume, pitch, seed })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSoundEffect {
+    pub sound: super::types::ItemSoundHolder,
+    pub sound_category: super::types::SoundSource,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub volume: f32,
+    pub pitch: f32,
+    pub seed: i64,
+}
+
+impl crate::traits::Encode for PacketSoundEffect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.sound, out)?;
+        crate::traits::Encode::encode(&self.sound_category, out)?;
+        out.put_i32(self.x);
+        out.put_i32(self.y);
+        out.put_i32(self.z);
+        crate::traits::Encode::encode(&self.volume, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        out.put_i64(self.seed);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSoundEffect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let sound = <super::types::ItemSoundHolder as crate::traits::Decode>::decode(input)?;
+        let sound_category = <super::types::SoundSource as crate::traits::Decode>::decode(input)?;
+        let x = input.get_i32()?;
+        let y = input.get_i32()?;
+        let z = input.get_i32()?;
+        let volume = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let seed = input.get_i64()?;
+        Ok(Self { sound, sound_category, x, y, z, volume, pitch, seed })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketStopSoundSource {
+    V1(i32),
+    V3(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketStopSoundSource {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V1(v) => {
+                out.put_varint(*v);
+            }
+            Self::V3(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketStopSoundSource {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            1 => Ok(Self::V1(input.get_varint()?)),
+            3 => Ok(Self::V3(input.get_varint()?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketStopSoundSound {
+    V2(super::types::String),
+    V3(super::types::String),
+    Default,
+}
+
+impl crate::traits::Encode for PacketStopSoundSound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V3(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketStopSoundSound {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i8,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            2 => Ok(Self::V2(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            3 => Ok(Self::V3(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketStopSound {
+    pub flags: i8,
+    pub source: PacketStopSoundSource,
+    pub sound: PacketStopSoundSound,
+}
+
+impl crate::traits::Encode for PacketStopSound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.flags, out)?;
+        match (self.flags, &self.source) {
+            (1, PacketStopSoundSource::V1(v)) => {
+                out.put_varint(*v);
+            }
+            (3, PacketStopSoundSource::V3(v)) => {
+                out.put_varint(*v);
+            }
+            (1, _) | (3, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketStopSound: field `source` does not match its discriminant".into())); }
+            (_, PacketStopSoundSource::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketStopSound: field `source` does not match its discriminant".into())); }
+        }
+        match (self.flags, &self.sound) {
+            (2, PacketStopSoundSound::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (3, PacketStopSoundSound::V3(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, _) | (3, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketStopSound: field `sound` does not match its discriminant".into())); }
+            (_, PacketStopSoundSound::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketStopSound: field `sound` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketStopSound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let flags = <i8 as crate::traits::Decode>::decode(input)?;
+        let source = PacketStopSoundSource::decode_from(input, flags)?;
+        let sound = PacketStopSoundSound::decode_from(input, flags)?;
+        Ok(Self { flags, source, sound })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSystemChat {
+    pub content: crate::nbt::Nbt,
+    pub is_action_bar: bool,
+}
+
+impl crate::traits::Encode for PacketSystemChat {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.content, out)?;
+        crate::traits::Encode::encode(&self.is_action_bar, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSystemChat {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let content = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let is_action_bar = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { content, is_action_bar })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerlistHeader {
+    pub header: crate::nbt::Nbt,
+    pub footer: crate::nbt::Nbt,
+}
+
+impl crate::traits::Encode for PacketPlayerlistHeader {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.header, out)?;
+        crate::traits::Encode::encode(&self.footer, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerlistHeader {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let header = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let footer = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        Ok(Self { header, footer })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketNbtQueryResponse {
+    pub transaction_id: i32,
+    pub nbt: Option<crate::nbt::Nbt>,
+}
+
+impl crate::traits::Encode for PacketNbtQueryResponse {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.transaction_id);
+        crate::nbt::write_optional(out, (self.nbt).as_ref())?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketNbtQueryResponse {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let transaction_id = input.get_varint()?;
+        let nbt = crate::nbt::read_optional(input)?;
+        Ok(Self { transaction_id, nbt })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCollect {
+    pub collected_entity_id: i32,
+    pub collector_entity_id: i32,
+    pub pickup_item_count: i32,
+}
+
+impl crate::traits::Encode for PacketCollect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.collected_entity_id);
+        out.put_varint(self.collector_entity_id);
+        out.put_varint(self.pickup_item_count);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCollect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let collected_entity_id = input.get_varint()?;
+        let collector_entity_id = input.get_varint()?;
+        let pickup_item_count = input.get_varint()?;
+        Ok(Self { collected_entity_id, collector_entity_id, pickup_item_count })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityTeleport {
+    pub entity_id: i32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub yaw: i8,
+    pub pitch: i8,
+    pub on_ground: bool,
+}
+
+impl crate::traits::Encode for PacketEntityTeleport {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.on_ground, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityTeleport {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let yaw = <i8 as crate::traits::Decode>::decode(input)?;
+        let pitch = <i8 as crate::traits::Decode>::decode(input)?;
+        let on_ground = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, x, y, z, yaw, pitch, on_ground })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetTickingState {
+    pub tick_rate: f32,
+    pub is_frozen: bool,
+}
+
+impl crate::traits::Encode for PacketSetTickingState {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.tick_rate, out)?;
+        crate::traits::Encode::encode(&self.is_frozen, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetTickingState {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let tick_rate = <f32 as crate::traits::Decode>::decode(input)?;
+        let is_frozen = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { tick_rate, is_frozen })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketStepTick {
+    pub tick_steps: i32,
+}
+
+impl crate::traits::Encode for PacketStepTick {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.tick_steps);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketStepTick {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let tick_steps = input.get_varint()?;
+        Ok(Self { tick_steps })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketAdvancementsAdvancementMappingItemValueDisplayDataValueFlags {
+    pub unused: u32,
+    pub hidden: bool,
+    pub show_toast: bool,
+    pub has_background_texture: bool,
+}
+
+impl crate::traits::Encode for PacketAdvancementsAdvancementMappingItemValueDisplayDataValueFlags {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        let raw = ((self.unused as u64 & 0x1fffffff) << 3) | ((self.hidden as u64) << 2) | ((self.show_toast as u64) << 1) | (self.has_background_texture as u64);
+        out.put_u32(raw as u32);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItemValueDisplayDataValueFlags {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let raw = u64::from(input.get_u32()?);
+        Ok(Self { unused: ((raw >> 3) & 0x1fffffff) as u32, hidden: ((raw >> 2) & 0x1) != 0, show_toast: ((raw >> 1) & 0x1) != 0, has_background_texture: (raw & 0x1) != 0 })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture {
+    True(super::types::String),
+    Default,
+}
+
+impl crate::traits::Encode for PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::True(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: bool,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            true => Ok(Self::True(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            false => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancementsAdvancementMappingItemValueDisplayDataValue {
+    pub title: crate::nbt::Nbt,
+    pub description: crate::nbt::Nbt,
+    pub icon: super::types::Slot,
+    pub frame_type: i32,
+    pub flags: PacketAdvancementsAdvancementMappingItemValueDisplayDataValueFlags,
+    pub background_texture: PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture,
+    pub x_cord: f32,
+    pub y_cord: f32,
+}
+
+impl crate::traits::Encode for PacketAdvancementsAdvancementMappingItemValueDisplayDataValue {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.title, out)?;
+        crate::traits::Encode::encode(&self.description, out)?;
+        crate::traits::Encode::encode(&self.icon, out)?;
+        out.put_varint(self.frame_type);
+        crate::traits::Encode::encode(&self.flags, out)?;
+        match (self.flags.has_background_texture, &self.background_texture) {
+            (true, PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture::True(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (true, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketAdvancementsAdvancementMappingItemValueDisplayDataValue: field `backgroundTexture` does not match its discriminant".into())); }
+            (_, PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketAdvancementsAdvancementMappingItemValueDisplayDataValue: field `backgroundTexture` does not match its discriminant".into())); }
+        }
+        crate::traits::Encode::encode(&self.x_cord, out)?;
+        crate::traits::Encode::encode(&self.y_cord, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItemValueDisplayDataValue {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let title = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let description = <crate::nbt::Nbt as crate::traits::Decode>::decode(input)?;
+        let icon = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        let frame_type = input.get_varint()?;
+        let flags = <PacketAdvancementsAdvancementMappingItemValueDisplayDataValueFlags as crate::traits::Decode>::decode(input)?;
+        let background_texture = PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture::decode_from(input, flags.has_background_texture)?;
+        let x_cord = <f32 as crate::traits::Decode>::decode(input)?;
+        let y_cord = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { title, description, icon, frame_type, flags, background_texture, x_cord, y_cord })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancementsAdvancementMappingItemValue {
+    pub parent_id: Option<super::types::String>,
+    pub display_data: Option<PacketAdvancementsAdvancementMappingItemValueDisplayDataValue>,
+    pub requirements: Vec<Vec<super::types::String>>,
+    pub sends_telemtry_data: bool,
+}
+
+impl crate::traits::Encode for PacketAdvancementsAdvancementMappingItemValue {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.parent_id, out)?;
+        crate::traits::Encode::encode(&self.display_data, out)?;
+        crate::traits::Encode::encode(&self.requirements, out)?;
+        crate::traits::Encode::encode(&self.sends_telemtry_data, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItemValue {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let parent_id = <Option<super::types::String> as crate::traits::Decode>::decode(input)?;
+        let display_data = <Option<PacketAdvancementsAdvancementMappingItemValueDisplayDataValue> as crate::traits::Decode>::decode(input)?;
+        let requirements = <Vec<Vec<super::types::String>> as crate::traits::Decode>::decode(input)?;
+        let sends_telemtry_data = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { parent_id, display_data, requirements, sends_telemtry_data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancementsAdvancementMappingItem {
+    pub key: super::types::String,
+    pub value: PacketAdvancementsAdvancementMappingItemValue,
+}
+
+impl crate::traits::Encode for PacketAdvancementsAdvancementMappingItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.key, out)?;
+        crate::traits::Encode::encode(&self.value, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let key = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let value = <PacketAdvancementsAdvancementMappingItemValue as crate::traits::Decode>::decode(input)?;
+        Ok(Self { key, value })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancementsProgressMappingItemValueItem {
+    pub criterion_identifier: super::types::String,
+    pub criterion_progress: Option<i64>,
+}
+
+impl crate::traits::Encode for PacketAdvancementsProgressMappingItemValueItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.criterion_identifier, out)?;
+        out.put_bool(self.criterion_progress.is_some());
+        if let Some(v) = &self.criterion_progress {
+        out.put_i64((*v));
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementsProgressMappingItemValueItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let criterion_identifier = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let criterion_progress = { if input.get_bool()? { Some(input.get_i64()?) } else { None } };
+        Ok(Self { criterion_identifier, criterion_progress })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancementsProgressMappingItem {
+    pub key: super::types::String,
+    pub value: Vec<PacketAdvancementsProgressMappingItemValueItem>,
+}
+
+impl crate::traits::Encode for PacketAdvancementsProgressMappingItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.key, out)?;
+        crate::traits::Encode::encode(&self.value, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementsProgressMappingItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let key = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let value = <Vec<PacketAdvancementsProgressMappingItemValueItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { key, value })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancements {
+    pub reset: bool,
+    pub advancement_mapping: Vec<PacketAdvancementsAdvancementMappingItem>,
+    pub identifiers: Vec<super::types::String>,
+    pub progress_mapping: Vec<PacketAdvancementsProgressMappingItem>,
+}
+
+impl crate::traits::Encode for PacketAdvancements {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.reset, out)?;
+        crate::traits::Encode::encode(&self.advancement_mapping, out)?;
+        crate::traits::Encode::encode(&self.identifiers, out)?;
+        crate::traits::Encode::encode(&self.progress_mapping, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancements {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let reset = <bool as crate::traits::Decode>::decode(input)?;
+        let advancement_mapping = <Vec<PacketAdvancementsAdvancementMappingItem> as crate::traits::Decode>::decode(input)?;
+        let identifiers = <Vec<super::types::String> as crate::traits::Decode>::decode(input)?;
+        let progress_mapping = <Vec<PacketAdvancementsProgressMappingItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { reset, advancement_mapping, identifiers, progress_mapping })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PacketEntityUpdateAttributesPropertiesItemKey {
+    GenericArmor,
+    GenericArmorToughness,
+    GenericFollowRange,
+    GenericGravity,
+    GenericJumpStrength,
+    GenericKnockbackResistance,
+    GenericLuck,
+    GenericMaxAbsorption,
+    GenericMaxHealth,
+    GenericMovementSpeed,
+    GenericSafeFallDistance,
+    GenericScale,
+    GenericAttackDamage,
+    ZombieSpawnReinforcements,
+    GenericStepHeight,
+    GenericAttackKnockback,
+    GenericAttackSpeed,
+    PlayerBlockBreakSpeed,
+    PlayerBlockInteractionRange,
+    PlayerEntityInteractionRange,
+    GenericFallDamageMultiplier,
+    GenericFlyingSpeed,
+}
+
+impl crate::traits::Encode for PacketEntityUpdateAttributesPropertiesItemKey {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::GenericArmor => out.put_varint(0),
+            Self::GenericArmorToughness => out.put_varint(1),
+            Self::GenericFollowRange => out.put_varint(10),
+            Self::GenericGravity => out.put_varint(11),
+            Self::GenericJumpStrength => out.put_varint(12),
+            Self::GenericKnockbackResistance => out.put_varint(13),
+            Self::GenericLuck => out.put_varint(14),
+            Self::GenericMaxAbsorption => out.put_varint(15),
+            Self::GenericMaxHealth => out.put_varint(16),
+            Self::GenericMovementSpeed => out.put_varint(17),
+            Self::GenericSafeFallDistance => out.put_varint(18),
+            Self::GenericScale => out.put_varint(19),
+            Self::GenericAttackDamage => out.put_varint(2),
+            Self::ZombieSpawnReinforcements => out.put_varint(20),
+            Self::GenericStepHeight => out.put_varint(21),
+            Self::GenericAttackKnockback => out.put_varint(3),
+            Self::GenericAttackSpeed => out.put_varint(4),
+            Self::PlayerBlockBreakSpeed => out.put_varint(5),
+            Self::PlayerBlockInteractionRange => out.put_varint(6),
+            Self::PlayerEntityInteractionRange => out.put_varint(7),
+            Self::GenericFallDamageMultiplier => out.put_varint(8),
+            Self::GenericFlyingSpeed => out.put_varint(9),
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityUpdateAttributesPropertiesItemKey {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let value = input.get_varint()?;
+        match value {
+            0 => Ok(Self::GenericArmor),
+            1 => Ok(Self::GenericArmorToughness),
+            10 => Ok(Self::GenericFollowRange),
+            11 => Ok(Self::GenericGravity),
+            12 => Ok(Self::GenericJumpStrength),
+            13 => Ok(Self::GenericKnockbackResistance),
+            14 => Ok(Self::GenericLuck),
+            15 => Ok(Self::GenericMaxAbsorption),
+            16 => Ok(Self::GenericMaxHealth),
+            17 => Ok(Self::GenericMovementSpeed),
+            18 => Ok(Self::GenericSafeFallDistance),
+            19 => Ok(Self::GenericScale),
+            2 => Ok(Self::GenericAttackDamage),
+            20 => Ok(Self::ZombieSpawnReinforcements),
+            21 => Ok(Self::GenericStepHeight),
+            3 => Ok(Self::GenericAttackKnockback),
+            4 => Ok(Self::GenericAttackSpeed),
+            5 => Ok(Self::PlayerBlockBreakSpeed),
+            6 => Ok(Self::PlayerBlockInteractionRange),
+            7 => Ok(Self::PlayerEntityInteractionRange),
+            8 => Ok(Self::GenericFallDamageMultiplier),
+            9 => Ok(Self::GenericFlyingSpeed),
+            _ => Err(crate::error::ProtocolError::UnknownEnumValue { type_name: "PacketEntityUpdateAttributesPropertiesItemKey", value: i64::from(value) }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityUpdateAttributesPropertiesItemModifiersItem {
+    pub uuid: super::types::String,
+    pub amount: f64,
+    pub operation: i8,
+}
+
+impl crate::traits::Encode for PacketEntityUpdateAttributesPropertiesItemModifiersItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.uuid, out)?;
+        crate::traits::Encode::encode(&self.amount, out)?;
+        crate::traits::Encode::encode(&self.operation, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityUpdateAttributesPropertiesItemModifiersItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let uuid = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let amount = <f64 as crate::traits::Decode>::decode(input)?;
+        let operation = <i8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { uuid, amount, operation })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityUpdateAttributesPropertiesItem {
+    pub key: PacketEntityUpdateAttributesPropertiesItemKey,
+    pub value: f64,
+    pub modifiers: Vec<PacketEntityUpdateAttributesPropertiesItemModifiersItem>,
+}
+
+impl crate::traits::Encode for PacketEntityUpdateAttributesPropertiesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.key, out)?;
+        crate::traits::Encode::encode(&self.value, out)?;
+        crate::traits::Encode::encode(&self.modifiers, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityUpdateAttributesPropertiesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let key = <PacketEntityUpdateAttributesPropertiesItemKey as crate::traits::Decode>::decode(input)?;
+        let value = <f64 as crate::traits::Decode>::decode(input)?;
+        let modifiers = <Vec<PacketEntityUpdateAttributesPropertiesItemModifiersItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { key, value, modifiers })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityUpdateAttributes {
+    pub entity_id: i32,
+    pub properties: Vec<PacketEntityUpdateAttributesPropertiesItem>,
+}
+
+impl crate::traits::Encode for PacketEntityUpdateAttributes {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.properties, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityUpdateAttributes {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let properties = <Vec<PacketEntityUpdateAttributesPropertiesItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, properties })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityEffect {
+    pub entity_id: i32,
+    pub effect_id: i32,
+    pub amplifier: i32,
+    pub duration: i32,
+    pub flags: u8,
+}
+
+impl crate::traits::Encode for PacketEntityEffect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        out.put_varint(self.effect_id);
+        out.put_varint(self.amplifier);
+        out.put_varint(self.duration);
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityEffect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let effect_id = input.get_varint()?;
+        let amplifier = input.get_varint()?;
+        let duration = input.get_varint()?;
+        let flags = <u8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, effect_id, amplifier, duration, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDeclareRecipesRecipesItem {
+    pub name: super::types::String,
+    pub items: Vec<i32>,
+}
+
+impl crate::traits::Encode for PacketDeclareRecipesRecipesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.name, out)?;
+        out.put_varint((self.items).len() as i32);
+        for item in &self.items {
+        out.put_varint(*item);
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDeclareRecipesRecipesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let items = input.read_array(|input| { Ok(input.get_varint()?) })?;
+        Ok(Self { name, items })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDeclareRecipesStoneCutterRecipesItem {
+    pub input_: super::types::IdSet,
+    pub slot_display: SlotDisplay,
+}
+
+impl crate::traits::Encode for PacketDeclareRecipesStoneCutterRecipesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.input_, out)?;
+        crate::traits::Encode::encode(&self.slot_display, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDeclareRecipesStoneCutterRecipesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let input_ = <super::types::IdSet as crate::traits::Decode>::decode(input)?;
+        let slot_display = <SlotDisplay as crate::traits::Decode>::decode(input)?;
+        Ok(Self { input_, slot_display })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDeclareRecipes {
+    pub recipes: Vec<PacketDeclareRecipesRecipesItem>,
+    pub stone_cutter_recipes: Vec<PacketDeclareRecipesStoneCutterRecipesItem>,
+}
+
+impl crate::traits::Encode for PacketDeclareRecipes {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.recipes, out)?;
+        crate::traits::Encode::encode(&self.stone_cutter_recipes, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDeclareRecipes {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let recipes = <Vec<PacketDeclareRecipesRecipesItem> as crate::traits::Decode>::decode(input)?;
+        let stone_cutter_recipes = <Vec<PacketDeclareRecipesStoneCutterRecipesItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { recipes, stone_cutter_recipes })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTagsTagsItem {
+    pub tag_type: super::types::String,
+    pub tags: super::types::Tags,
+}
+
+impl crate::traits::Encode for PacketTagsTagsItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.tag_type, out)?;
+        crate::traits::Encode::encode(&self.tags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTagsTagsItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let tag_type = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let tags = <super::types::Tags as crate::traits::Decode>::decode(input)?;
+        Ok(Self { tag_type, tags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTags {
+    pub tags: Vec<PacketTagsTagsItem>,
+}
+
+impl crate::traits::Encode for PacketTags {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.tags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTags {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let tags = <Vec<PacketTagsTagsItem> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { tags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetProjectilePower {
+    pub id: i32,
+    pub acceleration_power: f64,
+}
+
+impl crate::traits::Encode for PacketSetProjectilePower {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.id);
+        crate::traits::Encode::encode(&self.acceleration_power, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetProjectilePower {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = input.get_varint()?;
+        let acceleration_power = <f64 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { id, acceleration_power })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketTeleportConfirm {
+    pub teleport_id: i32,
+}
+
+impl crate::traits::Encode for PacketTeleportConfirm {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.teleport_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTeleportConfirm {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let teleport_id = input.get_varint()?;
+        Ok(Self { teleport_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketQueryBlockNbt {
+    pub transaction_id: i32,
+    pub location: super::types::Position,
+}
+
+impl crate::traits::Encode for PacketQueryBlockNbt {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.transaction_id);
+        crate::traits::Encode::encode(&self.location, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketQueryBlockNbt {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let transaction_id = input.get_varint()?;
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        Ok(Self { transaction_id, location })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSelectBundleItem {
+    pub slot_id: i32,
+    pub selected_item_index: i32,
+}
+
+impl crate::traits::Encode for PacketSelectBundleItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.slot_id);
+        out.put_varint(self.selected_item_index);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSelectBundleItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot_id = input.get_varint()?;
+        let selected_item_index = input.get_varint()?;
+        Ok(Self { slot_id, selected_item_index })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetDifficulty {
+    pub new_difficulty: u8,
+}
+
+impl crate::traits::Encode for PacketSetDifficulty {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.new_difficulty, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetDifficulty {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let new_difficulty = <u8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { new_difficulty })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketMessageAcknowledgement {
+    pub count: i32,
+}
+
+impl crate::traits::Encode for PacketMessageAcknowledgement {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.count);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketMessageAcknowledgement {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let count = input.get_varint()?;
+        Ok(Self { count })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChatCommand {
+    pub command: super::types::String,
+}
+
+impl crate::traits::Encode for PacketChatCommand {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.command, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChatCommand {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let command = <super::types::String as crate::traits::Decode>::decode(input)?;
+        Ok(Self { command })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChatCommandSignedArgumentSignaturesItem {
+    pub argument_name: super::types::String,
+    pub signature: Vec<u8>,
+}
+
+impl crate::traits::Encode for PacketChatCommandSignedArgumentSignaturesItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.argument_name, out)?;
+        if (self.signature).len() != 256 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_chat_command_signed`.argumentSignatures.signature: expected exactly 256 bytes"))); }
+        out.put_bytes(&self.signature);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChatCommandSignedArgumentSignaturesItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let argument_name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let signature = input.read_bytes(256)?.to_vec();
+        Ok(Self { argument_name, signature })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChatCommandSigned {
+    pub command: super::types::String,
+    pub timestamp: i64,
+    pub salt: i64,
+    pub argument_signatures: Vec<PacketChatCommandSignedArgumentSignaturesItem>,
+    pub message_count: i32,
+    pub acknowledged: Vec<u8>,
+}
+
+impl crate::traits::Encode for PacketChatCommandSigned {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.command, out)?;
+        out.put_i64(self.timestamp);
+        out.put_i64(self.salt);
+        crate::traits::Encode::encode(&self.argument_signatures, out)?;
+        out.put_varint(self.message_count);
+        if (self.acknowledged).len() != 3 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_chat_command_signed`.acknowledged: expected exactly 3 bytes"))); }
+        out.put_bytes(&self.acknowledged);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChatCommandSigned {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let command = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let timestamp = input.get_i64()?;
+        let salt = input.get_i64()?;
+        let argument_signatures = <Vec<PacketChatCommandSignedArgumentSignaturesItem> as crate::traits::Decode>::decode(input)?;
+        let message_count = input.get_varint()?;
+        let acknowledged = input.read_bytes(3)?.to_vec();
+        Ok(Self { command, timestamp, salt, argument_signatures, message_count, acknowledged })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChatMessage {
+    pub message: super::types::String,
+    pub timestamp: i64,
+    pub salt: i64,
+    pub signature: Option<Vec<u8>>,
+    pub offset: i32,
+    pub acknowledged: Vec<u8>,
+}
+
+impl crate::traits::Encode for PacketChatMessage {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.message, out)?;
+        out.put_i64(self.timestamp);
+        out.put_i64(self.salt);
+        out.put_bool(self.signature.is_some());
+        if let Some(v) = &self.signature {
+        if ((*v)).len() != 256 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_chat_message`.signature: expected exactly 256 bytes"))); }
+        out.put_bytes(&(*v));
+        }
+        out.put_varint(self.offset);
+        if (self.acknowledged).len() != 3 { return Err(crate::error::ProtocolError::InvalidData(format!("type `packet_chat_message`.acknowledged: expected exactly 3 bytes"))); }
+        out.put_bytes(&self.acknowledged);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChatMessage {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let message = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let timestamp = input.get_i64()?;
+        let salt = input.get_i64()?;
+        let signature = { if input.get_bool()? { Some(input.read_bytes(256)?.to_vec()) } else { None } };
+        let offset = input.get_varint()?;
+        let acknowledged = input.read_bytes(3)?.to_vec();
+        Ok(Self { message, timestamp, salt, signature, offset, acknowledged })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChatSessionUpdate {
+    pub session_uuid: u128,
+    pub expire_time: i64,
+    pub public_key: super::types::ByteArray,
+    pub signature: super::types::ByteArray,
+}
+
+impl crate::traits::Encode for PacketChatSessionUpdate {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.session_uuid, out)?;
+        out.put_i64(self.expire_time);
+        crate::traits::Encode::encode(&self.public_key, out)?;
+        crate::traits::Encode::encode(&self.signature, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChatSessionUpdate {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let session_uuid = <u128 as crate::traits::Decode>::decode(input)?;
+        let expire_time = input.get_i64()?;
+        let public_key = <super::types::ByteArray as crate::traits::Decode>::decode(input)?;
+        let signature = <super::types::ByteArray as crate::traits::Decode>::decode(input)?;
+        Ok(Self { session_uuid, expire_time, public_key, signature })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketChunkBatchReceived {
+    pub chunks_per_tick: f32,
+}
+
+impl crate::traits::Encode for PacketChunkBatchReceived {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.chunks_per_tick, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketChunkBatchReceived {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let chunks_per_tick = <f32 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { chunks_per_tick })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketClientCommand {
+    pub action_id: i32,
+}
+
+impl crate::traits::Encode for PacketClientCommand {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.action_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketClientCommand {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let action_id = input.get_varint()?;
+        Ok(Self { action_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEnchantItem {
+    pub window_id: i32,
+    pub enchantment: i32,
+}
+
+impl crate::traits::Encode for PacketEnchantItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.enchantment);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEnchantItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let enchantment = input.get_varint()?;
+        Ok(Self { window_id, enchantment })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWindowClickChangedSlotsItem {
+    pub location: i16,
+    pub item: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketWindowClickChangedSlotsItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.item, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWindowClickChangedSlotsItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <i16 as crate::traits::Decode>::decode(input)?;
+        let item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, item })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketWindowClick {
+    pub window_id: i32,
+    pub state_id: i32,
+    pub slot: i16,
+    pub mouse_button: i8,
+    pub mode: i32,
+    pub changed_slots: Vec<PacketWindowClickChangedSlotsItem>,
+    pub cursor_item: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketWindowClick {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.state_id);
+        crate::traits::Encode::encode(&self.slot, out)?;
+        crate::traits::Encode::encode(&self.mouse_button, out)?;
+        out.put_varint(self.mode);
+        crate::traits::Encode::encode(&self.changed_slots, out)?;
+        crate::traits::Encode::encode(&self.cursor_item, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketWindowClick {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let state_id = input.get_varint()?;
+        let slot = <i16 as crate::traits::Decode>::decode(input)?;
+        let mouse_button = <i8 as crate::traits::Decode>::decode(input)?;
+        let mode = input.get_varint()?;
+        let changed_slots = <Vec<PacketWindowClickChangedSlotsItem> as crate::traits::Decode>::decode(input)?;
+        let cursor_item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, state_id, slot, mouse_button, mode, changed_slots, cursor_item })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetSlotState {
+    pub slot_id: i32,
+    pub window_id: i32,
+    pub state: bool,
+}
+
+impl crate::traits::Encode for PacketSetSlotState {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.slot_id);
+        out.put_varint(self.window_id);
+        crate::traits::Encode::encode(&self.state, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetSlotState {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot_id = input.get_varint()?;
+        let window_id = input.get_varint()?;
+        let state = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { slot_id, window_id, state })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDebugSampleSubscription {
+    pub r#type: i32,
+}
+
+impl crate::traits::Encode for PacketDebugSampleSubscription {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.r#type);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDebugSampleSubscription {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let r#type = input.get_varint()?;
+        Ok(Self { r#type })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEditBook {
+    pub hand: i32,
+    pub pages: Vec<super::types::String>,
+    pub title: Option<super::types::String>,
+}
+
+impl crate::traits::Encode for PacketEditBook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.hand);
+        crate::traits::Encode::encode(&self.pages, out)?;
+        crate::traits::Encode::encode(&self.title, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEditBook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let hand = input.get_varint()?;
+        let pages = <Vec<super::types::String> as crate::traits::Decode>::decode(input)?;
+        let title = <Option<super::types::String> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { hand, pages, title })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketQueryEntityNbt {
+    pub transaction_id: i32,
+    pub entity_id: i32,
+}
+
+impl crate::traits::Encode for PacketQueryEntityNbt {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.transaction_id);
+        out.put_varint(self.entity_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketQueryEntityNbt {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let transaction_id = input.get_varint()?;
+        let entity_id = input.get_varint()?;
+        Ok(Self { transaction_id, entity_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketUseEntityX {
+    V2(f32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketUseEntityX {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketUseEntityX {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            2 => Ok(Self::V2(<f32 as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketUseEntityY {
+    V2(f32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketUseEntityY {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketUseEntityY {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            2 => Ok(Self::V2(<f32 as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketUseEntityZ {
+    V2(f32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketUseEntityZ {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V2(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketUseEntityZ {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            2 => Ok(Self::V2(<f32 as crate::traits::Decode>::decode(input)?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketUseEntityHand {
+    V0(i32),
+    V2(i32),
+    Default,
+}
+
+impl crate::traits::Encode for PacketUseEntityHand {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                out.put_varint(*v);
+            }
+            Self::V2(v) => {
+                out.put_varint(*v);
+            }
+            Self::Default => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketUseEntityHand {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(input.get_varint()?)),
+            2 => Ok(Self::V2(input.get_varint()?)),
+            _ => Ok(Self::Default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUseEntity {
+    pub target: i32,
+    pub mouse: i32,
+    pub x: PacketUseEntityX,
+    pub y: PacketUseEntityY,
+    pub z: PacketUseEntityZ,
+    pub hand: PacketUseEntityHand,
+    pub sneaking: bool,
+}
+
+impl crate::traits::Encode for PacketUseEntity {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.target);
+        out.put_varint(self.mouse);
+        match (self.mouse, &self.x) {
+            (2, PacketUseEntityX::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `x` does not match its discriminant".into())); }
+            (_, PacketUseEntityX::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `x` does not match its discriminant".into())); }
+        }
+        match (self.mouse, &self.y) {
+            (2, PacketUseEntityY::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `y` does not match its discriminant".into())); }
+            (_, PacketUseEntityY::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `y` does not match its discriminant".into())); }
+        }
+        match (self.mouse, &self.z) {
+            (2, PacketUseEntityZ::V2(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `z` does not match its discriminant".into())); }
+            (_, PacketUseEntityZ::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `z` does not match its discriminant".into())); }
+        }
+        match (self.mouse, &self.hand) {
+            (0, PacketUseEntityHand::V0(v)) => {
+                out.put_varint(*v);
+            }
+            (2, PacketUseEntityHand::V2(v)) => {
+                out.put_varint(*v);
+            }
+            (0, _) | (2, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `hand` does not match its discriminant".into())); }
+            (_, PacketUseEntityHand::Default) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketUseEntity: field `hand` does not match its discriminant".into())); }
+        }
+        crate::traits::Encode::encode(&self.sneaking, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUseEntity {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let target = input.get_varint()?;
+        let mouse = input.get_varint()?;
+        let x = PacketUseEntityX::decode_from(input, mouse)?;
+        let y = PacketUseEntityY::decode_from(input, mouse)?;
+        let z = PacketUseEntityZ::decode_from(input, mouse)?;
+        let hand = PacketUseEntityHand::decode_from(input, mouse)?;
+        let sneaking = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { target, mouse, x, y, z, hand, sneaking })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketGenerateStructure {
+    pub location: super::types::Position,
+    pub levels: i32,
+    pub keep_jigsaws: bool,
+}
+
+impl crate::traits::Encode for PacketGenerateStructure {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        out.put_varint(self.levels);
+        crate::traits::Encode::encode(&self.keep_jigsaws, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketGenerateStructure {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let levels = input.get_varint()?;
+        let keep_jigsaws = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, levels, keep_jigsaws })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketLockDifficulty {
+    pub locked: bool,
+}
+
+impl crate::traits::Encode for PacketLockDifficulty {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.locked, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketLockDifficulty {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let locked = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { locked })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MovementFlags(pub u8);
+
+impl MovementFlags {
+    pub const ON_GROUND: u8 = 0x1;
+    pub const HAS_HORIZONTAL_COLLISION: u8 = 0x2;
+    pub fn contains(&self, flag: u8) -> bool { self.0 & flag != 0 }
+}
+
+impl crate::traits::Encode for MovementFlags {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_u8(self.0);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for MovementFlags {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        Ok(Self(input.get_u8()?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPositionLook {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub flags: MovementFlags,
+}
+
+impl crate::traits::Encode for PacketPositionLook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPositionLook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let flags = <MovementFlags as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, y, z, yaw, pitch, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketLook {
+    pub yaw: f32,
+    pub pitch: f32,
+    pub flags: MovementFlags,
+}
+
+impl crate::traits::Encode for PacketLook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketLook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let flags = <MovementFlags as crate::traits::Decode>::decode(input)?;
+        Ok(Self { yaw, pitch, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketFlying {
+    pub flags: MovementFlags,
+}
+
+impl crate::traits::Encode for PacketFlying {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketFlying {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let flags = <MovementFlags as crate::traits::Decode>::decode(input)?;
+        Ok(Self { flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSteerBoat {
+    pub left_paddle: bool,
+    pub right_paddle: bool,
+}
+
+impl crate::traits::Encode for PacketSteerBoat {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.left_paddle, out)?;
+        crate::traits::Encode::encode(&self.right_paddle, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSteerBoat {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let left_paddle = <bool as crate::traits::Decode>::decode(input)?;
+        let right_paddle = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { left_paddle, right_paddle })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPickItemFromBlock {
+    pub position: super::types::Position,
+    pub include_data: bool,
+}
+
+impl crate::traits::Encode for PacketPickItemFromBlock {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.position, out)?;
+        crate::traits::Encode::encode(&self.include_data, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPickItemFromBlock {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let position = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let include_data = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { position, include_data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPickItemFromEntity {
+    pub entity_id: i32,
+    pub include_data: bool,
+}
+
+impl crate::traits::Encode for PacketPickItemFromEntity {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.include_data, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPickItemFromEntity {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let include_data = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, include_data })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPingRequest {
+    pub id: i64,
+}
+
+impl crate::traits::Encode for PacketPingRequest {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i64(self.id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPingRequest {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = input.get_i64()?;
+        Ok(Self { id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketCraftRecipeRequest {
+    pub window_id: i32,
+    pub recipe_id: i32,
+    pub make_all: bool,
+}
+
+impl crate::traits::Encode for PacketCraftRecipeRequest {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.window_id);
+        out.put_varint(self.recipe_id);
+        crate::traits::Encode::encode(&self.make_all, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketCraftRecipeRequest {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let window_id = input.get_varint()?;
+        let recipe_id = input.get_varint()?;
+        let make_all = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { window_id, recipe_id, make_all })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketBlockDig {
+    pub status: i32,
+    pub location: super::types::Position,
+    pub face: i8,
+    pub sequence: i32,
+}
+
+impl crate::traits::Encode for PacketBlockDig {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.status);
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.face, out)?;
+        out.put_varint(self.sequence);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketBlockDig {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let status = input.get_varint()?;
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let face = <i8 as crate::traits::Decode>::decode(input)?;
+        let sequence = input.get_varint()?;
+        Ok(Self { status, location, face, sequence })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketEntityAction {
+    pub entity_id: i32,
+    pub action_id: i32,
+    pub jump_boost: i32,
+}
+
+impl crate::traits::Encode for PacketEntityAction {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        out.put_varint(self.action_id);
+        out.put_varint(self.jump_boost);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEntityAction {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let action_id = input.get_varint()?;
+        let jump_boost = input.get_varint()?;
+        Ok(Self { entity_id, action_id, jump_boost })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PacketPlayerInputInputs(pub u8);
+
+impl PacketPlayerInputInputs {
+    pub const FORWARD: u8 = 0x1;
+    pub const BACKWARD: u8 = 0x2;
+    pub const LEFT: u8 = 0x4;
+    pub const RIGHT: u8 = 0x8;
+    pub const JUMP: u8 = 0x10;
+    pub const SHIFT: u8 = 0x20;
+    pub const SPRINT: u8 = 0x40;
+    pub fn contains(&self, flag: u8) -> bool { self.0 & flag != 0 }
+}
+
+impl crate::traits::Encode for PacketPlayerInputInputs {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_u8(self.0);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerInputInputs {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        Ok(Self(input.get_u8()?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPlayerInput {
+    pub inputs: PacketPlayerInputInputs,
+}
+
+impl crate::traits::Encode for PacketPlayerInput {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.inputs, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPlayerInput {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let inputs = <PacketPlayerInputInputs as crate::traits::Decode>::decode(input)?;
+        Ok(Self { inputs })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketPong {
+    pub id: i32,
+}
+
+impl crate::traits::Encode for PacketPong {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_i32(self.id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPong {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let id = input.get_i32()?;
+        Ok(Self { id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketRecipeBook {
+    pub book_id: i32,
+    pub book_open: bool,
+    pub filter_active: bool,
+}
+
+impl crate::traits::Encode for PacketRecipeBook {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.book_id);
+        crate::traits::Encode::encode(&self.book_open, out)?;
+        crate::traits::Encode::encode(&self.filter_active, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketRecipeBook {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let book_id = input.get_varint()?;
+        let book_open = <bool as crate::traits::Decode>::decode(input)?;
+        let filter_active = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { book_id, book_open, filter_active })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketDisplayedRecipe {
+    pub recipe_id: i32,
+}
+
+impl crate::traits::Encode for PacketDisplayedRecipe {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.recipe_id);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketDisplayedRecipe {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let recipe_id = input.get_varint()?;
+        Ok(Self { recipe_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketNameItem {
+    pub name: super::types::String,
+}
+
+impl crate::traits::Encode for PacketNameItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.name, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketNameItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        Ok(Self { name })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketResourcePackReceive {
+    pub uuid: u128,
+    pub result: i32,
+}
+
+impl crate::traits::Encode for PacketResourcePackReceive {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.uuid, out)?;
+        out.put_varint(self.result);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketResourcePackReceive {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let uuid = <u128 as crate::traits::Decode>::decode(input)?;
+        let result = input.get_varint()?;
+        Ok(Self { uuid, result })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PacketAdvancementTabTabId {
+    V0(super::types::String),
+    V1,
+    None,
+}
+
+impl crate::traits::Encode for PacketAdvancementTabTabId {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        match self {
+            Self::V0(v) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            Self::V1 => {}
+            Self::None => {}
+        }
+        Ok(())
+    }
+}
+
+impl PacketAdvancementTabTabId {
+    pub fn decode_from(
+        input: &mut crate::buffer::PacketReader<'_>,
+        discriminant: i32,
+    ) -> crate::error::Result<Self> {
+        match discriminant {
+            0 => Ok(Self::V0(<super::types::String as crate::traits::Decode>::decode(input)?)),
+            1 => Ok(Self::V1),
+            _ => Ok(Self::None),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAdvancementTab {
+    pub action: i32,
+    pub tab_id: PacketAdvancementTabTabId,
+}
+
+impl crate::traits::Encode for PacketAdvancementTab {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.action);
+        match (self.action, &self.tab_id) {
+            (0, PacketAdvancementTabTabId::V0(v)) => {
+                crate::traits::Encode::encode(&*v, out)?;
+            }
+            (1, PacketAdvancementTabTabId::V1) => {},
+            (0, _) | (1, _) => { return Err(crate::error::ProtocolError::InvalidData("PacketAdvancementTab: field `tabId` does not match its discriminant".into())); }
+            (_, PacketAdvancementTabTabId::None) => {},
+            _ => { return Err(crate::error::ProtocolError::InvalidData("PacketAdvancementTab: field `tabId` does not match its discriminant".into())); }
+        }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAdvancementTab {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let action = input.get_varint()?;
+        let tab_id = PacketAdvancementTabTabId::decode_from(input, action)?;
+        Ok(Self { action, tab_id })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSelectTrade {
+    pub slot: i32,
+}
+
+impl crate::traits::Encode for PacketSelectTrade {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.slot);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSelectTrade {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot = input.get_varint()?;
+        Ok(Self { slot })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetBeaconEffect {
+    pub primary_effect: Option<i32>,
+    pub secondary_effect: Option<i32>,
+}
+
+impl crate::traits::Encode for PacketSetBeaconEffect {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_bool((self.primary_effect).is_some());
+        if let Some(v) = self.primary_effect { out.put_varint(v); }
+        out.put_bool((self.secondary_effect).is_some());
+        if let Some(v) = self.secondary_effect { out.put_varint(v); }
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetBeaconEffect {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let primary_effect = { if input.get_bool()? { Some(input.get_varint()?) } else { None } };
+        let secondary_effect = { if input.get_bool()? { Some(input.get_varint()?) } else { None } };
+        Ok(Self { primary_effect, secondary_effect })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateCommandBlock {
+    pub location: super::types::Position,
+    pub command: super::types::String,
+    pub mode: i32,
+    pub flags: u8,
+}
+
+impl crate::traits::Encode for PacketUpdateCommandBlock {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.command, out)?;
+        out.put_varint(self.mode);
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateCommandBlock {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let command = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let mode = input.get_varint()?;
+        let flags = <u8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, command, mode, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateCommandBlockMinecart {
+    pub entity_id: i32,
+    pub command: super::types::String,
+    pub track_output: bool,
+}
+
+impl crate::traits::Encode for PacketUpdateCommandBlockMinecart {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.entity_id);
+        crate::traits::Encode::encode(&self.command, out)?;
+        crate::traits::Encode::encode(&self.track_output, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateCommandBlockMinecart {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let entity_id = input.get_varint()?;
+        let command = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let track_output = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { entity_id, command, track_output })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSetCreativeSlot {
+    pub slot: i16,
+    pub item: super::types::Slot,
+}
+
+impl crate::traits::Encode for PacketSetCreativeSlot {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.slot, out)?;
+        crate::traits::Encode::encode(&self.item, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSetCreativeSlot {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot = <i16 as crate::traits::Decode>::decode(input)?;
+        let item = <super::types::Slot as crate::traits::Decode>::decode(input)?;
+        Ok(Self { slot, item })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateJigsawBlock {
+    pub location: super::types::Position,
+    pub name: super::types::String,
+    pub target: super::types::String,
+    pub pool: super::types::String,
+    pub final_state: super::types::String,
+    pub joint_type: super::types::String,
+    pub selection_priority: i32,
+    pub placement_priority: i32,
+}
+
+impl crate::traits::Encode for PacketUpdateJigsawBlock {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.name, out)?;
+        crate::traits::Encode::encode(&self.target, out)?;
+        crate::traits::Encode::encode(&self.pool, out)?;
+        crate::traits::Encode::encode(&self.final_state, out)?;
+        crate::traits::Encode::encode(&self.joint_type, out)?;
+        out.put_varint(self.selection_priority);
+        out.put_varint(self.placement_priority);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateJigsawBlock {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let target = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let pool = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let final_state = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let joint_type = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let selection_priority = input.get_varint()?;
+        let placement_priority = input.get_varint()?;
+        Ok(Self { location, name, target, pool, final_state, joint_type, selection_priority, placement_priority })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateStructureBlock {
+    pub location: super::types::Position,
+    pub action: i32,
+    pub mode: i32,
+    pub name: super::types::String,
+    pub offset_x: i8,
+    pub offset_y: i8,
+    pub offset_z: i8,
+    pub size_x: i8,
+    pub size_y: i8,
+    pub size_z: i8,
+    pub mirror: i32,
+    pub rotation: i32,
+    pub metadata: super::types::String,
+    pub integrity: f32,
+    pub seed: i32,
+    pub flags: u8,
+}
+
+impl crate::traits::Encode for PacketUpdateStructureBlock {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        out.put_varint(self.action);
+        out.put_varint(self.mode);
+        crate::traits::Encode::encode(&self.name, out)?;
+        crate::traits::Encode::encode(&self.offset_x, out)?;
+        crate::traits::Encode::encode(&self.offset_y, out)?;
+        crate::traits::Encode::encode(&self.offset_z, out)?;
+        crate::traits::Encode::encode(&self.size_x, out)?;
+        crate::traits::Encode::encode(&self.size_y, out)?;
+        crate::traits::Encode::encode(&self.size_z, out)?;
+        out.put_varint(self.mirror);
+        out.put_varint(self.rotation);
+        crate::traits::Encode::encode(&self.metadata, out)?;
+        crate::traits::Encode::encode(&self.integrity, out)?;
+        out.put_varint(self.seed);
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateStructureBlock {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let action = input.get_varint()?;
+        let mode = input.get_varint()?;
+        let name = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let offset_x = <i8 as crate::traits::Decode>::decode(input)?;
+        let offset_y = <i8 as crate::traits::Decode>::decode(input)?;
+        let offset_z = <i8 as crate::traits::Decode>::decode(input)?;
+        let size_x = <i8 as crate::traits::Decode>::decode(input)?;
+        let size_y = <i8 as crate::traits::Decode>::decode(input)?;
+        let size_z = <i8 as crate::traits::Decode>::decode(input)?;
+        let mirror = input.get_varint()?;
+        let rotation = input.get_varint()?;
+        let metadata = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let integrity = <f32 as crate::traits::Decode>::decode(input)?;
+        let seed = input.get_varint()?;
+        let flags = <u8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, action, mode, name, offset_x, offset_y, offset_z, size_x, size_y, size_z, mirror, rotation, metadata, integrity, seed, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUpdateSign {
+    pub location: super::types::Position,
+    pub is_front_text: bool,
+    pub text1: super::types::String,
+    pub text2: super::types::String,
+    pub text3: super::types::String,
+    pub text4: super::types::String,
+}
+
+impl crate::traits::Encode for PacketUpdateSign {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.location, out)?;
+        crate::traits::Encode::encode(&self.is_front_text, out)?;
+        crate::traits::Encode::encode(&self.text1, out)?;
+        crate::traits::Encode::encode(&self.text2, out)?;
+        crate::traits::Encode::encode(&self.text3, out)?;
+        crate::traits::Encode::encode(&self.text4, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUpdateSign {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let is_front_text = <bool as crate::traits::Decode>::decode(input)?;
+        let text1 = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let text2 = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let text3 = <super::types::String as crate::traits::Decode>::decode(input)?;
+        let text4 = <super::types::String as crate::traits::Decode>::decode(input)?;
+        Ok(Self { location, is_front_text, text1, text2, text3, text4 })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketArmAnimation {
+    pub hand: i32,
+}
+
+impl crate::traits::Encode for PacketArmAnimation {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.hand);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketArmAnimation {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let hand = input.get_varint()?;
+        Ok(Self { hand })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketSpectate {
+    pub target: u128,
+}
+
+impl crate::traits::Encode for PacketSpectate {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.target, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketSpectate {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let target = <u128 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { target })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketBlockPlace {
+    pub hand: i32,
+    pub location: super::types::Position,
+    pub direction: i32,
+    pub cursor_x: f32,
+    pub cursor_y: f32,
+    pub cursor_z: f32,
+    pub inside_block: bool,
+    pub world_border_hit: bool,
+    pub sequence: i32,
+}
+
+impl crate::traits::Encode for PacketBlockPlace {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.hand);
+        crate::traits::Encode::encode(&self.location, out)?;
+        out.put_varint(self.direction);
+        crate::traits::Encode::encode(&self.cursor_x, out)?;
+        crate::traits::Encode::encode(&self.cursor_y, out)?;
+        crate::traits::Encode::encode(&self.cursor_z, out)?;
+        crate::traits::Encode::encode(&self.inside_block, out)?;
+        crate::traits::Encode::encode(&self.world_border_hit, out)?;
+        out.put_varint(self.sequence);
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketBlockPlace {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let hand = input.get_varint()?;
+        let location = <super::types::Position as crate::traits::Decode>::decode(input)?;
+        let direction = input.get_varint()?;
+        let cursor_x = <f32 as crate::traits::Decode>::decode(input)?;
+        let cursor_y = <f32 as crate::traits::Decode>::decode(input)?;
+        let cursor_z = <f32 as crate::traits::Decode>::decode(input)?;
+        let inside_block = <bool as crate::traits::Decode>::decode(input)?;
+        let world_border_hit = <bool as crate::traits::Decode>::decode(input)?;
+        let sequence = input.get_varint()?;
+        Ok(Self { hand, location, direction, cursor_x, cursor_y, cursor_z, inside_block, world_border_hit, sequence })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketUseItem {
+    pub hand: i32,
+    pub sequence: i32,
+    pub rotation: super::types::Vec2f,
+}
+
+impl crate::traits::Encode for PacketUseItem {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.hand);
+        out.put_varint(self.sequence);
+        crate::traits::Encode::encode(&self.rotation, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketUseItem {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let hand = input.get_varint()?;
+        let sequence = input.get_varint()?;
+        let rotation = <super::types::Vec2f as crate::traits::Decode>::decode(input)?;
+        Ok(Self { hand, sequence, rotation })
+    }
+}
+
+pub const CLIENTBOUND_BUNDLE_DELIMITER_ID: i32 = 0;
+pub const CLIENTBOUND_SPAWN_ENTITY_ID: i32 = 1;
+pub const CLIENTBOUND_SPAWN_ENTITY_EXPERIENCE_ORB_ID: i32 = 2;
+pub const CLIENTBOUND_ANIMATION_ID: i32 = 3;
+pub const CLIENTBOUND_STATISTICS_ID: i32 = 4;
+pub const CLIENTBOUND_ACKNOWLEDGE_PLAYER_DIGGING_ID: i32 = 5;
+pub const CLIENTBOUND_BLOCK_BREAK_ANIMATION_ID: i32 = 6;
+pub const CLIENTBOUND_TILE_ENTITY_DATA_ID: i32 = 7;
+pub const CLIENTBOUND_BLOCK_ACTION_ID: i32 = 8;
+pub const CLIENTBOUND_BLOCK_CHANGE_ID: i32 = 9;
+pub const CLIENTBOUND_BOSS_BAR_ID: i32 = 10;
+pub const CLIENTBOUND_DIFFICULTY_ID: i32 = 11;
+pub const CLIENTBOUND_CHUNK_BATCH_FINISHED_ID: i32 = 12;
+pub const CLIENTBOUND_CHUNK_BATCH_START_ID: i32 = 13;
+pub const CLIENTBOUND_CHUNK_BIOMES_ID: i32 = 14;
+pub const CLIENTBOUND_CLEAR_TITLES_ID: i32 = 15;
+pub const CLIENTBOUND_TAB_COMPLETE_ID: i32 = 16;
+pub const CLIENTBOUND_DECLARE_COMMANDS_ID: i32 = 17;
+pub const CLIENTBOUND_CLOSE_WINDOW_ID: i32 = 18;
+pub const CLIENTBOUND_WINDOW_ITEMS_ID: i32 = 19;
+pub const CLIENTBOUND_CRAFT_PROGRESS_BAR_ID: i32 = 20;
+pub const CLIENTBOUND_SET_SLOT_ID: i32 = 21;
+pub const CLIENTBOUND_COOKIE_REQUEST_ID: i32 = 22;
+pub const CLIENTBOUND_SET_COOLDOWN_ID: i32 = 23;
+pub const CLIENTBOUND_CHAT_SUGGESTIONS_ID: i32 = 24;
+pub const CLIENTBOUND_CUSTOM_PAYLOAD_ID: i32 = 25;
+pub const CLIENTBOUND_DAMAGE_EVENT_ID: i32 = 26;
+pub const CLIENTBOUND_DEBUG_SAMPLE_ID: i32 = 27;
+pub const CLIENTBOUND_HIDE_MESSAGE_ID: i32 = 28;
+pub const CLIENTBOUND_KICK_DISCONNECT_ID: i32 = 29;
+pub const CLIENTBOUND_PROFILELESS_CHAT_ID: i32 = 30;
+pub const CLIENTBOUND_ENTITY_STATUS_ID: i32 = 31;
+pub const CLIENTBOUND_SYNC_ENTITY_POSITION_ID: i32 = 32;
+pub const CLIENTBOUND_EXPLOSION_ID: i32 = 33;
+pub const CLIENTBOUND_UNLOAD_CHUNK_ID: i32 = 34;
+pub const CLIENTBOUND_GAME_STATE_CHANGE_ID: i32 = 35;
+pub const CLIENTBOUND_OPEN_HORSE_WINDOW_ID: i32 = 36;
+pub const CLIENTBOUND_HURT_ANIMATION_ID: i32 = 37;
+pub const CLIENTBOUND_INITIALIZE_WORLD_BORDER_ID: i32 = 38;
+pub const CLIENTBOUND_KEEP_ALIVE_ID: i32 = 39;
+pub const CLIENTBOUND_MAP_CHUNK_ID: i32 = 40;
+pub const CLIENTBOUND_WORLD_EVENT_ID: i32 = 41;
+pub const CLIENTBOUND_WORLD_PARTICLES_ID: i32 = 42;
+pub const CLIENTBOUND_UPDATE_LIGHT_ID: i32 = 43;
+pub const CLIENTBOUND_LOGIN_ID: i32 = 44;
+pub const CLIENTBOUND_MAP_ID: i32 = 45;
+pub const CLIENTBOUND_TRADE_LIST_ID: i32 = 46;
+pub const CLIENTBOUND_REL_ENTITY_MOVE_ID: i32 = 47;
+pub const CLIENTBOUND_ENTITY_MOVE_LOOK_ID: i32 = 48;
+pub const CLIENTBOUND_MOVE_MINECART_ID: i32 = 49;
+pub const CLIENTBOUND_ENTITY_LOOK_ID: i32 = 50;
+pub const CLIENTBOUND_VEHICLE_MOVE_ID: i32 = 51;
+pub const CLIENTBOUND_OPEN_BOOK_ID: i32 = 52;
+pub const CLIENTBOUND_OPEN_WINDOW_ID: i32 = 53;
+pub const CLIENTBOUND_OPEN_SIGN_ENTITY_ID: i32 = 54;
+pub const CLIENTBOUND_PING_ID: i32 = 55;
+pub const CLIENTBOUND_PING_RESPONSE_ID: i32 = 56;
+pub const CLIENTBOUND_CRAFT_RECIPE_RESPONSE_ID: i32 = 57;
+pub const CLIENTBOUND_ABILITIES_ID: i32 = 58;
+pub const CLIENTBOUND_PLAYER_CHAT_ID: i32 = 59;
+pub const CLIENTBOUND_END_COMBAT_EVENT_ID: i32 = 60;
+pub const CLIENTBOUND_ENTER_COMBAT_EVENT_ID: i32 = 61;
+pub const CLIENTBOUND_DEATH_COMBAT_EVENT_ID: i32 = 62;
+pub const CLIENTBOUND_PLAYER_REMOVE_ID: i32 = 63;
+pub const CLIENTBOUND_PLAYER_INFO_ID: i32 = 64;
+pub const CLIENTBOUND_FACE_PLAYER_ID: i32 = 65;
+pub const CLIENTBOUND_POSITION_ID: i32 = 66;
+pub const CLIENTBOUND_PLAYER_ROTATION_ID: i32 = 67;
+pub const CLIENTBOUND_RECIPE_BOOK_ADD_ID: i32 = 68;
+pub const CLIENTBOUND_RECIPE_BOOK_REMOVE_ID: i32 = 69;
+pub const CLIENTBOUND_RECIPE_BOOK_SETTINGS_ID: i32 = 70;
+pub const CLIENTBOUND_ENTITY_DESTROY_ID: i32 = 71;
+pub const CLIENTBOUND_REMOVE_ENTITY_EFFECT_ID: i32 = 72;
+pub const CLIENTBOUND_RESET_SCORE_ID: i32 = 73;
+pub const CLIENTBOUND_REMOVE_RESOURCE_PACK_ID: i32 = 74;
+pub const CLIENTBOUND_ADD_RESOURCE_PACK_ID: i32 = 75;
+pub const CLIENTBOUND_RESPAWN_ID: i32 = 76;
+pub const CLIENTBOUND_ENTITY_HEAD_ROTATION_ID: i32 = 77;
+pub const CLIENTBOUND_MULTI_BLOCK_CHANGE_ID: i32 = 78;
+pub const CLIENTBOUND_SELECT_ADVANCEMENT_TAB_ID: i32 = 79;
+pub const CLIENTBOUND_SERVER_DATA_ID: i32 = 80;
+pub const CLIENTBOUND_ACTION_BAR_ID: i32 = 81;
+pub const CLIENTBOUND_WORLD_BORDER_CENTER_ID: i32 = 82;
+pub const CLIENTBOUND_WORLD_BORDER_LERP_SIZE_ID: i32 = 83;
+pub const CLIENTBOUND_WORLD_BORDER_SIZE_ID: i32 = 84;
+pub const CLIENTBOUND_WORLD_BORDER_WARNING_DELAY_ID: i32 = 85;
+pub const CLIENTBOUND_WORLD_BORDER_WARNING_REACH_ID: i32 = 86;
+pub const CLIENTBOUND_CAMERA_ID: i32 = 87;
+pub const CLIENTBOUND_UPDATE_VIEW_POSITION_ID: i32 = 88;
+pub const CLIENTBOUND_UPDATE_VIEW_DISTANCE_ID: i32 = 89;
+pub const CLIENTBOUND_SET_CURSOR_ITEM_ID: i32 = 90;
+pub const CLIENTBOUND_SPAWN_POSITION_ID: i32 = 91;
+pub const CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID: i32 = 92;
+pub const CLIENTBOUND_ENTITY_METADATA_ID: i32 = 93;
+pub const CLIENTBOUND_ATTACH_ENTITY_ID: i32 = 94;
+pub const CLIENTBOUND_ENTITY_VELOCITY_ID: i32 = 95;
+pub const CLIENTBOUND_ENTITY_EQUIPMENT_ID: i32 = 96;
+pub const CLIENTBOUND_EXPERIENCE_ID: i32 = 97;
+pub const CLIENTBOUND_UPDATE_HEALTH_ID: i32 = 98;
+pub const CLIENTBOUND_HELD_ITEM_SLOT_ID: i32 = 99;
+pub const CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID: i32 = 100;
+pub const CLIENTBOUND_SET_PASSENGERS_ID: i32 = 101;
+pub const CLIENTBOUND_SET_PLAYER_INVENTORY_ID: i32 = 102;
+pub const CLIENTBOUND_TEAMS_ID: i32 = 103;
+pub const CLIENTBOUND_SCOREBOARD_SCORE_ID: i32 = 104;
+pub const CLIENTBOUND_SIMULATION_DISTANCE_ID: i32 = 105;
+pub const CLIENTBOUND_SET_TITLE_SUBTITLE_ID: i32 = 106;
+pub const CLIENTBOUND_UPDATE_TIME_ID: i32 = 107;
+pub const CLIENTBOUND_SET_TITLE_TEXT_ID: i32 = 108;
+pub const CLIENTBOUND_SET_TITLE_TIME_ID: i32 = 109;
+pub const CLIENTBOUND_ENTITY_SOUND_EFFECT_ID: i32 = 110;
+pub const CLIENTBOUND_SOUND_EFFECT_ID: i32 = 111;
+pub const CLIENTBOUND_START_CONFIGURATION_ID: i32 = 112;
+pub const CLIENTBOUND_STOP_SOUND_ID: i32 = 113;
+pub const CLIENTBOUND_STORE_COOKIE_ID: i32 = 114;
+pub const CLIENTBOUND_SYSTEM_CHAT_ID: i32 = 115;
+pub const CLIENTBOUND_PLAYERLIST_HEADER_ID: i32 = 116;
+pub const CLIENTBOUND_NBT_QUERY_RESPONSE_ID: i32 = 117;
+pub const CLIENTBOUND_COLLECT_ID: i32 = 118;
+pub const CLIENTBOUND_ENTITY_TELEPORT_ID: i32 = 119;
+pub const CLIENTBOUND_SET_TICKING_STATE_ID: i32 = 120;
+pub const CLIENTBOUND_STEP_TICK_ID: i32 = 121;
+pub const CLIENTBOUND_TRANSFER_ID: i32 = 122;
+pub const CLIENTBOUND_ADVANCEMENTS_ID: i32 = 123;
+pub const CLIENTBOUND_ENTITY_UPDATE_ATTRIBUTES_ID: i32 = 124;
+pub const CLIENTBOUND_ENTITY_EFFECT_ID: i32 = 125;
+pub const CLIENTBOUND_DECLARE_RECIPES_ID: i32 = 126;
+pub const CLIENTBOUND_TAGS_ID: i32 = 127;
+pub const CLIENTBOUND_SET_PROJECTILE_POWER_ID: i32 = 128;
+pub const CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID: i32 = 129;
+pub const CLIENTBOUND_SERVER_LINKS_ID: i32 = 130;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClientboundPlayPacket {
+    BundleDelimiter,
+    SpawnEntity(PacketSpawnEntity),
+    SpawnEntityExperienceOrb(PacketSpawnEntityExperienceOrb),
+    Animation(PacketAnimation),
+    Statistics(PacketStatistics),
+    AcknowledgePlayerDigging(PacketAcknowledgePlayerDigging),
+    BlockBreakAnimation(PacketBlockBreakAnimation),
+    TileEntityData(PacketTileEntityData),
+    BlockAction(PacketBlockAction),
+    BlockChange(PacketBlockChange),
+    BossBar(PacketBossBar),
+    Difficulty(PacketDifficulty),
+    ChunkBatchFinished(PacketChunkBatchFinished),
+    ChunkBatchStart,
+    ChunkBiomes(PacketChunkBiomes),
+    ClearTitles(PacketClearTitles),
+    TabComplete(PacketTabComplete),
+    DeclareCommands(PacketDeclareCommands),
+    CloseWindow(PacketCloseWindow),
+    WindowItems(PacketWindowItems),
+    CraftProgressBar(PacketCraftProgressBar),
+    SetSlot(PacketSetSlot),
+    CookieRequest(super::types::PacketCommonCookieRequest),
+    SetCooldown(PacketSetCooldown),
+    ChatSuggestions(PacketChatSuggestions),
+    CustomPayload(PacketCustomPayload),
+    DamageEvent(PacketDamageEvent),
+    DebugSample(PacketDebugSample),
+    HideMessage(PacketHideMessage),
+    KickDisconnect(PacketKickDisconnect),
+    ProfilelessChat(PacketProfilelessChat),
+    EntityStatus(PacketEntityStatus),
+    SyncEntityPosition(PacketSyncEntityPosition),
+    Explosion(PacketExplosion),
+    UnloadChunk(PacketUnloadChunk),
+    GameStateChange(PacketGameStateChange),
+    OpenHorseWindow(PacketOpenHorseWindow),
+    HurtAnimation(PacketHurtAnimation),
+    InitializeWorldBorder(PacketInitializeWorldBorder),
+    KeepAlive(PacketKeepAlive),
+    MapChunk(PacketMapChunk),
+    WorldEvent(PacketWorldEvent),
+    WorldParticles(PacketWorldParticles),
+    UpdateLight(PacketUpdateLight),
+    Login(PacketLogin),
+    Map(PacketMap),
+    TradeList(PacketTradeList),
+    RelEntityMove(PacketRelEntityMove),
+    EntityMoveLook(PacketEntityMoveLook),
+    MoveMinecart(PacketMoveMinecart),
+    EntityLook(PacketEntityLook),
+    VehicleMove(PacketVehicleMove),
+    OpenBook(PacketOpenBook),
+    OpenWindow(PacketOpenWindow),
+    OpenSignEntity(PacketOpenSignEntity),
+    Ping(PacketPing),
+    PingResponse(PacketPingResponse),
+    CraftRecipeResponse(PacketCraftRecipeResponse),
+    Abilities(PacketAbilities),
+    PlayerChat(PacketPlayerChat),
+    EndCombatEvent(PacketEndCombatEvent),
+    EnterCombatEvent,
+    DeathCombatEvent(PacketDeathCombatEvent),
+    PlayerRemove(PacketPlayerRemove),
+    PlayerInfo(PacketPlayerInfo),
+    FacePlayer(PacketFacePlayer),
+    Position(PacketPosition),
+    PlayerRotation(PacketPlayerRotation),
+    RecipeBookAdd(PacketRecipeBookAdd),
+    RecipeBookRemove(PacketRecipeBookRemove),
+    RecipeBookSettings(PacketRecipeBookSettings),
+    EntityDestroy(PacketEntityDestroy),
+    RemoveEntityEffect(PacketRemoveEntityEffect),
+    ResetScore(PacketResetScore),
+    RemoveResourcePack(super::types::PacketCommonRemoveResourcePack),
+    AddResourcePack(super::types::PacketCommonAddResourcePack),
+    Respawn(PacketRespawn),
+    EntityHeadRotation(PacketEntityHeadRotation),
+    MultiBlockChange(PacketMultiBlockChange),
+    SelectAdvancementTab(PacketSelectAdvancementTab),
+    ServerData(PacketServerData),
+    ActionBar(PacketActionBar),
+    WorldBorderCenter(PacketWorldBorderCenter),
+    WorldBorderLerpSize(PacketWorldBorderLerpSize),
+    WorldBorderSize(PacketWorldBorderSize),
+    WorldBorderWarningDelay(PacketWorldBorderWarningDelay),
+    WorldBorderWarningReach(PacketWorldBorderWarningReach),
+    Camera(PacketCamera),
+    UpdateViewPosition(PacketUpdateViewPosition),
+    UpdateViewDistance(PacketUpdateViewDistance),
+    SetCursorItem(PacketSetCursorItem),
+    SpawnPosition(PacketSpawnPosition),
+    ScoreboardDisplayObjective(PacketScoreboardDisplayObjective),
+    EntityMetadata(PacketEntityMetadata),
+    AttachEntity(PacketAttachEntity),
+    EntityVelocity(PacketEntityVelocity),
+    EntityEquipment(PacketEntityEquipment),
+    Experience(PacketExperience),
+    UpdateHealth(PacketUpdateHealth),
+    HeldItemSlot(PacketHeldItemSlot),
+    ScoreboardObjective(PacketScoreboardObjective),
+    SetPassengers(PacketSetPassengers),
+    SetPlayerInventory(PacketSetPlayerInventory),
+    Teams(PacketTeams),
+    ScoreboardScore(PacketScoreboardScore),
+    SimulationDistance(PacketSimulationDistance),
+    SetTitleSubtitle(PacketSetTitleSubtitle),
+    UpdateTime(PacketUpdateTime),
+    SetTitleText(PacketSetTitleText),
+    SetTitleTime(PacketSetTitleTime),
+    EntitySoundEffect(PacketEntitySoundEffect),
+    SoundEffect(PacketSoundEffect),
+    StartConfiguration,
+    StopSound(PacketStopSound),
+    StoreCookie(super::types::PacketCommonStoreCookie),
+    SystemChat(PacketSystemChat),
+    PlayerlistHeader(PacketPlayerlistHeader),
+    NbtQueryResponse(PacketNbtQueryResponse),
+    Collect(PacketCollect),
+    EntityTeleport(PacketEntityTeleport),
+    SetTickingState(PacketSetTickingState),
+    StepTick(PacketStepTick),
+    Transfer(super::types::PacketCommonTransfer),
+    Advancements(PacketAdvancements),
+    EntityUpdateAttributes(PacketEntityUpdateAttributes),
+    EntityEffect(PacketEntityEffect),
+    DeclareRecipes(PacketDeclareRecipes),
+    Tags(PacketTags),
+    SetProjectilePower(PacketSetProjectilePower),
+    CustomReportDetails(super::types::PacketCommonCustomReportDetails),
+    ServerLinks(super::types::PacketCommonServerLinks),
+}
+
+impl ClientboundPlayPacket {
+    pub fn id(&self) -> i32 {
+        match self {
+            Self::BundleDelimiter => CLIENTBOUND_BUNDLE_DELIMITER_ID,
+            Self::SpawnEntity(..) => CLIENTBOUND_SPAWN_ENTITY_ID,
+            Self::SpawnEntityExperienceOrb(..) => CLIENTBOUND_SPAWN_ENTITY_EXPERIENCE_ORB_ID,
+            Self::Animation(..) => CLIENTBOUND_ANIMATION_ID,
+            Self::Statistics(..) => CLIENTBOUND_STATISTICS_ID,
+            Self::AcknowledgePlayerDigging(..) => CLIENTBOUND_ACKNOWLEDGE_PLAYER_DIGGING_ID,
+            Self::BlockBreakAnimation(..) => CLIENTBOUND_BLOCK_BREAK_ANIMATION_ID,
+            Self::TileEntityData(..) => CLIENTBOUND_TILE_ENTITY_DATA_ID,
+            Self::BlockAction(..) => CLIENTBOUND_BLOCK_ACTION_ID,
+            Self::BlockChange(..) => CLIENTBOUND_BLOCK_CHANGE_ID,
+            Self::BossBar(..) => CLIENTBOUND_BOSS_BAR_ID,
+            Self::Difficulty(..) => CLIENTBOUND_DIFFICULTY_ID,
+            Self::ChunkBatchFinished(..) => CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
+            Self::ChunkBatchStart => CLIENTBOUND_CHUNK_BATCH_START_ID,
+            Self::ChunkBiomes(..) => CLIENTBOUND_CHUNK_BIOMES_ID,
+            Self::ClearTitles(..) => CLIENTBOUND_CLEAR_TITLES_ID,
+            Self::TabComplete(..) => CLIENTBOUND_TAB_COMPLETE_ID,
+            Self::DeclareCommands(..) => CLIENTBOUND_DECLARE_COMMANDS_ID,
+            Self::CloseWindow(..) => CLIENTBOUND_CLOSE_WINDOW_ID,
+            Self::WindowItems(..) => CLIENTBOUND_WINDOW_ITEMS_ID,
+            Self::CraftProgressBar(..) => CLIENTBOUND_CRAFT_PROGRESS_BAR_ID,
+            Self::SetSlot(..) => CLIENTBOUND_SET_SLOT_ID,
+            Self::CookieRequest(..) => CLIENTBOUND_COOKIE_REQUEST_ID,
+            Self::SetCooldown(..) => CLIENTBOUND_SET_COOLDOWN_ID,
+            Self::ChatSuggestions(..) => CLIENTBOUND_CHAT_SUGGESTIONS_ID,
+            Self::CustomPayload(..) => CLIENTBOUND_CUSTOM_PAYLOAD_ID,
+            Self::DamageEvent(..) => CLIENTBOUND_DAMAGE_EVENT_ID,
+            Self::DebugSample(..) => CLIENTBOUND_DEBUG_SAMPLE_ID,
+            Self::HideMessage(..) => CLIENTBOUND_HIDE_MESSAGE_ID,
+            Self::KickDisconnect(..) => CLIENTBOUND_KICK_DISCONNECT_ID,
+            Self::ProfilelessChat(..) => CLIENTBOUND_PROFILELESS_CHAT_ID,
+            Self::EntityStatus(..) => CLIENTBOUND_ENTITY_STATUS_ID,
+            Self::SyncEntityPosition(..) => CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
+            Self::Explosion(..) => CLIENTBOUND_EXPLOSION_ID,
+            Self::UnloadChunk(..) => CLIENTBOUND_UNLOAD_CHUNK_ID,
+            Self::GameStateChange(..) => CLIENTBOUND_GAME_STATE_CHANGE_ID,
+            Self::OpenHorseWindow(..) => CLIENTBOUND_OPEN_HORSE_WINDOW_ID,
+            Self::HurtAnimation(..) => CLIENTBOUND_HURT_ANIMATION_ID,
+            Self::InitializeWorldBorder(..) => CLIENTBOUND_INITIALIZE_WORLD_BORDER_ID,
+            Self::KeepAlive(..) => CLIENTBOUND_KEEP_ALIVE_ID,
+            Self::MapChunk(..) => CLIENTBOUND_MAP_CHUNK_ID,
+            Self::WorldEvent(..) => CLIENTBOUND_WORLD_EVENT_ID,
+            Self::WorldParticles(..) => CLIENTBOUND_WORLD_PARTICLES_ID,
+            Self::UpdateLight(..) => CLIENTBOUND_UPDATE_LIGHT_ID,
+            Self::Login(..) => CLIENTBOUND_LOGIN_ID,
+            Self::Map(..) => CLIENTBOUND_MAP_ID,
+            Self::TradeList(..) => CLIENTBOUND_TRADE_LIST_ID,
+            Self::RelEntityMove(..) => CLIENTBOUND_REL_ENTITY_MOVE_ID,
+            Self::EntityMoveLook(..) => CLIENTBOUND_ENTITY_MOVE_LOOK_ID,
+            Self::MoveMinecart(..) => CLIENTBOUND_MOVE_MINECART_ID,
+            Self::EntityLook(..) => CLIENTBOUND_ENTITY_LOOK_ID,
+            Self::VehicleMove(..) => CLIENTBOUND_VEHICLE_MOVE_ID,
+            Self::OpenBook(..) => CLIENTBOUND_OPEN_BOOK_ID,
+            Self::OpenWindow(..) => CLIENTBOUND_OPEN_WINDOW_ID,
+            Self::OpenSignEntity(..) => CLIENTBOUND_OPEN_SIGN_ENTITY_ID,
+            Self::Ping(..) => CLIENTBOUND_PING_ID,
+            Self::PingResponse(..) => CLIENTBOUND_PING_RESPONSE_ID,
+            Self::CraftRecipeResponse(..) => CLIENTBOUND_CRAFT_RECIPE_RESPONSE_ID,
+            Self::Abilities(..) => CLIENTBOUND_ABILITIES_ID,
+            Self::PlayerChat(..) => CLIENTBOUND_PLAYER_CHAT_ID,
+            Self::EndCombatEvent(..) => CLIENTBOUND_END_COMBAT_EVENT_ID,
+            Self::EnterCombatEvent => CLIENTBOUND_ENTER_COMBAT_EVENT_ID,
+            Self::DeathCombatEvent(..) => CLIENTBOUND_DEATH_COMBAT_EVENT_ID,
+            Self::PlayerRemove(..) => CLIENTBOUND_PLAYER_REMOVE_ID,
+            Self::PlayerInfo(..) => CLIENTBOUND_PLAYER_INFO_ID,
+            Self::FacePlayer(..) => CLIENTBOUND_FACE_PLAYER_ID,
+            Self::Position(..) => CLIENTBOUND_POSITION_ID,
+            Self::PlayerRotation(..) => CLIENTBOUND_PLAYER_ROTATION_ID,
+            Self::RecipeBookAdd(..) => CLIENTBOUND_RECIPE_BOOK_ADD_ID,
+            Self::RecipeBookRemove(..) => CLIENTBOUND_RECIPE_BOOK_REMOVE_ID,
+            Self::RecipeBookSettings(..) => CLIENTBOUND_RECIPE_BOOK_SETTINGS_ID,
+            Self::EntityDestroy(..) => CLIENTBOUND_ENTITY_DESTROY_ID,
+            Self::RemoveEntityEffect(..) => CLIENTBOUND_REMOVE_ENTITY_EFFECT_ID,
+            Self::ResetScore(..) => CLIENTBOUND_RESET_SCORE_ID,
+            Self::RemoveResourcePack(..) => CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
+            Self::AddResourcePack(..) => CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+            Self::Respawn(..) => CLIENTBOUND_RESPAWN_ID,
+            Self::EntityHeadRotation(..) => CLIENTBOUND_ENTITY_HEAD_ROTATION_ID,
+            Self::MultiBlockChange(..) => CLIENTBOUND_MULTI_BLOCK_CHANGE_ID,
+            Self::SelectAdvancementTab(..) => CLIENTBOUND_SELECT_ADVANCEMENT_TAB_ID,
+            Self::ServerData(..) => CLIENTBOUND_SERVER_DATA_ID,
+            Self::ActionBar(..) => CLIENTBOUND_ACTION_BAR_ID,
+            Self::WorldBorderCenter(..) => CLIENTBOUND_WORLD_BORDER_CENTER_ID,
+            Self::WorldBorderLerpSize(..) => CLIENTBOUND_WORLD_BORDER_LERP_SIZE_ID,
+            Self::WorldBorderSize(..) => CLIENTBOUND_WORLD_BORDER_SIZE_ID,
+            Self::WorldBorderWarningDelay(..) => CLIENTBOUND_WORLD_BORDER_WARNING_DELAY_ID,
+            Self::WorldBorderWarningReach(..) => CLIENTBOUND_WORLD_BORDER_WARNING_REACH_ID,
+            Self::Camera(..) => CLIENTBOUND_CAMERA_ID,
+            Self::UpdateViewPosition(..) => CLIENTBOUND_UPDATE_VIEW_POSITION_ID,
+            Self::UpdateViewDistance(..) => CLIENTBOUND_UPDATE_VIEW_DISTANCE_ID,
+            Self::SetCursorItem(..) => CLIENTBOUND_SET_CURSOR_ITEM_ID,
+            Self::SpawnPosition(..) => CLIENTBOUND_SPAWN_POSITION_ID,
+            Self::ScoreboardDisplayObjective(..) => CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID,
+            Self::EntityMetadata(..) => CLIENTBOUND_ENTITY_METADATA_ID,
+            Self::AttachEntity(..) => CLIENTBOUND_ATTACH_ENTITY_ID,
+            Self::EntityVelocity(..) => CLIENTBOUND_ENTITY_VELOCITY_ID,
+            Self::EntityEquipment(..) => CLIENTBOUND_ENTITY_EQUIPMENT_ID,
+            Self::Experience(..) => CLIENTBOUND_EXPERIENCE_ID,
+            Self::UpdateHealth(..) => CLIENTBOUND_UPDATE_HEALTH_ID,
+            Self::HeldItemSlot(..) => CLIENTBOUND_HELD_ITEM_SLOT_ID,
+            Self::ScoreboardObjective(..) => CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID,
+            Self::SetPassengers(..) => CLIENTBOUND_SET_PASSENGERS_ID,
+            Self::SetPlayerInventory(..) => CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
+            Self::Teams(..) => CLIENTBOUND_TEAMS_ID,
+            Self::ScoreboardScore(..) => CLIENTBOUND_SCOREBOARD_SCORE_ID,
+            Self::SimulationDistance(..) => CLIENTBOUND_SIMULATION_DISTANCE_ID,
+            Self::SetTitleSubtitle(..) => CLIENTBOUND_SET_TITLE_SUBTITLE_ID,
+            Self::UpdateTime(..) => CLIENTBOUND_UPDATE_TIME_ID,
+            Self::SetTitleText(..) => CLIENTBOUND_SET_TITLE_TEXT_ID,
+            Self::SetTitleTime(..) => CLIENTBOUND_SET_TITLE_TIME_ID,
+            Self::EntitySoundEffect(..) => CLIENTBOUND_ENTITY_SOUND_EFFECT_ID,
+            Self::SoundEffect(..) => CLIENTBOUND_SOUND_EFFECT_ID,
+            Self::StartConfiguration => CLIENTBOUND_START_CONFIGURATION_ID,
+            Self::StopSound(..) => CLIENTBOUND_STOP_SOUND_ID,
+            Self::StoreCookie(..) => CLIENTBOUND_STORE_COOKIE_ID,
+            Self::SystemChat(..) => CLIENTBOUND_SYSTEM_CHAT_ID,
+            Self::PlayerlistHeader(..) => CLIENTBOUND_PLAYERLIST_HEADER_ID,
+            Self::NbtQueryResponse(..) => CLIENTBOUND_NBT_QUERY_RESPONSE_ID,
+            Self::Collect(..) => CLIENTBOUND_COLLECT_ID,
+            Self::EntityTeleport(..) => CLIENTBOUND_ENTITY_TELEPORT_ID,
+            Self::SetTickingState(..) => CLIENTBOUND_SET_TICKING_STATE_ID,
+            Self::StepTick(..) => CLIENTBOUND_STEP_TICK_ID,
+            Self::Transfer(..) => CLIENTBOUND_TRANSFER_ID,
+            Self::Advancements(..) => CLIENTBOUND_ADVANCEMENTS_ID,
+            Self::EntityUpdateAttributes(..) => CLIENTBOUND_ENTITY_UPDATE_ATTRIBUTES_ID,
+            Self::EntityEffect(..) => CLIENTBOUND_ENTITY_EFFECT_ID,
+            Self::DeclareRecipes(..) => CLIENTBOUND_DECLARE_RECIPES_ID,
+            Self::Tags(..) => CLIENTBOUND_TAGS_ID,
+            Self::SetProjectilePower(..) => CLIENTBOUND_SET_PROJECTILE_POWER_ID,
+            Self::CustomReportDetails(..) => CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID,
+            Self::ServerLinks(..) => CLIENTBOUND_SERVER_LINKS_ID,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::BundleDelimiter => "bundle_delimiter",
+            Self::SpawnEntity(..) => "spawn_entity",
+            Self::SpawnEntityExperienceOrb(..) => "spawn_entity_experience_orb",
+            Self::Animation(..) => "animation",
+            Self::Statistics(..) => "statistics",
+            Self::AcknowledgePlayerDigging(..) => "acknowledge_player_digging",
+            Self::BlockBreakAnimation(..) => "block_break_animation",
+            Self::TileEntityData(..) => "tile_entity_data",
+            Self::BlockAction(..) => "block_action",
+            Self::BlockChange(..) => "block_change",
+            Self::BossBar(..) => "boss_bar",
+            Self::Difficulty(..) => "difficulty",
+            Self::ChunkBatchFinished(..) => "chunk_batch_finished",
+            Self::ChunkBatchStart => "chunk_batch_start",
+            Self::ChunkBiomes(..) => "chunk_biomes",
+            Self::ClearTitles(..) => "clear_titles",
+            Self::TabComplete(..) => "tab_complete",
+            Self::DeclareCommands(..) => "declare_commands",
+            Self::CloseWindow(..) => "close_window",
+            Self::WindowItems(..) => "window_items",
+            Self::CraftProgressBar(..) => "craft_progress_bar",
+            Self::SetSlot(..) => "set_slot",
+            Self::CookieRequest(..) => "cookie_request",
+            Self::SetCooldown(..) => "set_cooldown",
+            Self::ChatSuggestions(..) => "chat_suggestions",
+            Self::CustomPayload(..) => "custom_payload",
+            Self::DamageEvent(..) => "damage_event",
+            Self::DebugSample(..) => "debug_sample",
+            Self::HideMessage(..) => "hide_message",
+            Self::KickDisconnect(..) => "kick_disconnect",
+            Self::ProfilelessChat(..) => "profileless_chat",
+            Self::EntityStatus(..) => "entity_status",
+            Self::SyncEntityPosition(..) => "sync_entity_position",
+            Self::Explosion(..) => "explosion",
+            Self::UnloadChunk(..) => "unload_chunk",
+            Self::GameStateChange(..) => "game_state_change",
+            Self::OpenHorseWindow(..) => "open_horse_window",
+            Self::HurtAnimation(..) => "hurt_animation",
+            Self::InitializeWorldBorder(..) => "initialize_world_border",
+            Self::KeepAlive(..) => "keep_alive",
+            Self::MapChunk(..) => "map_chunk",
+            Self::WorldEvent(..) => "world_event",
+            Self::WorldParticles(..) => "world_particles",
+            Self::UpdateLight(..) => "update_light",
+            Self::Login(..) => "login",
+            Self::Map(..) => "map",
+            Self::TradeList(..) => "trade_list",
+            Self::RelEntityMove(..) => "rel_entity_move",
+            Self::EntityMoveLook(..) => "entity_move_look",
+            Self::MoveMinecart(..) => "move_minecart",
+            Self::EntityLook(..) => "entity_look",
+            Self::VehicleMove(..) => "vehicle_move",
+            Self::OpenBook(..) => "open_book",
+            Self::OpenWindow(..) => "open_window",
+            Self::OpenSignEntity(..) => "open_sign_entity",
+            Self::Ping(..) => "ping",
+            Self::PingResponse(..) => "ping_response",
+            Self::CraftRecipeResponse(..) => "craft_recipe_response",
+            Self::Abilities(..) => "abilities",
+            Self::PlayerChat(..) => "player_chat",
+            Self::EndCombatEvent(..) => "end_combat_event",
+            Self::EnterCombatEvent => "enter_combat_event",
+            Self::DeathCombatEvent(..) => "death_combat_event",
+            Self::PlayerRemove(..) => "player_remove",
+            Self::PlayerInfo(..) => "player_info",
+            Self::FacePlayer(..) => "face_player",
+            Self::Position(..) => "position",
+            Self::PlayerRotation(..) => "player_rotation",
+            Self::RecipeBookAdd(..) => "recipe_book_add",
+            Self::RecipeBookRemove(..) => "recipe_book_remove",
+            Self::RecipeBookSettings(..) => "recipe_book_settings",
+            Self::EntityDestroy(..) => "entity_destroy",
+            Self::RemoveEntityEffect(..) => "remove_entity_effect",
+            Self::ResetScore(..) => "reset_score",
+            Self::RemoveResourcePack(..) => "remove_resource_pack",
+            Self::AddResourcePack(..) => "add_resource_pack",
+            Self::Respawn(..) => "respawn",
+            Self::EntityHeadRotation(..) => "entity_head_rotation",
+            Self::MultiBlockChange(..) => "multi_block_change",
+            Self::SelectAdvancementTab(..) => "select_advancement_tab",
+            Self::ServerData(..) => "server_data",
+            Self::ActionBar(..) => "action_bar",
+            Self::WorldBorderCenter(..) => "world_border_center",
+            Self::WorldBorderLerpSize(..) => "world_border_lerp_size",
+            Self::WorldBorderSize(..) => "world_border_size",
+            Self::WorldBorderWarningDelay(..) => "world_border_warning_delay",
+            Self::WorldBorderWarningReach(..) => "world_border_warning_reach",
+            Self::Camera(..) => "camera",
+            Self::UpdateViewPosition(..) => "update_view_position",
+            Self::UpdateViewDistance(..) => "update_view_distance",
+            Self::SetCursorItem(..) => "set_cursor_item",
+            Self::SpawnPosition(..) => "spawn_position",
+            Self::ScoreboardDisplayObjective(..) => "scoreboard_display_objective",
+            Self::EntityMetadata(..) => "entity_metadata",
+            Self::AttachEntity(..) => "attach_entity",
+            Self::EntityVelocity(..) => "entity_velocity",
+            Self::EntityEquipment(..) => "entity_equipment",
+            Self::Experience(..) => "experience",
+            Self::UpdateHealth(..) => "update_health",
+            Self::HeldItemSlot(..) => "held_item_slot",
+            Self::ScoreboardObjective(..) => "scoreboard_objective",
+            Self::SetPassengers(..) => "set_passengers",
+            Self::SetPlayerInventory(..) => "set_player_inventory",
+            Self::Teams(..) => "teams",
+            Self::ScoreboardScore(..) => "scoreboard_score",
+            Self::SimulationDistance(..) => "simulation_distance",
+            Self::SetTitleSubtitle(..) => "set_title_subtitle",
+            Self::UpdateTime(..) => "update_time",
+            Self::SetTitleText(..) => "set_title_text",
+            Self::SetTitleTime(..) => "set_title_time",
+            Self::EntitySoundEffect(..) => "entity_sound_effect",
+            Self::SoundEffect(..) => "sound_effect",
+            Self::StartConfiguration => "start_configuration",
+            Self::StopSound(..) => "stop_sound",
+            Self::StoreCookie(..) => "store_cookie",
+            Self::SystemChat(..) => "system_chat",
+            Self::PlayerlistHeader(..) => "playerlist_header",
+            Self::NbtQueryResponse(..) => "nbt_query_response",
+            Self::Collect(..) => "collect",
+            Self::EntityTeleport(..) => "entity_teleport",
+            Self::SetTickingState(..) => "set_ticking_state",
+            Self::StepTick(..) => "step_tick",
+            Self::Transfer(..) => "transfer",
+            Self::Advancements(..) => "advancements",
+            Self::EntityUpdateAttributes(..) => "entity_update_attributes",
+            Self::EntityEffect(..) => "entity_effect",
+            Self::DeclareRecipes(..) => "declare_recipes",
+            Self::Tags(..) => "tags",
+            Self::SetProjectilePower(..) => "set_projectile_power",
+            Self::CustomReportDetails(..) => "custom_report_details",
+            Self::ServerLinks(..) => "server_links",
+        }
+    }
+
+    pub fn decode(
+        id: i32,
+        input: &mut crate::buffer::PacketReader<'_>,
+    ) -> crate::error::Result<Self> {
+        match id {
+            CLIENTBOUND_BUNDLE_DELIMITER_ID => {
+                crate::traits::ensure_consumed(input, "clientbound play bundle_delimiter")?;
+                Ok(Self::BundleDelimiter)
+            }
+            CLIENTBOUND_SPAWN_ENTITY_ID => {
+                let payload = <PacketSpawnEntity as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play spawn_entity")?;
+                Ok(Self::SpawnEntity(payload))
+            }
+            CLIENTBOUND_SPAWN_ENTITY_EXPERIENCE_ORB_ID => {
+                let payload = <PacketSpawnEntityExperienceOrb as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play spawn_entity_experience_orb")?;
+                Ok(Self::SpawnEntityExperienceOrb(payload))
+            }
+            CLIENTBOUND_ANIMATION_ID => {
+                let payload = <PacketAnimation as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play animation")?;
+                Ok(Self::Animation(payload))
+            }
+            CLIENTBOUND_STATISTICS_ID => {
+                let payload = <PacketStatistics as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play statistics")?;
+                Ok(Self::Statistics(payload))
+            }
+            CLIENTBOUND_ACKNOWLEDGE_PLAYER_DIGGING_ID => {
+                let payload = <PacketAcknowledgePlayerDigging as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play acknowledge_player_digging")?;
+                Ok(Self::AcknowledgePlayerDigging(payload))
+            }
+            CLIENTBOUND_BLOCK_BREAK_ANIMATION_ID => {
+                let payload = <PacketBlockBreakAnimation as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play block_break_animation")?;
+                Ok(Self::BlockBreakAnimation(payload))
+            }
+            CLIENTBOUND_TILE_ENTITY_DATA_ID => {
+                let payload = <PacketTileEntityData as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play tile_entity_data")?;
+                Ok(Self::TileEntityData(payload))
+            }
+            CLIENTBOUND_BLOCK_ACTION_ID => {
+                let payload = <PacketBlockAction as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play block_action")?;
+                Ok(Self::BlockAction(payload))
+            }
+            CLIENTBOUND_BLOCK_CHANGE_ID => {
+                let payload = <PacketBlockChange as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play block_change")?;
+                Ok(Self::BlockChange(payload))
+            }
+            CLIENTBOUND_BOSS_BAR_ID => {
+                let payload = <PacketBossBar as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play boss_bar")?;
+                Ok(Self::BossBar(payload))
+            }
+            CLIENTBOUND_DIFFICULTY_ID => {
+                let payload = <PacketDifficulty as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play difficulty")?;
+                Ok(Self::Difficulty(payload))
+            }
+            CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => {
+                let payload = <PacketChunkBatchFinished as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play chunk_batch_finished")?;
+                Ok(Self::ChunkBatchFinished(payload))
+            }
+            CLIENTBOUND_CHUNK_BATCH_START_ID => {
+                crate::traits::ensure_consumed(input, "clientbound play chunk_batch_start")?;
+                Ok(Self::ChunkBatchStart)
+            }
+            CLIENTBOUND_CHUNK_BIOMES_ID => {
+                let payload = <PacketChunkBiomes as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play chunk_biomes")?;
+                Ok(Self::ChunkBiomes(payload))
+            }
+            CLIENTBOUND_CLEAR_TITLES_ID => {
+                let payload = <PacketClearTitles as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play clear_titles")?;
+                Ok(Self::ClearTitles(payload))
+            }
+            CLIENTBOUND_TAB_COMPLETE_ID => {
+                let payload = <PacketTabComplete as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play tab_complete")?;
+                Ok(Self::TabComplete(payload))
+            }
+            CLIENTBOUND_DECLARE_COMMANDS_ID => {
+                let payload = <PacketDeclareCommands as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play declare_commands")?;
+                Ok(Self::DeclareCommands(payload))
+            }
+            CLIENTBOUND_CLOSE_WINDOW_ID => {
+                let payload = <PacketCloseWindow as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play close_window")?;
+                Ok(Self::CloseWindow(payload))
+            }
+            CLIENTBOUND_WINDOW_ITEMS_ID => {
+                let payload = <PacketWindowItems as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play window_items")?;
+                Ok(Self::WindowItems(payload))
+            }
+            CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => {
+                let payload = <PacketCraftProgressBar as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play craft_progress_bar")?;
+                Ok(Self::CraftProgressBar(payload))
+            }
+            CLIENTBOUND_SET_SLOT_ID => {
+                let payload = <PacketSetSlot as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_slot")?;
+                Ok(Self::SetSlot(payload))
+            }
+            CLIENTBOUND_COOKIE_REQUEST_ID => {
+                let payload = <super::types::PacketCommonCookieRequest as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play cookie_request")?;
+                Ok(Self::CookieRequest(payload))
+            }
+            CLIENTBOUND_SET_COOLDOWN_ID => {
+                let payload = <PacketSetCooldown as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_cooldown")?;
+                Ok(Self::SetCooldown(payload))
+            }
+            CLIENTBOUND_CHAT_SUGGESTIONS_ID => {
+                let payload = <PacketChatSuggestions as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play chat_suggestions")?;
+                Ok(Self::ChatSuggestions(payload))
+            }
+            CLIENTBOUND_CUSTOM_PAYLOAD_ID => {
+                let payload = <PacketCustomPayload as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play custom_payload")?;
+                Ok(Self::CustomPayload(payload))
+            }
+            CLIENTBOUND_DAMAGE_EVENT_ID => {
+                let payload = <PacketDamageEvent as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play damage_event")?;
+                Ok(Self::DamageEvent(payload))
+            }
+            CLIENTBOUND_DEBUG_SAMPLE_ID => {
+                let payload = <PacketDebugSample as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play debug_sample")?;
+                Ok(Self::DebugSample(payload))
+            }
+            CLIENTBOUND_HIDE_MESSAGE_ID => {
+                let payload = <PacketHideMessage as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play hide_message")?;
+                Ok(Self::HideMessage(payload))
+            }
+            CLIENTBOUND_KICK_DISCONNECT_ID => {
+                let payload = <PacketKickDisconnect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play kick_disconnect")?;
+                Ok(Self::KickDisconnect(payload))
+            }
+            CLIENTBOUND_PROFILELESS_CHAT_ID => {
+                let payload = <PacketProfilelessChat as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play profileless_chat")?;
+                Ok(Self::ProfilelessChat(payload))
+            }
+            CLIENTBOUND_ENTITY_STATUS_ID => {
+                let payload = <PacketEntityStatus as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_status")?;
+                Ok(Self::EntityStatus(payload))
+            }
+            CLIENTBOUND_SYNC_ENTITY_POSITION_ID => {
+                let payload = <PacketSyncEntityPosition as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play sync_entity_position")?;
+                Ok(Self::SyncEntityPosition(payload))
+            }
+            CLIENTBOUND_EXPLOSION_ID => {
+                let payload = <PacketExplosion as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play explosion")?;
+                Ok(Self::Explosion(payload))
+            }
+            CLIENTBOUND_UNLOAD_CHUNK_ID => {
+                let payload = <PacketUnloadChunk as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play unload_chunk")?;
+                Ok(Self::UnloadChunk(payload))
+            }
+            CLIENTBOUND_GAME_STATE_CHANGE_ID => {
+                let payload = <PacketGameStateChange as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play game_state_change")?;
+                Ok(Self::GameStateChange(payload))
+            }
+            CLIENTBOUND_OPEN_HORSE_WINDOW_ID => {
+                let payload = <PacketOpenHorseWindow as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play open_horse_window")?;
+                Ok(Self::OpenHorseWindow(payload))
+            }
+            CLIENTBOUND_HURT_ANIMATION_ID => {
+                let payload = <PacketHurtAnimation as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play hurt_animation")?;
+                Ok(Self::HurtAnimation(payload))
+            }
+            CLIENTBOUND_INITIALIZE_WORLD_BORDER_ID => {
+                let payload = <PacketInitializeWorldBorder as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play initialize_world_border")?;
+                Ok(Self::InitializeWorldBorder(payload))
+            }
+            CLIENTBOUND_KEEP_ALIVE_ID => {
+                let payload = <PacketKeepAlive as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play keep_alive")?;
+                Ok(Self::KeepAlive(payload))
+            }
+            CLIENTBOUND_MAP_CHUNK_ID => {
+                let payload = <PacketMapChunk as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play map_chunk")?;
+                Ok(Self::MapChunk(payload))
+            }
+            CLIENTBOUND_WORLD_EVENT_ID => {
+                let payload = <PacketWorldEvent as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_event")?;
+                Ok(Self::WorldEvent(payload))
+            }
+            CLIENTBOUND_WORLD_PARTICLES_ID => {
+                let payload = <PacketWorldParticles as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_particles")?;
+                Ok(Self::WorldParticles(payload))
+            }
+            CLIENTBOUND_UPDATE_LIGHT_ID => {
+                let payload = <PacketUpdateLight as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play update_light")?;
+                Ok(Self::UpdateLight(payload))
+            }
+            CLIENTBOUND_LOGIN_ID => {
+                let payload = <PacketLogin as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play login")?;
+                Ok(Self::Login(payload))
+            }
+            CLIENTBOUND_MAP_ID => {
+                let payload = <PacketMap as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play map")?;
+                Ok(Self::Map(payload))
+            }
+            CLIENTBOUND_TRADE_LIST_ID => {
+                let payload = <PacketTradeList as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play trade_list")?;
+                Ok(Self::TradeList(payload))
+            }
+            CLIENTBOUND_REL_ENTITY_MOVE_ID => {
+                let payload = <PacketRelEntityMove as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play rel_entity_move")?;
+                Ok(Self::RelEntityMove(payload))
+            }
+            CLIENTBOUND_ENTITY_MOVE_LOOK_ID => {
+                let payload = <PacketEntityMoveLook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_move_look")?;
+                Ok(Self::EntityMoveLook(payload))
+            }
+            CLIENTBOUND_MOVE_MINECART_ID => {
+                let payload = <PacketMoveMinecart as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play move_minecart")?;
+                Ok(Self::MoveMinecart(payload))
+            }
+            CLIENTBOUND_ENTITY_LOOK_ID => {
+                let payload = <PacketEntityLook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_look")?;
+                Ok(Self::EntityLook(payload))
+            }
+            CLIENTBOUND_VEHICLE_MOVE_ID => {
+                let payload = <PacketVehicleMove as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play vehicle_move")?;
+                Ok(Self::VehicleMove(payload))
+            }
+            CLIENTBOUND_OPEN_BOOK_ID => {
+                let payload = <PacketOpenBook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play open_book")?;
+                Ok(Self::OpenBook(payload))
+            }
+            CLIENTBOUND_OPEN_WINDOW_ID => {
+                let payload = <PacketOpenWindow as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play open_window")?;
+                Ok(Self::OpenWindow(payload))
+            }
+            CLIENTBOUND_OPEN_SIGN_ENTITY_ID => {
+                let payload = <PacketOpenSignEntity as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play open_sign_entity")?;
+                Ok(Self::OpenSignEntity(payload))
+            }
+            CLIENTBOUND_PING_ID => {
+                let payload = <PacketPing as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play ping")?;
+                Ok(Self::Ping(payload))
+            }
+            CLIENTBOUND_PING_RESPONSE_ID => {
+                let payload = <PacketPingResponse as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play ping_response")?;
+                Ok(Self::PingResponse(payload))
+            }
+            CLIENTBOUND_CRAFT_RECIPE_RESPONSE_ID => {
+                let payload = <PacketCraftRecipeResponse as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play craft_recipe_response")?;
+                Ok(Self::CraftRecipeResponse(payload))
+            }
+            CLIENTBOUND_ABILITIES_ID => {
+                let payload = <PacketAbilities as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play abilities")?;
+                Ok(Self::Abilities(payload))
+            }
+            CLIENTBOUND_PLAYER_CHAT_ID => {
+                let payload = <PacketPlayerChat as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play player_chat")?;
+                Ok(Self::PlayerChat(payload))
+            }
+            CLIENTBOUND_END_COMBAT_EVENT_ID => {
+                let payload = <PacketEndCombatEvent as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play end_combat_event")?;
+                Ok(Self::EndCombatEvent(payload))
+            }
+            CLIENTBOUND_ENTER_COMBAT_EVENT_ID => {
+                crate::traits::ensure_consumed(input, "clientbound play enter_combat_event")?;
+                Ok(Self::EnterCombatEvent)
+            }
+            CLIENTBOUND_DEATH_COMBAT_EVENT_ID => {
+                let payload = <PacketDeathCombatEvent as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play death_combat_event")?;
+                Ok(Self::DeathCombatEvent(payload))
+            }
+            CLIENTBOUND_PLAYER_REMOVE_ID => {
+                let payload = <PacketPlayerRemove as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play player_remove")?;
+                Ok(Self::PlayerRemove(payload))
+            }
+            CLIENTBOUND_PLAYER_INFO_ID => {
+                let payload = <PacketPlayerInfo as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play player_info")?;
+                Ok(Self::PlayerInfo(payload))
+            }
+            CLIENTBOUND_FACE_PLAYER_ID => {
+                let payload = <PacketFacePlayer as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play face_player")?;
+                Ok(Self::FacePlayer(payload))
+            }
+            CLIENTBOUND_POSITION_ID => {
+                let payload = <PacketPosition as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play position")?;
+                Ok(Self::Position(payload))
+            }
+            CLIENTBOUND_PLAYER_ROTATION_ID => {
+                let payload = <PacketPlayerRotation as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play player_rotation")?;
+                Ok(Self::PlayerRotation(payload))
+            }
+            CLIENTBOUND_RECIPE_BOOK_ADD_ID => {
+                let payload = <PacketRecipeBookAdd as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play recipe_book_add")?;
+                Ok(Self::RecipeBookAdd(payload))
+            }
+            CLIENTBOUND_RECIPE_BOOK_REMOVE_ID => {
+                let payload = <PacketRecipeBookRemove as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play recipe_book_remove")?;
+                Ok(Self::RecipeBookRemove(payload))
+            }
+            CLIENTBOUND_RECIPE_BOOK_SETTINGS_ID => {
+                let payload = <PacketRecipeBookSettings as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play recipe_book_settings")?;
+                Ok(Self::RecipeBookSettings(payload))
+            }
+            CLIENTBOUND_ENTITY_DESTROY_ID => {
+                let payload = <PacketEntityDestroy as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_destroy")?;
+                Ok(Self::EntityDestroy(payload))
+            }
+            CLIENTBOUND_REMOVE_ENTITY_EFFECT_ID => {
+                let payload = <PacketRemoveEntityEffect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play remove_entity_effect")?;
+                Ok(Self::RemoveEntityEffect(payload))
+            }
+            CLIENTBOUND_RESET_SCORE_ID => {
+                let payload = <PacketResetScore as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play reset_score")?;
+                Ok(Self::ResetScore(payload))
+            }
+            CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
+                let payload = <super::types::PacketCommonRemoveResourcePack as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play remove_resource_pack")?;
+                Ok(Self::RemoveResourcePack(payload))
+            }
+            CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
+                let payload = <super::types::PacketCommonAddResourcePack as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play add_resource_pack")?;
+                Ok(Self::AddResourcePack(payload))
+            }
+            CLIENTBOUND_RESPAWN_ID => {
+                let payload = <PacketRespawn as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play respawn")?;
+                Ok(Self::Respawn(payload))
+            }
+            CLIENTBOUND_ENTITY_HEAD_ROTATION_ID => {
+                let payload = <PacketEntityHeadRotation as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_head_rotation")?;
+                Ok(Self::EntityHeadRotation(payload))
+            }
+            CLIENTBOUND_MULTI_BLOCK_CHANGE_ID => {
+                let payload = <PacketMultiBlockChange as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play multi_block_change")?;
+                Ok(Self::MultiBlockChange(payload))
+            }
+            CLIENTBOUND_SELECT_ADVANCEMENT_TAB_ID => {
+                let payload = <PacketSelectAdvancementTab as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play select_advancement_tab")?;
+                Ok(Self::SelectAdvancementTab(payload))
+            }
+            CLIENTBOUND_SERVER_DATA_ID => {
+                let payload = <PacketServerData as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play server_data")?;
+                Ok(Self::ServerData(payload))
+            }
+            CLIENTBOUND_ACTION_BAR_ID => {
+                let payload = <PacketActionBar as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play action_bar")?;
+                Ok(Self::ActionBar(payload))
+            }
+            CLIENTBOUND_WORLD_BORDER_CENTER_ID => {
+                let payload = <PacketWorldBorderCenter as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_border_center")?;
+                Ok(Self::WorldBorderCenter(payload))
+            }
+            CLIENTBOUND_WORLD_BORDER_LERP_SIZE_ID => {
+                let payload = <PacketWorldBorderLerpSize as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_border_lerp_size")?;
+                Ok(Self::WorldBorderLerpSize(payload))
+            }
+            CLIENTBOUND_WORLD_BORDER_SIZE_ID => {
+                let payload = <PacketWorldBorderSize as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_border_size")?;
+                Ok(Self::WorldBorderSize(payload))
+            }
+            CLIENTBOUND_WORLD_BORDER_WARNING_DELAY_ID => {
+                let payload = <PacketWorldBorderWarningDelay as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_border_warning_delay")?;
+                Ok(Self::WorldBorderWarningDelay(payload))
+            }
+            CLIENTBOUND_WORLD_BORDER_WARNING_REACH_ID => {
+                let payload = <PacketWorldBorderWarningReach as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play world_border_warning_reach")?;
+                Ok(Self::WorldBorderWarningReach(payload))
+            }
+            CLIENTBOUND_CAMERA_ID => {
+                let payload = <PacketCamera as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play camera")?;
+                Ok(Self::Camera(payload))
+            }
+            CLIENTBOUND_UPDATE_VIEW_POSITION_ID => {
+                let payload = <PacketUpdateViewPosition as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play update_view_position")?;
+                Ok(Self::UpdateViewPosition(payload))
+            }
+            CLIENTBOUND_UPDATE_VIEW_DISTANCE_ID => {
+                let payload = <PacketUpdateViewDistance as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play update_view_distance")?;
+                Ok(Self::UpdateViewDistance(payload))
+            }
+            CLIENTBOUND_SET_CURSOR_ITEM_ID => {
+                let payload = <PacketSetCursorItem as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_cursor_item")?;
+                Ok(Self::SetCursorItem(payload))
+            }
+            CLIENTBOUND_SPAWN_POSITION_ID => {
+                let payload = <PacketSpawnPosition as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play spawn_position")?;
+                Ok(Self::SpawnPosition(payload))
+            }
+            CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID => {
+                let payload = <PacketScoreboardDisplayObjective as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play scoreboard_display_objective")?;
+                Ok(Self::ScoreboardDisplayObjective(payload))
+            }
+            CLIENTBOUND_ENTITY_METADATA_ID => {
+                let payload = <PacketEntityMetadata as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_metadata")?;
+                Ok(Self::EntityMetadata(payload))
+            }
+            CLIENTBOUND_ATTACH_ENTITY_ID => {
+                let payload = <PacketAttachEntity as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play attach_entity")?;
+                Ok(Self::AttachEntity(payload))
+            }
+            CLIENTBOUND_ENTITY_VELOCITY_ID => {
+                let payload = <PacketEntityVelocity as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_velocity")?;
+                Ok(Self::EntityVelocity(payload))
+            }
+            CLIENTBOUND_ENTITY_EQUIPMENT_ID => {
+                let payload = <PacketEntityEquipment as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_equipment")?;
+                Ok(Self::EntityEquipment(payload))
+            }
+            CLIENTBOUND_EXPERIENCE_ID => {
+                let payload = <PacketExperience as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play experience")?;
+                Ok(Self::Experience(payload))
+            }
+            CLIENTBOUND_UPDATE_HEALTH_ID => {
+                let payload = <PacketUpdateHealth as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play update_health")?;
+                Ok(Self::UpdateHealth(payload))
+            }
+            CLIENTBOUND_HELD_ITEM_SLOT_ID => {
+                let payload = <PacketHeldItemSlot as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play held_item_slot")?;
+                Ok(Self::HeldItemSlot(payload))
+            }
+            CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID => {
+                let payload = <PacketScoreboardObjective as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play scoreboard_objective")?;
+                Ok(Self::ScoreboardObjective(payload))
+            }
+            CLIENTBOUND_SET_PASSENGERS_ID => {
+                let payload = <PacketSetPassengers as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_passengers")?;
+                Ok(Self::SetPassengers(payload))
+            }
+            CLIENTBOUND_SET_PLAYER_INVENTORY_ID => {
+                let payload = <PacketSetPlayerInventory as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_player_inventory")?;
+                Ok(Self::SetPlayerInventory(payload))
+            }
+            CLIENTBOUND_TEAMS_ID => {
+                let payload = <PacketTeams as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play teams")?;
+                Ok(Self::Teams(payload))
+            }
+            CLIENTBOUND_SCOREBOARD_SCORE_ID => {
+                let payload = <PacketScoreboardScore as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play scoreboard_score")?;
+                Ok(Self::ScoreboardScore(payload))
+            }
+            CLIENTBOUND_SIMULATION_DISTANCE_ID => {
+                let payload = <PacketSimulationDistance as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play simulation_distance")?;
+                Ok(Self::SimulationDistance(payload))
+            }
+            CLIENTBOUND_SET_TITLE_SUBTITLE_ID => {
+                let payload = <PacketSetTitleSubtitle as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_title_subtitle")?;
+                Ok(Self::SetTitleSubtitle(payload))
+            }
+            CLIENTBOUND_UPDATE_TIME_ID => {
+                let payload = <PacketUpdateTime as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play update_time")?;
+                Ok(Self::UpdateTime(payload))
+            }
+            CLIENTBOUND_SET_TITLE_TEXT_ID => {
+                let payload = <PacketSetTitleText as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_title_text")?;
+                Ok(Self::SetTitleText(payload))
+            }
+            CLIENTBOUND_SET_TITLE_TIME_ID => {
+                let payload = <PacketSetTitleTime as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_title_time")?;
+                Ok(Self::SetTitleTime(payload))
+            }
+            CLIENTBOUND_ENTITY_SOUND_EFFECT_ID => {
+                let payload = <PacketEntitySoundEffect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_sound_effect")?;
+                Ok(Self::EntitySoundEffect(payload))
+            }
+            CLIENTBOUND_SOUND_EFFECT_ID => {
+                let payload = <PacketSoundEffect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play sound_effect")?;
+                Ok(Self::SoundEffect(payload))
+            }
+            CLIENTBOUND_START_CONFIGURATION_ID => {
+                crate::traits::ensure_consumed(input, "clientbound play start_configuration")?;
+                Ok(Self::StartConfiguration)
+            }
+            CLIENTBOUND_STOP_SOUND_ID => {
+                let payload = <PacketStopSound as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play stop_sound")?;
+                Ok(Self::StopSound(payload))
+            }
+            CLIENTBOUND_STORE_COOKIE_ID => {
+                let payload = <super::types::PacketCommonStoreCookie as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play store_cookie")?;
+                Ok(Self::StoreCookie(payload))
+            }
+            CLIENTBOUND_SYSTEM_CHAT_ID => {
+                let payload = <PacketSystemChat as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play system_chat")?;
+                Ok(Self::SystemChat(payload))
+            }
+            CLIENTBOUND_PLAYERLIST_HEADER_ID => {
+                let payload = <PacketPlayerlistHeader as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play playerlist_header")?;
+                Ok(Self::PlayerlistHeader(payload))
+            }
+            CLIENTBOUND_NBT_QUERY_RESPONSE_ID => {
+                let payload = <PacketNbtQueryResponse as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play nbt_query_response")?;
+                Ok(Self::NbtQueryResponse(payload))
+            }
+            CLIENTBOUND_COLLECT_ID => {
+                let payload = <PacketCollect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play collect")?;
+                Ok(Self::Collect(payload))
+            }
+            CLIENTBOUND_ENTITY_TELEPORT_ID => {
+                let payload = <PacketEntityTeleport as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_teleport")?;
+                Ok(Self::EntityTeleport(payload))
+            }
+            CLIENTBOUND_SET_TICKING_STATE_ID => {
+                let payload = <PacketSetTickingState as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_ticking_state")?;
+                Ok(Self::SetTickingState(payload))
+            }
+            CLIENTBOUND_STEP_TICK_ID => {
+                let payload = <PacketStepTick as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play step_tick")?;
+                Ok(Self::StepTick(payload))
+            }
+            CLIENTBOUND_TRANSFER_ID => {
+                let payload = <super::types::PacketCommonTransfer as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play transfer")?;
+                Ok(Self::Transfer(payload))
+            }
+            CLIENTBOUND_ADVANCEMENTS_ID => {
+                let payload = <PacketAdvancements as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play advancements")?;
+                Ok(Self::Advancements(payload))
+            }
+            CLIENTBOUND_ENTITY_UPDATE_ATTRIBUTES_ID => {
+                let payload = <PacketEntityUpdateAttributes as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_update_attributes")?;
+                Ok(Self::EntityUpdateAttributes(payload))
+            }
+            CLIENTBOUND_ENTITY_EFFECT_ID => {
+                let payload = <PacketEntityEffect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play entity_effect")?;
+                Ok(Self::EntityEffect(payload))
+            }
+            CLIENTBOUND_DECLARE_RECIPES_ID => {
+                let payload = <PacketDeclareRecipes as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play declare_recipes")?;
+                Ok(Self::DeclareRecipes(payload))
+            }
+            CLIENTBOUND_TAGS_ID => {
+                let payload = <PacketTags as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play tags")?;
+                Ok(Self::Tags(payload))
+            }
+            CLIENTBOUND_SET_PROJECTILE_POWER_ID => {
+                let payload = <PacketSetProjectilePower as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play set_projectile_power")?;
+                Ok(Self::SetProjectilePower(payload))
+            }
+            CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID => {
+                let payload = <super::types::PacketCommonCustomReportDetails as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play custom_report_details")?;
+                Ok(Self::CustomReportDetails(payload))
+            }
+            CLIENTBOUND_SERVER_LINKS_ID => {
+                let payload = <super::types::PacketCommonServerLinks as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "clientbound play server_links")?;
+                Ok(Self::ServerLinks(payload))
+            }
+            _ => Err(crate::error::ProtocolError::UnknownPacketId { context: "clientbound play", id }),
+        }
+    }
+}
+
+impl crate::traits::Encode for ClientboundPlayPacket {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.id());
+        match self {
+            Self::BundleDelimiter => {},
+            Self::SpawnEntity(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SpawnEntityExperienceOrb(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Animation(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Statistics(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::AcknowledgePlayerDigging(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::BlockBreakAnimation(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::TileEntityData(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::BlockAction(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::BlockChange(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::BossBar(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Difficulty(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChunkBatchFinished(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChunkBatchStart => {},
+            Self::ChunkBiomes(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ClearTitles(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::TabComplete(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::DeclareCommands(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CloseWindow(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WindowItems(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CraftProgressBar(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetSlot(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CookieRequest(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetCooldown(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChatSuggestions(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CustomPayload(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::DamageEvent(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::DebugSample(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::HideMessage(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::KickDisconnect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ProfilelessChat(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityStatus(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SyncEntityPosition(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Explosion(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UnloadChunk(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::GameStateChange(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::OpenHorseWindow(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::HurtAnimation(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::InitializeWorldBorder(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::KeepAlive(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::MapChunk(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldEvent(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldParticles(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateLight(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Login(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Map(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::TradeList(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RelEntityMove(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityMoveLook(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::MoveMinecart(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityLook(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::VehicleMove(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::OpenBook(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::OpenWindow(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::OpenSignEntity(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Ping(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PingResponse(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CraftRecipeResponse(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Abilities(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerChat(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EndCombatEvent(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EnterCombatEvent => {},
+            Self::DeathCombatEvent(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerRemove(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerInfo(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::FacePlayer(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Position(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerRotation(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RecipeBookAdd(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RecipeBookRemove(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RecipeBookSettings(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityDestroy(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RemoveEntityEffect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ResetScore(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RemoveResourcePack(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::AddResourcePack(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Respawn(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityHeadRotation(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::MultiBlockChange(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SelectAdvancementTab(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ServerData(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ActionBar(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldBorderCenter(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldBorderLerpSize(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldBorderSize(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldBorderWarningDelay(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WorldBorderWarningReach(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Camera(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateViewPosition(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateViewDistance(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetCursorItem(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SpawnPosition(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ScoreboardDisplayObjective(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityMetadata(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::AttachEntity(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityVelocity(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityEquipment(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Experience(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateHealth(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::HeldItemSlot(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ScoreboardObjective(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetPassengers(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetPlayerInventory(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Teams(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ScoreboardScore(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SimulationDistance(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetTitleSubtitle(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateTime(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetTitleText(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetTitleTime(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntitySoundEffect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SoundEffect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::StartConfiguration => {},
+            Self::StopSound(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::StoreCookie(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SystemChat(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerlistHeader(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::NbtQueryResponse(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Collect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityTeleport(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetTickingState(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::StepTick(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Transfer(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Advancements(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityUpdateAttributes(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityEffect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::DeclareRecipes(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Tags(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetProjectilePower(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CustomReportDetails(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ServerLinks(payload) => crate::traits::Encode::encode(payload, out)?,
+        }
+        Ok(())
+    }
+}
+
+pub const SERVERBOUND_TELEPORT_CONFIRM_ID: i32 = 0;
+pub const SERVERBOUND_QUERY_BLOCK_NBT_ID: i32 = 1;
+pub const SERVERBOUND_SELECT_BUNDLE_ITEM_ID: i32 = 2;
+pub const SERVERBOUND_SET_DIFFICULTY_ID: i32 = 3;
+pub const SERVERBOUND_MESSAGE_ACKNOWLEDGEMENT_ID: i32 = 4;
+pub const SERVERBOUND_CHAT_COMMAND_ID: i32 = 5;
+pub const SERVERBOUND_CHAT_COMMAND_SIGNED_ID: i32 = 6;
+pub const SERVERBOUND_CHAT_MESSAGE_ID: i32 = 7;
+pub const SERVERBOUND_CHAT_SESSION_UPDATE_ID: i32 = 8;
+pub const SERVERBOUND_CHUNK_BATCH_RECEIVED_ID: i32 = 9;
+pub const SERVERBOUND_CLIENT_COMMAND_ID: i32 = 10;
+pub const SERVERBOUND_TICK_END_ID: i32 = 11;
+pub const SERVERBOUND_SETTINGS_ID: i32 = 12;
+pub const SERVERBOUND_TAB_COMPLETE_ID: i32 = 13;
+pub const SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID: i32 = 14;
+pub const SERVERBOUND_ENCHANT_ITEM_ID: i32 = 15;
+pub const SERVERBOUND_WINDOW_CLICK_ID: i32 = 16;
+pub const SERVERBOUND_CLOSE_WINDOW_ID: i32 = 17;
+pub const SERVERBOUND_SET_SLOT_STATE_ID: i32 = 18;
+pub const SERVERBOUND_COOKIE_RESPONSE_ID: i32 = 19;
+pub const SERVERBOUND_CUSTOM_PAYLOAD_ID: i32 = 20;
+pub const SERVERBOUND_DEBUG_SAMPLE_SUBSCRIPTION_ID: i32 = 21;
+pub const SERVERBOUND_EDIT_BOOK_ID: i32 = 22;
+pub const SERVERBOUND_QUERY_ENTITY_NBT_ID: i32 = 23;
+pub const SERVERBOUND_USE_ENTITY_ID: i32 = 24;
+pub const SERVERBOUND_GENERATE_STRUCTURE_ID: i32 = 25;
+pub const SERVERBOUND_KEEP_ALIVE_ID: i32 = 26;
+pub const SERVERBOUND_LOCK_DIFFICULTY_ID: i32 = 27;
+pub const SERVERBOUND_POSITION_ID: i32 = 28;
+pub const SERVERBOUND_POSITION_LOOK_ID: i32 = 29;
+pub const SERVERBOUND_LOOK_ID: i32 = 30;
+pub const SERVERBOUND_FLYING_ID: i32 = 31;
+pub const SERVERBOUND_VEHICLE_MOVE_ID: i32 = 32;
+pub const SERVERBOUND_STEER_BOAT_ID: i32 = 33;
+pub const SERVERBOUND_PICK_ITEM_FROM_BLOCK_ID: i32 = 34;
+pub const SERVERBOUND_PICK_ITEM_FROM_ENTITY_ID: i32 = 35;
+pub const SERVERBOUND_PING_REQUEST_ID: i32 = 36;
+pub const SERVERBOUND_CRAFT_RECIPE_REQUEST_ID: i32 = 37;
+pub const SERVERBOUND_ABILITIES_ID: i32 = 38;
+pub const SERVERBOUND_BLOCK_DIG_ID: i32 = 39;
+pub const SERVERBOUND_ENTITY_ACTION_ID: i32 = 40;
+pub const SERVERBOUND_PLAYER_INPUT_ID: i32 = 41;
+pub const SERVERBOUND_PLAYER_LOADED_ID: i32 = 42;
+pub const SERVERBOUND_PONG_ID: i32 = 43;
+pub const SERVERBOUND_RECIPE_BOOK_ID: i32 = 44;
+pub const SERVERBOUND_DISPLAYED_RECIPE_ID: i32 = 45;
+pub const SERVERBOUND_NAME_ITEM_ID: i32 = 46;
+pub const SERVERBOUND_RESOURCE_PACK_RECEIVE_ID: i32 = 47;
+pub const SERVERBOUND_ADVANCEMENT_TAB_ID: i32 = 48;
+pub const SERVERBOUND_SELECT_TRADE_ID: i32 = 49;
+pub const SERVERBOUND_SET_BEACON_EFFECT_ID: i32 = 50;
+pub const SERVERBOUND_HELD_ITEM_SLOT_ID: i32 = 51;
+pub const SERVERBOUND_UPDATE_COMMAND_BLOCK_ID: i32 = 52;
+pub const SERVERBOUND_UPDATE_COMMAND_BLOCK_MINECART_ID: i32 = 53;
+pub const SERVERBOUND_SET_CREATIVE_SLOT_ID: i32 = 54;
+pub const SERVERBOUND_UPDATE_JIGSAW_BLOCK_ID: i32 = 55;
+pub const SERVERBOUND_UPDATE_STRUCTURE_BLOCK_ID: i32 = 56;
+pub const SERVERBOUND_UPDATE_SIGN_ID: i32 = 57;
+pub const SERVERBOUND_ARM_ANIMATION_ID: i32 = 58;
+pub const SERVERBOUND_SPECTATE_ID: i32 = 59;
+pub const SERVERBOUND_BLOCK_PLACE_ID: i32 = 60;
+pub const SERVERBOUND_USE_ITEM_ID: i32 = 61;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ServerboundPlayPacket {
+    TeleportConfirm(PacketTeleportConfirm),
+    QueryBlockNbt(PacketQueryBlockNbt),
+    SelectBundleItem(PacketSelectBundleItem),
+    SetDifficulty(PacketSetDifficulty),
+    MessageAcknowledgement(PacketMessageAcknowledgement),
+    ChatCommand(PacketChatCommand),
+    ChatCommandSigned(PacketChatCommandSigned),
+    ChatMessage(PacketChatMessage),
+    ChatSessionUpdate(PacketChatSessionUpdate),
+    ChunkBatchReceived(PacketChunkBatchReceived),
+    ClientCommand(PacketClientCommand),
+    TickEnd,
+    Settings(super::types::PacketCommonSettings),
+    TabComplete(PacketTabComplete),
+    ConfigurationAcknowledged,
+    EnchantItem(PacketEnchantItem),
+    WindowClick(PacketWindowClick),
+    CloseWindow(PacketCloseWindow),
+    SetSlotState(PacketSetSlotState),
+    CookieResponse(super::types::PacketCommonCookieResponse),
+    CustomPayload(PacketCustomPayload),
+    DebugSampleSubscription(PacketDebugSampleSubscription),
+    EditBook(PacketEditBook),
+    QueryEntityNbt(PacketQueryEntityNbt),
+    UseEntity(PacketUseEntity),
+    GenerateStructure(PacketGenerateStructure),
+    KeepAlive(PacketKeepAlive),
+    LockDifficulty(PacketLockDifficulty),
+    Position(PacketPosition),
+    PositionLook(PacketPositionLook),
+    Look(PacketLook),
+    Flying(PacketFlying),
+    VehicleMove(PacketVehicleMove),
+    SteerBoat(PacketSteerBoat),
+    PickItemFromBlock(PacketPickItemFromBlock),
+    PickItemFromEntity(PacketPickItemFromEntity),
+    PingRequest(PacketPingRequest),
+    CraftRecipeRequest(PacketCraftRecipeRequest),
+    Abilities(PacketAbilities),
+    BlockDig(PacketBlockDig),
+    EntityAction(PacketEntityAction),
+    PlayerInput(PacketPlayerInput),
+    PlayerLoaded,
+    Pong(PacketPong),
+    RecipeBook(PacketRecipeBook),
+    DisplayedRecipe(PacketDisplayedRecipe),
+    NameItem(PacketNameItem),
+    ResourcePackReceive(PacketResourcePackReceive),
+    AdvancementTab(PacketAdvancementTab),
+    SelectTrade(PacketSelectTrade),
+    SetBeaconEffect(PacketSetBeaconEffect),
+    HeldItemSlot(PacketHeldItemSlot),
+    UpdateCommandBlock(PacketUpdateCommandBlock),
+    UpdateCommandBlockMinecart(PacketUpdateCommandBlockMinecart),
+    SetCreativeSlot(PacketSetCreativeSlot),
+    UpdateJigsawBlock(PacketUpdateJigsawBlock),
+    UpdateStructureBlock(PacketUpdateStructureBlock),
+    UpdateSign(PacketUpdateSign),
+    ArmAnimation(PacketArmAnimation),
+    Spectate(PacketSpectate),
+    BlockPlace(PacketBlockPlace),
+    UseItem(PacketUseItem),
+}
+
+impl ServerboundPlayPacket {
+    pub fn id(&self) -> i32 {
+        match self {
+            Self::TeleportConfirm(..) => SERVERBOUND_TELEPORT_CONFIRM_ID,
+            Self::QueryBlockNbt(..) => SERVERBOUND_QUERY_BLOCK_NBT_ID,
+            Self::SelectBundleItem(..) => SERVERBOUND_SELECT_BUNDLE_ITEM_ID,
+            Self::SetDifficulty(..) => SERVERBOUND_SET_DIFFICULTY_ID,
+            Self::MessageAcknowledgement(..) => SERVERBOUND_MESSAGE_ACKNOWLEDGEMENT_ID,
+            Self::ChatCommand(..) => SERVERBOUND_CHAT_COMMAND_ID,
+            Self::ChatCommandSigned(..) => SERVERBOUND_CHAT_COMMAND_SIGNED_ID,
+            Self::ChatMessage(..) => SERVERBOUND_CHAT_MESSAGE_ID,
+            Self::ChatSessionUpdate(..) => SERVERBOUND_CHAT_SESSION_UPDATE_ID,
+            Self::ChunkBatchReceived(..) => SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+            Self::ClientCommand(..) => SERVERBOUND_CLIENT_COMMAND_ID,
+            Self::TickEnd => SERVERBOUND_TICK_END_ID,
+            Self::Settings(..) => SERVERBOUND_SETTINGS_ID,
+            Self::TabComplete(..) => SERVERBOUND_TAB_COMPLETE_ID,
+            Self::ConfigurationAcknowledged => SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID,
+            Self::EnchantItem(..) => SERVERBOUND_ENCHANT_ITEM_ID,
+            Self::WindowClick(..) => SERVERBOUND_WINDOW_CLICK_ID,
+            Self::CloseWindow(..) => SERVERBOUND_CLOSE_WINDOW_ID,
+            Self::SetSlotState(..) => SERVERBOUND_SET_SLOT_STATE_ID,
+            Self::CookieResponse(..) => SERVERBOUND_COOKIE_RESPONSE_ID,
+            Self::CustomPayload(..) => SERVERBOUND_CUSTOM_PAYLOAD_ID,
+            Self::DebugSampleSubscription(..) => SERVERBOUND_DEBUG_SAMPLE_SUBSCRIPTION_ID,
+            Self::EditBook(..) => SERVERBOUND_EDIT_BOOK_ID,
+            Self::QueryEntityNbt(..) => SERVERBOUND_QUERY_ENTITY_NBT_ID,
+            Self::UseEntity(..) => SERVERBOUND_USE_ENTITY_ID,
+            Self::GenerateStructure(..) => SERVERBOUND_GENERATE_STRUCTURE_ID,
+            Self::KeepAlive(..) => SERVERBOUND_KEEP_ALIVE_ID,
+            Self::LockDifficulty(..) => SERVERBOUND_LOCK_DIFFICULTY_ID,
+            Self::Position(..) => SERVERBOUND_POSITION_ID,
+            Self::PositionLook(..) => SERVERBOUND_POSITION_LOOK_ID,
+            Self::Look(..) => SERVERBOUND_LOOK_ID,
+            Self::Flying(..) => SERVERBOUND_FLYING_ID,
+            Self::VehicleMove(..) => SERVERBOUND_VEHICLE_MOVE_ID,
+            Self::SteerBoat(..) => SERVERBOUND_STEER_BOAT_ID,
+            Self::PickItemFromBlock(..) => SERVERBOUND_PICK_ITEM_FROM_BLOCK_ID,
+            Self::PickItemFromEntity(..) => SERVERBOUND_PICK_ITEM_FROM_ENTITY_ID,
+            Self::PingRequest(..) => SERVERBOUND_PING_REQUEST_ID,
+            Self::CraftRecipeRequest(..) => SERVERBOUND_CRAFT_RECIPE_REQUEST_ID,
+            Self::Abilities(..) => SERVERBOUND_ABILITIES_ID,
+            Self::BlockDig(..) => SERVERBOUND_BLOCK_DIG_ID,
+            Self::EntityAction(..) => SERVERBOUND_ENTITY_ACTION_ID,
+            Self::PlayerInput(..) => SERVERBOUND_PLAYER_INPUT_ID,
+            Self::PlayerLoaded => SERVERBOUND_PLAYER_LOADED_ID,
+            Self::Pong(..) => SERVERBOUND_PONG_ID,
+            Self::RecipeBook(..) => SERVERBOUND_RECIPE_BOOK_ID,
+            Self::DisplayedRecipe(..) => SERVERBOUND_DISPLAYED_RECIPE_ID,
+            Self::NameItem(..) => SERVERBOUND_NAME_ITEM_ID,
+            Self::ResourcePackReceive(..) => SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+            Self::AdvancementTab(..) => SERVERBOUND_ADVANCEMENT_TAB_ID,
+            Self::SelectTrade(..) => SERVERBOUND_SELECT_TRADE_ID,
+            Self::SetBeaconEffect(..) => SERVERBOUND_SET_BEACON_EFFECT_ID,
+            Self::HeldItemSlot(..) => SERVERBOUND_HELD_ITEM_SLOT_ID,
+            Self::UpdateCommandBlock(..) => SERVERBOUND_UPDATE_COMMAND_BLOCK_ID,
+            Self::UpdateCommandBlockMinecart(..) => SERVERBOUND_UPDATE_COMMAND_BLOCK_MINECART_ID,
+            Self::SetCreativeSlot(..) => SERVERBOUND_SET_CREATIVE_SLOT_ID,
+            Self::UpdateJigsawBlock(..) => SERVERBOUND_UPDATE_JIGSAW_BLOCK_ID,
+            Self::UpdateStructureBlock(..) => SERVERBOUND_UPDATE_STRUCTURE_BLOCK_ID,
+            Self::UpdateSign(..) => SERVERBOUND_UPDATE_SIGN_ID,
+            Self::ArmAnimation(..) => SERVERBOUND_ARM_ANIMATION_ID,
+            Self::Spectate(..) => SERVERBOUND_SPECTATE_ID,
+            Self::BlockPlace(..) => SERVERBOUND_BLOCK_PLACE_ID,
+            Self::UseItem(..) => SERVERBOUND_USE_ITEM_ID,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::TeleportConfirm(..) => "teleport_confirm",
+            Self::QueryBlockNbt(..) => "query_block_nbt",
+            Self::SelectBundleItem(..) => "select_bundle_item",
+            Self::SetDifficulty(..) => "set_difficulty",
+            Self::MessageAcknowledgement(..) => "message_acknowledgement",
+            Self::ChatCommand(..) => "chat_command",
+            Self::ChatCommandSigned(..) => "chat_command_signed",
+            Self::ChatMessage(..) => "chat_message",
+            Self::ChatSessionUpdate(..) => "chat_session_update",
+            Self::ChunkBatchReceived(..) => "chunk_batch_received",
+            Self::ClientCommand(..) => "client_command",
+            Self::TickEnd => "tick_end",
+            Self::Settings(..) => "settings",
+            Self::TabComplete(..) => "tab_complete",
+            Self::ConfigurationAcknowledged => "configuration_acknowledged",
+            Self::EnchantItem(..) => "enchant_item",
+            Self::WindowClick(..) => "window_click",
+            Self::CloseWindow(..) => "close_window",
+            Self::SetSlotState(..) => "set_slot_state",
+            Self::CookieResponse(..) => "cookie_response",
+            Self::CustomPayload(..) => "custom_payload",
+            Self::DebugSampleSubscription(..) => "debug_sample_subscription",
+            Self::EditBook(..) => "edit_book",
+            Self::QueryEntityNbt(..) => "query_entity_nbt",
+            Self::UseEntity(..) => "use_entity",
+            Self::GenerateStructure(..) => "generate_structure",
+            Self::KeepAlive(..) => "keep_alive",
+            Self::LockDifficulty(..) => "lock_difficulty",
+            Self::Position(..) => "position",
+            Self::PositionLook(..) => "position_look",
+            Self::Look(..) => "look",
+            Self::Flying(..) => "flying",
+            Self::VehicleMove(..) => "vehicle_move",
+            Self::SteerBoat(..) => "steer_boat",
+            Self::PickItemFromBlock(..) => "pick_item_from_block",
+            Self::PickItemFromEntity(..) => "pick_item_from_entity",
+            Self::PingRequest(..) => "ping_request",
+            Self::CraftRecipeRequest(..) => "craft_recipe_request",
+            Self::Abilities(..) => "abilities",
+            Self::BlockDig(..) => "block_dig",
+            Self::EntityAction(..) => "entity_action",
+            Self::PlayerInput(..) => "player_input",
+            Self::PlayerLoaded => "player_loaded",
+            Self::Pong(..) => "pong",
+            Self::RecipeBook(..) => "recipe_book",
+            Self::DisplayedRecipe(..) => "displayed_recipe",
+            Self::NameItem(..) => "name_item",
+            Self::ResourcePackReceive(..) => "resource_pack_receive",
+            Self::AdvancementTab(..) => "advancement_tab",
+            Self::SelectTrade(..) => "select_trade",
+            Self::SetBeaconEffect(..) => "set_beacon_effect",
+            Self::HeldItemSlot(..) => "held_item_slot",
+            Self::UpdateCommandBlock(..) => "update_command_block",
+            Self::UpdateCommandBlockMinecart(..) => "update_command_block_minecart",
+            Self::SetCreativeSlot(..) => "set_creative_slot",
+            Self::UpdateJigsawBlock(..) => "update_jigsaw_block",
+            Self::UpdateStructureBlock(..) => "update_structure_block",
+            Self::UpdateSign(..) => "update_sign",
+            Self::ArmAnimation(..) => "arm_animation",
+            Self::Spectate(..) => "spectate",
+            Self::BlockPlace(..) => "block_place",
+            Self::UseItem(..) => "use_item",
+        }
+    }
+
+    pub fn decode(
+        id: i32,
+        input: &mut crate::buffer::PacketReader<'_>,
+    ) -> crate::error::Result<Self> {
+        match id {
+            SERVERBOUND_TELEPORT_CONFIRM_ID => {
+                let payload = <PacketTeleportConfirm as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play teleport_confirm")?;
+                Ok(Self::TeleportConfirm(payload))
+            }
+            SERVERBOUND_QUERY_BLOCK_NBT_ID => {
+                let payload = <PacketQueryBlockNbt as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play query_block_nbt")?;
+                Ok(Self::QueryBlockNbt(payload))
+            }
+            SERVERBOUND_SELECT_BUNDLE_ITEM_ID => {
+                let payload = <PacketSelectBundleItem as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play select_bundle_item")?;
+                Ok(Self::SelectBundleItem(payload))
+            }
+            SERVERBOUND_SET_DIFFICULTY_ID => {
+                let payload = <PacketSetDifficulty as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play set_difficulty")?;
+                Ok(Self::SetDifficulty(payload))
+            }
+            SERVERBOUND_MESSAGE_ACKNOWLEDGEMENT_ID => {
+                let payload = <PacketMessageAcknowledgement as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play message_acknowledgement")?;
+                Ok(Self::MessageAcknowledgement(payload))
+            }
+            SERVERBOUND_CHAT_COMMAND_ID => {
+                let payload = <PacketChatCommand as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play chat_command")?;
+                Ok(Self::ChatCommand(payload))
+            }
+            SERVERBOUND_CHAT_COMMAND_SIGNED_ID => {
+                let payload = <PacketChatCommandSigned as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play chat_command_signed")?;
+                Ok(Self::ChatCommandSigned(payload))
+            }
+            SERVERBOUND_CHAT_MESSAGE_ID => {
+                let payload = <PacketChatMessage as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play chat_message")?;
+                Ok(Self::ChatMessage(payload))
+            }
+            SERVERBOUND_CHAT_SESSION_UPDATE_ID => {
+                let payload = <PacketChatSessionUpdate as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play chat_session_update")?;
+                Ok(Self::ChatSessionUpdate(payload))
+            }
+            SERVERBOUND_CHUNK_BATCH_RECEIVED_ID => {
+                let payload = <PacketChunkBatchReceived as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play chunk_batch_received")?;
+                Ok(Self::ChunkBatchReceived(payload))
+            }
+            SERVERBOUND_CLIENT_COMMAND_ID => {
+                let payload = <PacketClientCommand as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play client_command")?;
+                Ok(Self::ClientCommand(payload))
+            }
+            SERVERBOUND_TICK_END_ID => {
+                crate::traits::ensure_consumed(input, "serverbound play tick_end")?;
+                Ok(Self::TickEnd)
+            }
+            SERVERBOUND_SETTINGS_ID => {
+                let payload = <super::types::PacketCommonSettings as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play settings")?;
+                Ok(Self::Settings(payload))
+            }
+            SERVERBOUND_TAB_COMPLETE_ID => {
+                let payload = <PacketTabComplete as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play tab_complete")?;
+                Ok(Self::TabComplete(payload))
+            }
+            SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID => {
+                crate::traits::ensure_consumed(input, "serverbound play configuration_acknowledged")?;
+                Ok(Self::ConfigurationAcknowledged)
+            }
+            SERVERBOUND_ENCHANT_ITEM_ID => {
+                let payload = <PacketEnchantItem as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play enchant_item")?;
+                Ok(Self::EnchantItem(payload))
+            }
+            SERVERBOUND_WINDOW_CLICK_ID => {
+                let payload = <PacketWindowClick as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play window_click")?;
+                Ok(Self::WindowClick(payload))
+            }
+            SERVERBOUND_CLOSE_WINDOW_ID => {
+                let payload = <PacketCloseWindow as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play close_window")?;
+                Ok(Self::CloseWindow(payload))
+            }
+            SERVERBOUND_SET_SLOT_STATE_ID => {
+                let payload = <PacketSetSlotState as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play set_slot_state")?;
+                Ok(Self::SetSlotState(payload))
+            }
+            SERVERBOUND_COOKIE_RESPONSE_ID => {
+                let payload = <super::types::PacketCommonCookieResponse as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play cookie_response")?;
+                Ok(Self::CookieResponse(payload))
+            }
+            SERVERBOUND_CUSTOM_PAYLOAD_ID => {
+                let payload = <PacketCustomPayload as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play custom_payload")?;
+                Ok(Self::CustomPayload(payload))
+            }
+            SERVERBOUND_DEBUG_SAMPLE_SUBSCRIPTION_ID => {
+                let payload = <PacketDebugSampleSubscription as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play debug_sample_subscription")?;
+                Ok(Self::DebugSampleSubscription(payload))
+            }
+            SERVERBOUND_EDIT_BOOK_ID => {
+                let payload = <PacketEditBook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play edit_book")?;
+                Ok(Self::EditBook(payload))
+            }
+            SERVERBOUND_QUERY_ENTITY_NBT_ID => {
+                let payload = <PacketQueryEntityNbt as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play query_entity_nbt")?;
+                Ok(Self::QueryEntityNbt(payload))
+            }
+            SERVERBOUND_USE_ENTITY_ID => {
+                let payload = <PacketUseEntity as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play use_entity")?;
+                Ok(Self::UseEntity(payload))
+            }
+            SERVERBOUND_GENERATE_STRUCTURE_ID => {
+                let payload = <PacketGenerateStructure as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play generate_structure")?;
+                Ok(Self::GenerateStructure(payload))
+            }
+            SERVERBOUND_KEEP_ALIVE_ID => {
+                let payload = <PacketKeepAlive as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play keep_alive")?;
+                Ok(Self::KeepAlive(payload))
+            }
+            SERVERBOUND_LOCK_DIFFICULTY_ID => {
+                let payload = <PacketLockDifficulty as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play lock_difficulty")?;
+                Ok(Self::LockDifficulty(payload))
+            }
+            SERVERBOUND_POSITION_ID => {
+                let payload = <PacketPosition as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play position")?;
+                Ok(Self::Position(payload))
+            }
+            SERVERBOUND_POSITION_LOOK_ID => {
+                let payload = <PacketPositionLook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play position_look")?;
+                Ok(Self::PositionLook(payload))
+            }
+            SERVERBOUND_LOOK_ID => {
+                let payload = <PacketLook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play look")?;
+                Ok(Self::Look(payload))
+            }
+            SERVERBOUND_FLYING_ID => {
+                let payload = <PacketFlying as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play flying")?;
+                Ok(Self::Flying(payload))
+            }
+            SERVERBOUND_VEHICLE_MOVE_ID => {
+                let payload = <PacketVehicleMove as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play vehicle_move")?;
+                Ok(Self::VehicleMove(payload))
+            }
+            SERVERBOUND_STEER_BOAT_ID => {
+                let payload = <PacketSteerBoat as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play steer_boat")?;
+                Ok(Self::SteerBoat(payload))
+            }
+            SERVERBOUND_PICK_ITEM_FROM_BLOCK_ID => {
+                let payload = <PacketPickItemFromBlock as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play pick_item_from_block")?;
+                Ok(Self::PickItemFromBlock(payload))
+            }
+            SERVERBOUND_PICK_ITEM_FROM_ENTITY_ID => {
+                let payload = <PacketPickItemFromEntity as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play pick_item_from_entity")?;
+                Ok(Self::PickItemFromEntity(payload))
+            }
+            SERVERBOUND_PING_REQUEST_ID => {
+                let payload = <PacketPingRequest as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play ping_request")?;
+                Ok(Self::PingRequest(payload))
+            }
+            SERVERBOUND_CRAFT_RECIPE_REQUEST_ID => {
+                let payload = <PacketCraftRecipeRequest as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play craft_recipe_request")?;
+                Ok(Self::CraftRecipeRequest(payload))
+            }
+            SERVERBOUND_ABILITIES_ID => {
+                let payload = <PacketAbilities as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play abilities")?;
+                Ok(Self::Abilities(payload))
+            }
+            SERVERBOUND_BLOCK_DIG_ID => {
+                let payload = <PacketBlockDig as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play block_dig")?;
+                Ok(Self::BlockDig(payload))
+            }
+            SERVERBOUND_ENTITY_ACTION_ID => {
+                let payload = <PacketEntityAction as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play entity_action")?;
+                Ok(Self::EntityAction(payload))
+            }
+            SERVERBOUND_PLAYER_INPUT_ID => {
+                let payload = <PacketPlayerInput as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play player_input")?;
+                Ok(Self::PlayerInput(payload))
+            }
+            SERVERBOUND_PLAYER_LOADED_ID => {
+                crate::traits::ensure_consumed(input, "serverbound play player_loaded")?;
+                Ok(Self::PlayerLoaded)
+            }
+            SERVERBOUND_PONG_ID => {
+                let payload = <PacketPong as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play pong")?;
+                Ok(Self::Pong(payload))
+            }
+            SERVERBOUND_RECIPE_BOOK_ID => {
+                let payload = <PacketRecipeBook as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play recipe_book")?;
+                Ok(Self::RecipeBook(payload))
+            }
+            SERVERBOUND_DISPLAYED_RECIPE_ID => {
+                let payload = <PacketDisplayedRecipe as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play displayed_recipe")?;
+                Ok(Self::DisplayedRecipe(payload))
+            }
+            SERVERBOUND_NAME_ITEM_ID => {
+                let payload = <PacketNameItem as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play name_item")?;
+                Ok(Self::NameItem(payload))
+            }
+            SERVERBOUND_RESOURCE_PACK_RECEIVE_ID => {
+                let payload = <PacketResourcePackReceive as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play resource_pack_receive")?;
+                Ok(Self::ResourcePackReceive(payload))
+            }
+            SERVERBOUND_ADVANCEMENT_TAB_ID => {
+                let payload = <PacketAdvancementTab as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play advancement_tab")?;
+                Ok(Self::AdvancementTab(payload))
+            }
+            SERVERBOUND_SELECT_TRADE_ID => {
+                let payload = <PacketSelectTrade as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play select_trade")?;
+                Ok(Self::SelectTrade(payload))
+            }
+            SERVERBOUND_SET_BEACON_EFFECT_ID => {
+                let payload = <PacketSetBeaconEffect as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play set_beacon_effect")?;
+                Ok(Self::SetBeaconEffect(payload))
+            }
+            SERVERBOUND_HELD_ITEM_SLOT_ID => {
+                let payload = <PacketHeldItemSlot as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play held_item_slot")?;
+                Ok(Self::HeldItemSlot(payload))
+            }
+            SERVERBOUND_UPDATE_COMMAND_BLOCK_ID => {
+                let payload = <PacketUpdateCommandBlock as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play update_command_block")?;
+                Ok(Self::UpdateCommandBlock(payload))
+            }
+            SERVERBOUND_UPDATE_COMMAND_BLOCK_MINECART_ID => {
+                let payload = <PacketUpdateCommandBlockMinecart as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play update_command_block_minecart")?;
+                Ok(Self::UpdateCommandBlockMinecart(payload))
+            }
+            SERVERBOUND_SET_CREATIVE_SLOT_ID => {
+                let payload = <PacketSetCreativeSlot as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play set_creative_slot")?;
+                Ok(Self::SetCreativeSlot(payload))
+            }
+            SERVERBOUND_UPDATE_JIGSAW_BLOCK_ID => {
+                let payload = <PacketUpdateJigsawBlock as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play update_jigsaw_block")?;
+                Ok(Self::UpdateJigsawBlock(payload))
+            }
+            SERVERBOUND_UPDATE_STRUCTURE_BLOCK_ID => {
+                let payload = <PacketUpdateStructureBlock as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play update_structure_block")?;
+                Ok(Self::UpdateStructureBlock(payload))
+            }
+            SERVERBOUND_UPDATE_SIGN_ID => {
+                let payload = <PacketUpdateSign as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play update_sign")?;
+                Ok(Self::UpdateSign(payload))
+            }
+            SERVERBOUND_ARM_ANIMATION_ID => {
+                let payload = <PacketArmAnimation as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play arm_animation")?;
+                Ok(Self::ArmAnimation(payload))
+            }
+            SERVERBOUND_SPECTATE_ID => {
+                let payload = <PacketSpectate as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play spectate")?;
+                Ok(Self::Spectate(payload))
+            }
+            SERVERBOUND_BLOCK_PLACE_ID => {
+                let payload = <PacketBlockPlace as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play block_place")?;
+                Ok(Self::BlockPlace(payload))
+            }
+            SERVERBOUND_USE_ITEM_ID => {
+                let payload = <PacketUseItem as crate::traits::Decode>::decode(input)?;
+                crate::traits::ensure_consumed(input, "serverbound play use_item")?;
+                Ok(Self::UseItem(payload))
+            }
+            _ => Err(crate::error::ProtocolError::UnknownPacketId { context: "serverbound play", id }),
+        }
+    }
+}
+
+impl crate::traits::Encode for ServerboundPlayPacket {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.id());
+        match self {
+            Self::TeleportConfirm(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::QueryBlockNbt(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SelectBundleItem(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetDifficulty(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::MessageAcknowledgement(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChatCommand(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChatCommandSigned(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChatMessage(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChatSessionUpdate(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ChunkBatchReceived(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ClientCommand(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::TickEnd => {},
+            Self::Settings(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::TabComplete(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ConfigurationAcknowledged => {},
+            Self::EnchantItem(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::WindowClick(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CloseWindow(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetSlotState(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CookieResponse(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CustomPayload(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::DebugSampleSubscription(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EditBook(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::QueryEntityNbt(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UseEntity(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::GenerateStructure(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::KeepAlive(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::LockDifficulty(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Position(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PositionLook(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Look(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Flying(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::VehicleMove(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SteerBoat(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PickItemFromBlock(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PickItemFromEntity(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PingRequest(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::CraftRecipeRequest(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Abilities(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::BlockDig(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::EntityAction(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerInput(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::PlayerLoaded => {},
+            Self::Pong(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::RecipeBook(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::DisplayedRecipe(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::NameItem(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ResourcePackReceive(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::AdvancementTab(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SelectTrade(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetBeaconEffect(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::HeldItemSlot(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateCommandBlock(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateCommandBlockMinecart(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::SetCreativeSlot(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateJigsawBlock(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateStructureBlock(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UpdateSign(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::ArmAnimation(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::Spectate(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::BlockPlace(payload) => crate::traits::Encode::encode(payload, out)?,
+            Self::UseItem(payload) => crate::traits::Encode::encode(payload, out)?,
+        }
+        Ok(())
+    }
+}
+
+pub fn clientbound_packet_name(id: i32) -> Option<&'static str> {
+    match id {
+        CLIENTBOUND_BUNDLE_DELIMITER_ID => Some("bundle_delimiter"),
+        CLIENTBOUND_SPAWN_ENTITY_ID => Some("spawn_entity"),
+        CLIENTBOUND_SPAWN_ENTITY_EXPERIENCE_ORB_ID => Some("spawn_entity_experience_orb"),
+        CLIENTBOUND_ANIMATION_ID => Some("animation"),
+        CLIENTBOUND_STATISTICS_ID => Some("statistics"),
+        CLIENTBOUND_ACKNOWLEDGE_PLAYER_DIGGING_ID => Some("acknowledge_player_digging"),
+        CLIENTBOUND_BLOCK_BREAK_ANIMATION_ID => Some("block_break_animation"),
+        CLIENTBOUND_TILE_ENTITY_DATA_ID => Some("tile_entity_data"),
+        CLIENTBOUND_BLOCK_ACTION_ID => Some("block_action"),
+        CLIENTBOUND_BLOCK_CHANGE_ID => Some("block_change"),
+        CLIENTBOUND_BOSS_BAR_ID => Some("boss_bar"),
+        CLIENTBOUND_DIFFICULTY_ID => Some("difficulty"),
+        CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => Some("chunk_batch_finished"),
+        CLIENTBOUND_CHUNK_BATCH_START_ID => Some("chunk_batch_start"),
+        CLIENTBOUND_CHUNK_BIOMES_ID => Some("chunk_biomes"),
+        CLIENTBOUND_CLEAR_TITLES_ID => Some("clear_titles"),
+        CLIENTBOUND_TAB_COMPLETE_ID => Some("tab_complete"),
+        CLIENTBOUND_DECLARE_COMMANDS_ID => Some("declare_commands"),
+        CLIENTBOUND_CLOSE_WINDOW_ID => Some("close_window"),
+        CLIENTBOUND_WINDOW_ITEMS_ID => Some("window_items"),
+        CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => Some("craft_progress_bar"),
+        CLIENTBOUND_SET_SLOT_ID => Some("set_slot"),
+        CLIENTBOUND_COOKIE_REQUEST_ID => Some("cookie_request"),
+        CLIENTBOUND_SET_COOLDOWN_ID => Some("set_cooldown"),
+        CLIENTBOUND_CHAT_SUGGESTIONS_ID => Some("chat_suggestions"),
+        CLIENTBOUND_CUSTOM_PAYLOAD_ID => Some("custom_payload"),
+        CLIENTBOUND_DAMAGE_EVENT_ID => Some("damage_event"),
+        CLIENTBOUND_DEBUG_SAMPLE_ID => Some("debug_sample"),
+        CLIENTBOUND_HIDE_MESSAGE_ID => Some("hide_message"),
+        CLIENTBOUND_KICK_DISCONNECT_ID => Some("kick_disconnect"),
+        CLIENTBOUND_PROFILELESS_CHAT_ID => Some("profileless_chat"),
+        CLIENTBOUND_ENTITY_STATUS_ID => Some("entity_status"),
+        CLIENTBOUND_SYNC_ENTITY_POSITION_ID => Some("sync_entity_position"),
+        CLIENTBOUND_EXPLOSION_ID => Some("explosion"),
+        CLIENTBOUND_UNLOAD_CHUNK_ID => Some("unload_chunk"),
+        CLIENTBOUND_GAME_STATE_CHANGE_ID => Some("game_state_change"),
+        CLIENTBOUND_OPEN_HORSE_WINDOW_ID => Some("open_horse_window"),
+        CLIENTBOUND_HURT_ANIMATION_ID => Some("hurt_animation"),
+        CLIENTBOUND_INITIALIZE_WORLD_BORDER_ID => Some("initialize_world_border"),
+        CLIENTBOUND_KEEP_ALIVE_ID => Some("keep_alive"),
+        CLIENTBOUND_MAP_CHUNK_ID => Some("map_chunk"),
+        CLIENTBOUND_WORLD_EVENT_ID => Some("world_event"),
+        CLIENTBOUND_WORLD_PARTICLES_ID => Some("world_particles"),
+        CLIENTBOUND_UPDATE_LIGHT_ID => Some("update_light"),
+        CLIENTBOUND_LOGIN_ID => Some("login"),
+        CLIENTBOUND_MAP_ID => Some("map"),
+        CLIENTBOUND_TRADE_LIST_ID => Some("trade_list"),
+        CLIENTBOUND_REL_ENTITY_MOVE_ID => Some("rel_entity_move"),
+        CLIENTBOUND_ENTITY_MOVE_LOOK_ID => Some("entity_move_look"),
+        CLIENTBOUND_MOVE_MINECART_ID => Some("move_minecart"),
+        CLIENTBOUND_ENTITY_LOOK_ID => Some("entity_look"),
+        CLIENTBOUND_VEHICLE_MOVE_ID => Some("vehicle_move"),
+        CLIENTBOUND_OPEN_BOOK_ID => Some("open_book"),
+        CLIENTBOUND_OPEN_WINDOW_ID => Some("open_window"),
+        CLIENTBOUND_OPEN_SIGN_ENTITY_ID => Some("open_sign_entity"),
+        CLIENTBOUND_PING_ID => Some("ping"),
+        CLIENTBOUND_PING_RESPONSE_ID => Some("ping_response"),
+        CLIENTBOUND_CRAFT_RECIPE_RESPONSE_ID => Some("craft_recipe_response"),
+        CLIENTBOUND_ABILITIES_ID => Some("abilities"),
+        CLIENTBOUND_PLAYER_CHAT_ID => Some("player_chat"),
+        CLIENTBOUND_END_COMBAT_EVENT_ID => Some("end_combat_event"),
+        CLIENTBOUND_ENTER_COMBAT_EVENT_ID => Some("enter_combat_event"),
+        CLIENTBOUND_DEATH_COMBAT_EVENT_ID => Some("death_combat_event"),
+        CLIENTBOUND_PLAYER_REMOVE_ID => Some("player_remove"),
+        CLIENTBOUND_PLAYER_INFO_ID => Some("player_info"),
+        CLIENTBOUND_FACE_PLAYER_ID => Some("face_player"),
+        CLIENTBOUND_POSITION_ID => Some("position"),
+        CLIENTBOUND_PLAYER_ROTATION_ID => Some("player_rotation"),
+        CLIENTBOUND_RECIPE_BOOK_ADD_ID => Some("recipe_book_add"),
+        CLIENTBOUND_RECIPE_BOOK_REMOVE_ID => Some("recipe_book_remove"),
+        CLIENTBOUND_RECIPE_BOOK_SETTINGS_ID => Some("recipe_book_settings"),
+        CLIENTBOUND_ENTITY_DESTROY_ID => Some("entity_destroy"),
+        CLIENTBOUND_REMOVE_ENTITY_EFFECT_ID => Some("remove_entity_effect"),
+        CLIENTBOUND_RESET_SCORE_ID => Some("reset_score"),
+        CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => Some("remove_resource_pack"),
+        CLIENTBOUND_ADD_RESOURCE_PACK_ID => Some("add_resource_pack"),
+        CLIENTBOUND_RESPAWN_ID => Some("respawn"),
+        CLIENTBOUND_ENTITY_HEAD_ROTATION_ID => Some("entity_head_rotation"),
+        CLIENTBOUND_MULTI_BLOCK_CHANGE_ID => Some("multi_block_change"),
+        CLIENTBOUND_SELECT_ADVANCEMENT_TAB_ID => Some("select_advancement_tab"),
+        CLIENTBOUND_SERVER_DATA_ID => Some("server_data"),
+        CLIENTBOUND_ACTION_BAR_ID => Some("action_bar"),
+        CLIENTBOUND_WORLD_BORDER_CENTER_ID => Some("world_border_center"),
+        CLIENTBOUND_WORLD_BORDER_LERP_SIZE_ID => Some("world_border_lerp_size"),
+        CLIENTBOUND_WORLD_BORDER_SIZE_ID => Some("world_border_size"),
+        CLIENTBOUND_WORLD_BORDER_WARNING_DELAY_ID => Some("world_border_warning_delay"),
+        CLIENTBOUND_WORLD_BORDER_WARNING_REACH_ID => Some("world_border_warning_reach"),
+        CLIENTBOUND_CAMERA_ID => Some("camera"),
+        CLIENTBOUND_UPDATE_VIEW_POSITION_ID => Some("update_view_position"),
+        CLIENTBOUND_UPDATE_VIEW_DISTANCE_ID => Some("update_view_distance"),
+        CLIENTBOUND_SET_CURSOR_ITEM_ID => Some("set_cursor_item"),
+        CLIENTBOUND_SPAWN_POSITION_ID => Some("spawn_position"),
+        CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID => Some("scoreboard_display_objective"),
+        CLIENTBOUND_ENTITY_METADATA_ID => Some("entity_metadata"),
+        CLIENTBOUND_ATTACH_ENTITY_ID => Some("attach_entity"),
+        CLIENTBOUND_ENTITY_VELOCITY_ID => Some("entity_velocity"),
+        CLIENTBOUND_ENTITY_EQUIPMENT_ID => Some("entity_equipment"),
+        CLIENTBOUND_EXPERIENCE_ID => Some("experience"),
+        CLIENTBOUND_UPDATE_HEALTH_ID => Some("update_health"),
+        CLIENTBOUND_HELD_ITEM_SLOT_ID => Some("held_item_slot"),
+        CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID => Some("scoreboard_objective"),
+        CLIENTBOUND_SET_PASSENGERS_ID => Some("set_passengers"),
+        CLIENTBOUND_SET_PLAYER_INVENTORY_ID => Some("set_player_inventory"),
+        CLIENTBOUND_TEAMS_ID => Some("teams"),
+        CLIENTBOUND_SCOREBOARD_SCORE_ID => Some("scoreboard_score"),
+        CLIENTBOUND_SIMULATION_DISTANCE_ID => Some("simulation_distance"),
+        CLIENTBOUND_SET_TITLE_SUBTITLE_ID => Some("set_title_subtitle"),
+        CLIENTBOUND_UPDATE_TIME_ID => Some("update_time"),
+        CLIENTBOUND_SET_TITLE_TEXT_ID => Some("set_title_text"),
+        CLIENTBOUND_SET_TITLE_TIME_ID => Some("set_title_time"),
+        CLIENTBOUND_ENTITY_SOUND_EFFECT_ID => Some("entity_sound_effect"),
+        CLIENTBOUND_SOUND_EFFECT_ID => Some("sound_effect"),
+        CLIENTBOUND_START_CONFIGURATION_ID => Some("start_configuration"),
+        CLIENTBOUND_STOP_SOUND_ID => Some("stop_sound"),
+        CLIENTBOUND_STORE_COOKIE_ID => Some("store_cookie"),
+        CLIENTBOUND_SYSTEM_CHAT_ID => Some("system_chat"),
+        CLIENTBOUND_PLAYERLIST_HEADER_ID => Some("playerlist_header"),
+        CLIENTBOUND_NBT_QUERY_RESPONSE_ID => Some("nbt_query_response"),
+        CLIENTBOUND_COLLECT_ID => Some("collect"),
+        CLIENTBOUND_ENTITY_TELEPORT_ID => Some("entity_teleport"),
+        CLIENTBOUND_SET_TICKING_STATE_ID => Some("set_ticking_state"),
+        CLIENTBOUND_STEP_TICK_ID => Some("step_tick"),
+        CLIENTBOUND_TRANSFER_ID => Some("transfer"),
+        CLIENTBOUND_ADVANCEMENTS_ID => Some("advancements"),
+        CLIENTBOUND_ENTITY_UPDATE_ATTRIBUTES_ID => Some("entity_update_attributes"),
+        CLIENTBOUND_ENTITY_EFFECT_ID => Some("entity_effect"),
+        CLIENTBOUND_DECLARE_RECIPES_ID => Some("declare_recipes"),
+        CLIENTBOUND_TAGS_ID => Some("tags"),
+        CLIENTBOUND_SET_PROJECTILE_POWER_ID => Some("set_projectile_power"),
+        CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID => Some("custom_report_details"),
+        CLIENTBOUND_SERVER_LINKS_ID => Some("server_links"),
+        _ => None,
+    }
+}
+
+pub fn serverbound_packet_name(id: i32) -> Option<&'static str> {
+    match id {
+        SERVERBOUND_TELEPORT_CONFIRM_ID => Some("teleport_confirm"),
+        SERVERBOUND_QUERY_BLOCK_NBT_ID => Some("query_block_nbt"),
+        SERVERBOUND_SELECT_BUNDLE_ITEM_ID => Some("select_bundle_item"),
+        SERVERBOUND_SET_DIFFICULTY_ID => Some("set_difficulty"),
+        SERVERBOUND_MESSAGE_ACKNOWLEDGEMENT_ID => Some("message_acknowledgement"),
+        SERVERBOUND_CHAT_COMMAND_ID => Some("chat_command"),
+        SERVERBOUND_CHAT_COMMAND_SIGNED_ID => Some("chat_command_signed"),
+        SERVERBOUND_CHAT_MESSAGE_ID => Some("chat_message"),
+        SERVERBOUND_CHAT_SESSION_UPDATE_ID => Some("chat_session_update"),
+        SERVERBOUND_CHUNK_BATCH_RECEIVED_ID => Some("chunk_batch_received"),
+        SERVERBOUND_CLIENT_COMMAND_ID => Some("client_command"),
+        SERVERBOUND_TICK_END_ID => Some("tick_end"),
+        SERVERBOUND_SETTINGS_ID => Some("settings"),
+        SERVERBOUND_TAB_COMPLETE_ID => Some("tab_complete"),
+        SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID => Some("configuration_acknowledged"),
+        SERVERBOUND_ENCHANT_ITEM_ID => Some("enchant_item"),
+        SERVERBOUND_WINDOW_CLICK_ID => Some("window_click"),
+        SERVERBOUND_CLOSE_WINDOW_ID => Some("close_window"),
+        SERVERBOUND_SET_SLOT_STATE_ID => Some("set_slot_state"),
+        SERVERBOUND_COOKIE_RESPONSE_ID => Some("cookie_response"),
+        SERVERBOUND_CUSTOM_PAYLOAD_ID => Some("custom_payload"),
+        SERVERBOUND_DEBUG_SAMPLE_SUBSCRIPTION_ID => Some("debug_sample_subscription"),
+        SERVERBOUND_EDIT_BOOK_ID => Some("edit_book"),
+        SERVERBOUND_QUERY_ENTITY_NBT_ID => Some("query_entity_nbt"),
+        SERVERBOUND_USE_ENTITY_ID => Some("use_entity"),
+        SERVERBOUND_GENERATE_STRUCTURE_ID => Some("generate_structure"),
+        SERVERBOUND_KEEP_ALIVE_ID => Some("keep_alive"),
+        SERVERBOUND_LOCK_DIFFICULTY_ID => Some("lock_difficulty"),
+        SERVERBOUND_POSITION_ID => Some("position"),
+        SERVERBOUND_POSITION_LOOK_ID => Some("position_look"),
+        SERVERBOUND_LOOK_ID => Some("look"),
+        SERVERBOUND_FLYING_ID => Some("flying"),
+        SERVERBOUND_VEHICLE_MOVE_ID => Some("vehicle_move"),
+        SERVERBOUND_STEER_BOAT_ID => Some("steer_boat"),
+        SERVERBOUND_PICK_ITEM_FROM_BLOCK_ID => Some("pick_item_from_block"),
+        SERVERBOUND_PICK_ITEM_FROM_ENTITY_ID => Some("pick_item_from_entity"),
+        SERVERBOUND_PING_REQUEST_ID => Some("ping_request"),
+        SERVERBOUND_CRAFT_RECIPE_REQUEST_ID => Some("craft_recipe_request"),
+        SERVERBOUND_ABILITIES_ID => Some("abilities"),
+        SERVERBOUND_BLOCK_DIG_ID => Some("block_dig"),
+        SERVERBOUND_ENTITY_ACTION_ID => Some("entity_action"),
+        SERVERBOUND_PLAYER_INPUT_ID => Some("player_input"),
+        SERVERBOUND_PLAYER_LOADED_ID => Some("player_loaded"),
+        SERVERBOUND_PONG_ID => Some("pong"),
+        SERVERBOUND_RECIPE_BOOK_ID => Some("recipe_book"),
+        SERVERBOUND_DISPLAYED_RECIPE_ID => Some("displayed_recipe"),
+        SERVERBOUND_NAME_ITEM_ID => Some("name_item"),
+        SERVERBOUND_RESOURCE_PACK_RECEIVE_ID => Some("resource_pack_receive"),
+        SERVERBOUND_ADVANCEMENT_TAB_ID => Some("advancement_tab"),
+        SERVERBOUND_SELECT_TRADE_ID => Some("select_trade"),
+        SERVERBOUND_SET_BEACON_EFFECT_ID => Some("set_beacon_effect"),
+        SERVERBOUND_HELD_ITEM_SLOT_ID => Some("held_item_slot"),
+        SERVERBOUND_UPDATE_COMMAND_BLOCK_ID => Some("update_command_block"),
+        SERVERBOUND_UPDATE_COMMAND_BLOCK_MINECART_ID => Some("update_command_block_minecart"),
+        SERVERBOUND_SET_CREATIVE_SLOT_ID => Some("set_creative_slot"),
+        SERVERBOUND_UPDATE_JIGSAW_BLOCK_ID => Some("update_jigsaw_block"),
+        SERVERBOUND_UPDATE_STRUCTURE_BLOCK_ID => Some("update_structure_block"),
+        SERVERBOUND_UPDATE_SIGN_ID => Some("update_sign"),
+        SERVERBOUND_ARM_ANIMATION_ID => Some("arm_animation"),
+        SERVERBOUND_SPECTATE_ID => Some("spectate"),
+        SERVERBOUND_BLOCK_PLACE_ID => Some("block_place"),
+        SERVERBOUND_USE_ITEM_ID => Some("use_item"),
+        _ => None,
+    }
+}
+

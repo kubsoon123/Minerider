@@ -6,7 +6,7 @@
 
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
-#![allow(clippy::all, unused_parens, unused_variables)]
+#![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
 pub type String = std::string::String;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2248,7 +2248,7 @@ pub struct SlotComponentDataPotionContents {
 
 impl crate::traits::Encode for SlotComponentDataPotionContents {
     fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
-        out.put_bool(self.potion_id.is_some());
+        out.put_bool((self.potion_id).is_some());
         if let Some(v) = self.potion_id { out.put_varint(v); }
         out.put_bool(self.custom_color.is_some());
         if let Some(v) = &self.custom_color {

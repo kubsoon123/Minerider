@@ -759,7 +759,7 @@ fn build_direction(
         };
         let in_section = section.types.contains_key(payload.as_str());
         let in_shared = file.types.contains_key(payload.as_str());
-        if !in_section && !in_shared {
+        if payload != "void" && !in_section && !in_shared {
             return Err(CodegenError::Invalid(format!(
                 "{ctx}: packet `{name}` payload type `{payload}` does not resolve"
             )));

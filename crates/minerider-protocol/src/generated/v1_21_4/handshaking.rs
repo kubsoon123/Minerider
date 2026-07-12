@@ -6,9 +6,7 @@
 
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
-#![allow(clippy::all, unused_parens, unused_variables)]
-pub type String = std::string::String;
-
+#![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PacketSetProtocol {
     pub protocol_version: i32,

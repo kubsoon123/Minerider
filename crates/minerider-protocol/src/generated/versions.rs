@@ -6,7 +6,7 @@
 
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
-#![allow(clippy::all, unused_parens, unused_variables)]
+#![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
 pub struct ProtocolVersion {
     pub protocol: i32,
     pub minecraft: &'static str,
