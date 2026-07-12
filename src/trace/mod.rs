@@ -15,7 +15,9 @@
 //! first, which also redacts/normalizes UUIDs, ids, tokens and addresses.
 
 pub mod decode;
+pub mod diff;
 pub mod format;
+pub mod normalize;
 pub mod recorder;
 
 pub use format::{Direction, TraceEvent};
