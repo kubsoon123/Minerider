@@ -171,6 +171,28 @@ impl crate::traits::Decode for PacketLoginStart {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PacketEncryptionBeginServerbound {
+    pub shared_secret: Vec<u8>,
+    pub verify_token: Vec<u8>,
+}
+
+impl crate::traits::Encode for PacketEncryptionBeginServerbound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.shared_secret, out)?;
+        crate::traits::Encode::encode(&self.verify_token, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketEncryptionBeginServerbound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let shared_secret = <Vec<u8> as crate::traits::Decode>::decode(input)?;
+        let verify_token = <Vec<u8> as crate::traits::Decode>::decode(input)?;
+        Ok(Self { shared_secret, verify_token })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct PacketLoginPluginResponse {
     pub message_id: i32,
     pub data: Option<Vec<u8>>,
@@ -299,7 +321,7 @@ pub const SERVERBOUND_COOKIE_RESPONSE_ID: i32 = 4;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ServerboundLoginPacket {
     LoginStart(PacketLoginStart),
-    EncryptionBegin(PacketEncryptionBegin),
+    EncryptionBegin(PacketEncryptionBeginServerbound),
     LoginPluginResponse(PacketLoginPluginResponse),
     LoginAcknowledged,
     CookieResponse(super::types::PacketCommonCookieResponse),
@@ -337,7 +359,7 @@ impl ServerboundLoginPacket {
                 Ok(Self::LoginStart(payload))
             }
             SERVERBOUND_ENCRYPTION_BEGIN_ID => {
-                let payload = <PacketEncryptionBegin as crate::traits::Decode>::decode(input)?;
+                let payload = <PacketEncryptionBeginServerbound as crate::traits::Decode>::decode(input)?;
                 crate::traits::ensure_consumed(input, "serverbound login encryption_begin")?;
                 Ok(Self::EncryptionBegin(payload))
             }

@@ -6582,6 +6582,28 @@ impl crate::traits::Decode for PacketClientCommand {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PacketTabCompleteServerbound {
+    pub transaction_id: i32,
+    pub text: super::types::String,
+}
+
+impl crate::traits::Encode for PacketTabCompleteServerbound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        out.put_varint(self.transaction_id);
+        crate::traits::Encode::encode(&self.text, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketTabCompleteServerbound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let transaction_id = input.get_varint()?;
+        let text = <super::types::String as crate::traits::Decode>::decode(input)?;
+        Ok(Self { transaction_id, text })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct PacketEnchantItem {
     pub window_id: i32,
     pub enchantment: i32,
@@ -7013,6 +7035,34 @@ impl crate::traits::Decode for MovementFlags {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PacketPositionServerbound {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub flags: MovementFlags,
+}
+
+impl crate::traits::Encode for PacketPositionServerbound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketPositionServerbound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let flags = <MovementFlags as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, y, z, flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct PacketPositionLook {
     pub x: f64,
     pub y: f64,
@@ -7087,6 +7137,40 @@ impl crate::traits::Decode for PacketFlying {
     fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
         let flags = <MovementFlags as crate::traits::Decode>::decode(input)?;
         Ok(Self { flags })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketVehicleMoveServerbound {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub on_ground: bool,
+}
+
+impl crate::traits::Encode for PacketVehicleMoveServerbound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.x, out)?;
+        crate::traits::Encode::encode(&self.y, out)?;
+        crate::traits::Encode::encode(&self.z, out)?;
+        crate::traits::Encode::encode(&self.yaw, out)?;
+        crate::traits::Encode::encode(&self.pitch, out)?;
+        crate::traits::Encode::encode(&self.on_ground, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketVehicleMoveServerbound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let x = <f64 as crate::traits::Decode>::decode(input)?;
+        let y = <f64 as crate::traits::Decode>::decode(input)?;
+        let z = <f64 as crate::traits::Decode>::decode(input)?;
+        let yaw = <f32 as crate::traits::Decode>::decode(input)?;
+        let pitch = <f32 as crate::traits::Decode>::decode(input)?;
+        let on_ground = <bool as crate::traits::Decode>::decode(input)?;
+        Ok(Self { x, y, z, yaw, pitch, on_ground })
     }
 }
 
@@ -7197,6 +7281,25 @@ impl crate::traits::Decode for PacketCraftRecipeRequest {
         let recipe_id = input.get_varint()?;
         let make_all = <bool as crate::traits::Decode>::decode(input)?;
         Ok(Self { window_id, recipe_id, make_all })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketAbilitiesServerbound {
+    pub flags: i8,
+}
+
+impl crate::traits::Encode for PacketAbilitiesServerbound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.flags, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketAbilitiesServerbound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let flags = <i8 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { flags })
     }
 }
 
@@ -7506,6 +7609,25 @@ impl crate::traits::Decode for PacketSetBeaconEffect {
         let primary_effect = { if input.get_bool()? { Some(input.get_varint()?) } else { None } };
         let secondary_effect = { if input.get_bool()? { Some(input.get_varint()?) } else { None } };
         Ok(Self { primary_effect, secondary_effect })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PacketHeldItemSlotServerbound {
+    pub slot_id: i16,
+}
+
+impl crate::traits::Encode for PacketHeldItemSlotServerbound {
+    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {
+        crate::traits::Encode::encode(&self.slot_id, out)?;
+        Ok(())
+    }
+}
+
+impl crate::traits::Decode for PacketHeldItemSlotServerbound {
+    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {
+        let slot_id = <i16 as crate::traits::Decode>::decode(input)?;
+        Ok(Self { slot_id })
     }
 }
 
@@ -9247,7 +9369,7 @@ pub enum ServerboundPlayPacket {
     ClientCommand(PacketClientCommand),
     TickEnd,
     Settings(super::types::PacketCommonSettings),
-    TabComplete(PacketTabComplete),
+    TabComplete(PacketTabCompleteServerbound),
     ConfigurationAcknowledged,
     EnchantItem(PacketEnchantItem),
     WindowClick(PacketWindowClick),
@@ -9262,17 +9384,17 @@ pub enum ServerboundPlayPacket {
     GenerateStructure(PacketGenerateStructure),
     KeepAlive(PacketKeepAlive),
     LockDifficulty(PacketLockDifficulty),
-    Position(PacketPosition),
+    Position(PacketPositionServerbound),
     PositionLook(PacketPositionLook),
     Look(PacketLook),
     Flying(PacketFlying),
-    VehicleMove(PacketVehicleMove),
+    VehicleMove(PacketVehicleMoveServerbound),
     SteerBoat(PacketSteerBoat),
     PickItemFromBlock(PacketPickItemFromBlock),
     PickItemFromEntity(PacketPickItemFromEntity),
     PingRequest(PacketPingRequest),
     CraftRecipeRequest(PacketCraftRecipeRequest),
-    Abilities(PacketAbilities),
+    Abilities(PacketAbilitiesServerbound),
     BlockDig(PacketBlockDig),
     EntityAction(PacketEntityAction),
     PlayerInput(PacketPlayerInput),
@@ -9285,7 +9407,7 @@ pub enum ServerboundPlayPacket {
     AdvancementTab(PacketAdvancementTab),
     SelectTrade(PacketSelectTrade),
     SetBeaconEffect(PacketSetBeaconEffect),
-    HeldItemSlot(PacketHeldItemSlot),
+    HeldItemSlot(PacketHeldItemSlotServerbound),
     UpdateCommandBlock(PacketUpdateCommandBlock),
     UpdateCommandBlockMinecart(PacketUpdateCommandBlockMinecart),
     SetCreativeSlot(PacketSetCreativeSlot),
@@ -9503,7 +9625,7 @@ impl ServerboundPlayPacket {
                 Ok(Self::Settings(payload))
             }
             SERVERBOUND_TAB_COMPLETE_ID => {
-                let payload = <PacketTabComplete as crate::traits::Decode>::decode(input)?;
+                let payload = <PacketTabCompleteServerbound as crate::traits::Decode>::decode(input)?;
                 crate::traits::ensure_consumed(input, "serverbound play tab_complete")?;
                 Ok(Self::TabComplete(payload))
             }
@@ -9577,7 +9699,7 @@ impl ServerboundPlayPacket {
                 Ok(Self::LockDifficulty(payload))
             }
             SERVERBOUND_POSITION_ID => {
-                let payload = <PacketPosition as crate::traits::Decode>::decode(input)?;
+                let payload = <PacketPositionServerbound as crate::traits::Decode>::decode(input)?;
                 crate::traits::ensure_consumed(input, "serverbound play position")?;
                 Ok(Self::Position(payload))
             }
@@ -9597,7 +9719,7 @@ impl ServerboundPlayPacket {
                 Ok(Self::Flying(payload))
             }
             SERVERBOUND_VEHICLE_MOVE_ID => {
-                let payload = <PacketVehicleMove as crate::traits::Decode>::decode(input)?;
+                let payload = <PacketVehicleMoveServerbound as crate::traits::Decode>::decode(input)?;
                 crate::traits::ensure_consumed(input, "serverbound play vehicle_move")?;
                 Ok(Self::VehicleMove(payload))
             }
@@ -9627,7 +9749,7 @@ impl ServerboundPlayPacket {
                 Ok(Self::CraftRecipeRequest(payload))
             }
             SERVERBOUND_ABILITIES_ID => {
-                let payload = <PacketAbilities as crate::traits::Decode>::decode(input)?;
+                let payload = <PacketAbilitiesServerbound as crate::traits::Decode>::decode(input)?;
                 crate::traits::ensure_consumed(input, "serverbound play abilities")?;
                 Ok(Self::Abilities(payload))
             }
@@ -9691,7 +9813,7 @@ impl ServerboundPlayPacket {
                 Ok(Self::SetBeaconEffect(payload))
             }
             SERVERBOUND_HELD_ITEM_SLOT_ID => {
-                let payload = <PacketHeldItemSlot as crate::traits::Decode>::decode(input)?;
+                let payload = <PacketHeldItemSlotServerbound as crate::traits::Decode>::decode(input)?;
                 crate::traits::ensure_consumed(input, "serverbound play held_item_slot")?;
                 Ok(Self::HeldItemSlot(payload))
             }

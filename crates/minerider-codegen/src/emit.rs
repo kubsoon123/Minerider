@@ -479,16 +479,30 @@ enum ModuleKind {
     State,
 }
 
+/// A top-level type emitted into the current module.
+struct EmittedType {
+    rust: String,
+    needs: Vec<Need>,
+    class: Class,
+    /// The definition this entry was emitted from; two directions may define
+    /// same-named local types with different layouts.
+    def: TypeDef,
+}
+
 struct ModuleCtx<'a> {
     ir: &'a Ir,
     dir: Option<&'a DirectionIr>,
+    /// Direction currently being emitted ("clientbound"/"serverbound"), used
+    /// to disambiguate direction-local types that share a name but not a
+    /// definition.
+    side: Option<String>,
     kind: ModuleKind,
     /// Accumulated module body.
     out: String,
     /// Reserved Rust type names in this module.
     names: std::collections::HashSet<String>,
-    /// Emitted top-level types: orig name → (rust name, needs, class).
-    emitted: HashMap<String, (String, Vec<Need>, Class)>,
+    /// Emitted top-level types: orig name → entry.
+    emitted: HashMap<String, EmittedType>,
     /// Types currently being emitted (recursion guard).
     in_progress: std::collections::HashSet<String>,
     /// Shared types emitted into `types.rs`, for state modules: original
@@ -668,6 +682,7 @@ impl<'a> ModuleCtx<'a> {
         ModuleCtx {
             ir,
             dir,
+            side: None,
             kind,
             out: String::new(),
             names: std::collections::HashSet::new(),
@@ -687,7 +702,12 @@ impl<'a> ModuleCtx<'a> {
     fn shared_decls(&self) -> HashMap<String, (String, Vec<Need>, Class)> {
         self.emitted
             .iter()
-            .map(|(k, (r, n, c))| (k.clone(), (r.clone(), n.clone(), qualify_class(c))))
+            .map(|(k, e)| {
+                (
+                    k.clone(),
+                    (e.rust.clone(), e.needs.clone(), qualify_class(&e.class)),
+                )
+            })
             .collect()
     }
 
@@ -736,13 +756,22 @@ impl<'a> ModuleCtx<'a> {
     /// Emits a named type on demand and returns its Rust path as seen from
     /// this module, its context needs and its discriminant class.
     fn ensure_named(&mut self, orig: &str) -> Result<(String, Vec<Need>, Class)> {
-        if let Some((rust, needs, class)) = self.emitted.get(orig) {
-            let path = if self.kind == ModuleKind::State && self.is_shared(orig) {
-                format!("super::types::{rust}")
-            } else {
-                rust.clone()
-            };
-            return Ok((path, needs.clone(), class.clone()));
+        let def = self
+            .lookup(orig)
+            .ok_or_else(|| CodegenError::Invalid(format!("unresolved type reference `{orig}`")))?
+            .clone();
+        if let Some(e) = self.emitted.get(orig) {
+            if e.def == def {
+                let path = if self.kind == ModuleKind::State && self.is_shared(orig) {
+                    format!("super::types::{}", e.rust)
+                } else {
+                    e.rust.clone()
+                };
+                return Ok((path, e.needs.clone(), e.class.clone()));
+            }
+            // Same name, different definition: the other direction already
+            // claimed the plain name; fall through and emit this one with
+            // a side suffix.
         }
         // Shared types live in `types.rs`; state modules reference them
         // instead of emitting duplicates — unless a direction-local
@@ -758,25 +787,39 @@ impl<'a> ModuleCtx<'a> {
                 ));
             }
         }
-        let def = self
-            .lookup(orig)
-            .ok_or_else(|| CodegenError::Invalid(format!("unresolved type reference `{orig}`")))?;
-        let TypeDef::Complex(complex) = def else {
+        let TypeDef::Complex(complex) = def.clone() else {
             return Err(CodegenError::Invalid(format!(
                 "type `{orig}`: aliases must be resolved before emission"
             )));
         };
-        let complex = complex.clone();
-        let rust = self.reserve(&pascal(orig));
-        self.emitted
-            .insert(orig.to_string(), (rust.clone(), Vec::new(), Class::Other));
+        let hint = if self.emitted.contains_key(orig) {
+            let side = self.side.clone().unwrap_or_default();
+            format!("{}{}", pascal(orig), pascal(&side))
+        } else {
+            pascal(orig)
+        };
+        let rust = self.reserve(&hint);
+        self.emitted.insert(
+            orig.to_string(),
+            EmittedType {
+                rust: rust.clone(),
+                needs: Vec::new(),
+                class: Class::Other,
+                def: def.clone(),
+            },
+        );
         self.in_progress.insert(orig.to_string());
         self.top_level_count += 1;
         let (needs, class) = self.emit_named_top(&rust, orig, &complex)?;
         self.in_progress.remove(orig);
         self.emitted.insert(
             orig.to_string(),
-            (rust.clone(), needs.clone(), class.clone()),
+            EmittedType {
+                rust: rust.clone(),
+                needs: needs.clone(),
+                class: class.clone(),
+                def,
+            },
         );
         let path = if self.kind == ModuleKind::State && self.is_shared(orig) {
             format!("super::types::{rust}")
@@ -3180,6 +3223,7 @@ fn emit_direction<'a>(
     side_lower: &str,
 ) -> Result<String> {
     ctx.dir = Some(dir);
+    ctx.side = Some(side_lower.to_string());
     // Reference cycles depend on the visible direction-local types, so they
     // must be recomputed whenever the direction changes.
     ctx.cycles = compute_cycles(ctx.ir, Some(dir));
