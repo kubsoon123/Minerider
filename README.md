@@ -9,8 +9,10 @@ designed so future versions are generated, not hand-maintained.
 
 ## Status
 
-Early development. Phase 1 (connection core) in progress — see
-[docs/progress.md](docs/progress.md).
+Early development. Phase 1 (connection core) and phase 2 (minecraft-data
+packet pipeline) are complete — see [docs/progress.md](docs/progress.md)
+and [docs/codegen.md](docs/codegen.md). Real Paper 1.21.4 validation is
+still pending (no public test server).
 
 ## Architecture
 
@@ -32,8 +34,9 @@ Early development. Phase 1 (connection core) in progress — see
   protocol, encryption (RSA + AES-128-CFB8), compression (zlib), world
   state, entities, physics, tick engine.
 - **Lua** (mlua, phase 5) owns bot logic, automation and plugins.
-- **Protocol definitions are generated from minecraft-data** (phase 2) into
-  `crates/minerider-protocol/src/generated/` and never edited by hand.
+- **Protocol definitions are generated from minecraft-data** into
+  `crates/minerider-protocol/src/generated/` and never edited by hand
+  (237 packets for 1.21.4).
 
 Bots share static data globally (registries, packet definitions, block/item
 data); each bot stores only its own connection, player state and the world
@@ -44,17 +47,18 @@ numbers live in [docs/architecture.md](docs/architecture.md).
 
 ```text
 crates/
+  minerider-codegen/   build-time generator: vendored minecraft-data → Rust
+                       (parser, IR, emitter, drift gate)
   minerider-protocol/  standalone wire-protocol library (no game logic, no
                        tokio): VarInt/VarLong, buffers, framing, zlib codec,
-                       RSA + AES-128-CFB8, benchmarks
+                       RSA + AES-128-CFB8, NBT, generated packets, benchmarks
 src/
   core/         client facade, state machine, tick engine, error type
   network/      async TCP transport, connection manager
   minecraft/    handshake, login, configuration, play state handling
   lua/          scripting API (phase 5)
-  generator/    minecraft-data pipeline (phase 2)
 tests/          integration tests (mock server, raw-socket stream edge cases)
-docs/           architecture notes, progress log
+docs/           architecture notes, codegen pipeline, progress log
 ```
 
 ## Development
@@ -62,6 +66,7 @@ docs/           architecture notes, progress log
 ```sh
 cargo build
 cargo test
+cargo run -p minerider-codegen -- --check   # generated-files drift gate
 ```
 
 Live-server tests are gated behind environment variables and never run by

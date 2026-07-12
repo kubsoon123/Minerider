@@ -191,3 +191,54 @@ disconnect with NBT reason surfaces as `Disconnected`).
 **Problems:** none
 
 **Next step:** unchanged — Phase 2 minecraft-data packet pipeline.
+
+---
+
+## Milestone: Phase 2 — minecraft-data packet pipeline (complete)
+
+**Completed:**
+- `minerider-codegen` crate: protocol.json parser → resolved IR → Rust
+  emitter, vendored minecraft-data 1.21.4 (protocol 769) as the single
+  source of truth.
+- Generated output in `crates/minerider-protocol/src/generated/`:
+  237 packets (handshaking 2/0, status 2/2, login 6/5, configuration
+  17/10, play 131/62 clientbound/serverbound) + 53 shared types +
+  `ProtocolVersion` model. Strongly typed packet enums with integer-match
+  dispatch, `Encode`/`Decode` both directions.
+- Hard problems solved deliberately (nothing skipped): nested switches
+  (scoreboard objective), switch-on-option discriminants flattened to
+  `Option<i64>`, recursive types boxed via per-direction Tarjan SCC,
+  direction-local name collisions suffixed
+  (`PacketEncryptionBeginServerbound` — this fixed a wire-critical
+  serverbound encryption layout), shared types referenced from `types.rs`
+  instead of duplicated.
+- Client refactor: handshake/login/configuration/play and the mock server
+  use generated structs, id constants and `ProtocolVersion`; zero
+  hardcoded 1.21.4 packet ids remain in runtime code. Disconnect reasons
+  decoded as NBT text components.
+- Tests: 129 green (was 71). New: 19 golden byte-exact vectors, enum
+  round-trips for all 44 small-state packets + 9 play packets (nested
+  switches, NBT, metadata loop, holder sets), 10 malformed-input tests,
+  drift gate + determinism test. Clippy `-D warnings` and rustfmt clean.
+- Benchmarks (generated): keep-alive decode 14.2 ns, encode 135.7 ns;
+  settings decode 62.3 ns, encode 147.1 ns; int-match dispatch 1.1 ns vs
+  string if-chain baseline 2.0 ns; play dispatch over 131 ids 1.5 ns.
+
+**Files changed:** `crates/minerider-codegen/**` (new crate),
+`crates/minerider-protocol/src/generated/**` (new),
+`crates/minerider-protocol/tests/{golden,roundtrip,malformed_generated}.rs`
+(new), `crates/minerider-protocol/benches/protocol.rs`,
+`src/{core,minecraft}/**`, `tests/common/mod.rs`, `docs/**`.
+
+**Tests:** 129 passed, 0 failed (`cargo test --workspace`).
+
+**Problems:**
+- Real Paper 1.21.4 validation NOT performed (no server available). Gate
+  remains open; command: `cargo run -- <host> <port> <username>`.
+- minecraft-data models `number_format` in scoreboard packets as
+  `option varint`; wire-compatibility vs vanilla (varint enum 0/1/2 in
+  older docs) is inherited from the data and needs the Paper validation
+  to confirm.
+
+**Next step:** Phase 3 — tick engine, player/world/entity state on top of
+the generated packet layer.
