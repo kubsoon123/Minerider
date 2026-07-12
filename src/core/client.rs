@@ -9,6 +9,7 @@ use crate::core::error::Result;
 use crate::core::state::ConnectionState;
 use crate::minecraft::{configuration, handshake, login, play};
 use crate::network::connection::Connection;
+use crate::trace::TraceRecorder;
 
 /// Parameters required to connect to a server.
 #[derive(Debug, Clone)]
@@ -48,8 +49,21 @@ impl Client {
     /// Connects and logs in: TCP → handshake → login → configuration.
     /// Returns the client ready for the play state.
     pub async fn connect(cfg: &ClientConfig) -> Result<Client> {
+        Self::connect_inner(cfg, None).await
+    }
+
+    /// Like [`Client::connect`], but records every packet in both
+    /// directions to the given trace recorder (vanilla-fidelity captures).
+    pub async fn connect_with_trace(cfg: &ClientConfig, trace: TraceRecorder) -> Result<Client> {
+        Self::connect_inner(cfg, Some(trace)).await
+    }
+
+    async fn connect_inner(cfg: &ClientConfig, trace: Option<TraceRecorder>) -> Result<Client> {
         info!(host = %cfg.host, port = cfg.port, version = %cfg.version.minecraft, "connecting");
         let mut conn = Connection::connect(&cfg.host, cfg.port).await?;
+        if let Some(trace) = trace {
+            conn.set_trace(trace);
+        }
 
         handshake::send(&mut conn, cfg.version.protocol, &cfg.host, cfg.port).await?;
         conn.set_state(ConnectionState::Login);
@@ -76,5 +90,12 @@ impl Client {
     /// Current protocol state of the underlying connection.
     pub fn state(&self) -> ConnectionState {
         self.conn.state()
+    }
+
+    /// Sets the scenario step recorded on subsequent trace events.
+    pub fn set_trace_step(&mut self, step: u32) {
+        if let Some(trace) = self.conn.trace_mut() {
+            trace.set_step(step);
+        }
     }
 }

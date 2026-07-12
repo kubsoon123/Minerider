@@ -59,6 +59,26 @@ impl MockServer {
         Self::start(Mode::ConfigDisconnect).await
     }
 
+    /// Scenario 2: plain login, a play-state Login packet, then three
+    /// keep-alives (join and stand still).
+    pub async fn start_join_idle() -> MockServer {
+        Self::start(Mode::JoinIdle).await
+    }
+
+    /// Scenario 3: plain login, play Login, then a chunk batch
+    /// (start, one minimal chunk, finished). The vanilla obligation is a
+    /// `chunk_batch_received` response; the mock tolerates its absence.
+    pub async fn start_chunk_streaming() -> MockServer {
+        Self::start(Mode::ChunkStreaming).await
+    }
+
+    /// Scenario 4: plain login, play Login, then a Synchronize Player
+    /// Position with teleport id 1. The vanilla obligation is an
+    /// `accept_teleportation` response; the mock tolerates its absence.
+    pub async fn start_teleport_correction() -> MockServer {
+        Self::start(Mode::TeleportCorrection).await
+    }
+
     async fn start(mode: Mode) -> MockServer {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -90,6 +110,9 @@ enum Mode {
     Encrypted,
     Plain,
     ConfigDisconnect,
+    JoinIdle,
+    ChunkStreaming,
+    TeleportCorrection,
 }
 
 fn ensure(cond: bool, msg: impl Into<String>) -> Result<()> {
@@ -153,7 +176,7 @@ async fn run_server(
     // compression for the frames that follow.
     let threshold = match mode {
         Mode::Encrypted => 64,
-        Mode::Plain | Mode::ConfigDisconnect => 16,
+        _ => 16,
     };
     let mut w = PacketWriter::new();
     w.put_varint(threshold);
@@ -165,7 +188,7 @@ async fn run_server(
     // compressed codec path is exercised.
     let username = match mode {
         Mode::Encrypted => format!("MockPlayer{}", "x".repeat(60)),
-        Mode::Plain | Mode::ConfigDisconnect => "MockPlayer".to_string(),
+        _ => "MockPlayer".to_string(),
     };
     let mut w = PacketWriter::new();
     w.put_uuid(0x00112233445566778899AABBCCDDEEFF);
@@ -205,11 +228,43 @@ async fn run_server(
         format!("expected finish configuration 0x03, got 0x{:02x}", fin.id),
     )?;
 
+    // Scenario modes start the play state with a Login packet, like vanilla.
+    if matches!(
+        mode,
+        Mode::JoinIdle | Mode::ChunkStreaming | Mode::TeleportCorrection
+    ) {
+        send_play_login(&mut conn).await?;
+    }
+
+    match mode {
+        Mode::ChunkStreaming => {
+            send_chunk_batch(&mut conn).await?;
+            // Vanilla clients answer chunk_batch_finished with
+            // chunk_batch_received; tolerate its absence (client under test).
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(300), conn.read_packet())
+                .await;
+            conn.close().await?;
+            return Ok(());
+        }
+        Mode::TeleportCorrection => {
+            send_position(&mut conn).await?;
+            // Vanilla clients answer with accept_teleportation; tolerate
+            // its absence (client under test).
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(300), conn.read_packet())
+                .await;
+            conn.close().await?;
+            return Ok(());
+        }
+        _ => {}
+    }
+
     // Play state: keep-alives (S2C 0x27, i64 payload), expect C2S 0x1a echoes.
     let keepalive_ids: &[i64] = match mode {
-        Mode::Encrypted => &[42, 43, 44],
+        Mode::Encrypted | Mode::JoinIdle => &[42, 43, 44],
         Mode::Plain => &[42],
-        Mode::ConfigDisconnect => unreachable!("config-disconnect mock returned earlier"),
+        Mode::ConfigDisconnect | Mode::ChunkStreaming | Mode::TeleportCorrection => {
+            unreachable!("non-keepalive mock modes returned earlier")
+        }
     };
     for &id in keepalive_ids {
         let mut w = PacketWriter::new();
@@ -230,6 +285,90 @@ async fn run_server(
     }
 
     conn.close().await?;
+    Ok(())
+}
+
+/// Sends a play-state Login packet with fixed overworld values.
+async fn send_play_login(conn: &mut Connection) -> Result<()> {
+    use minerider_protocol::traits::Encode;
+    let packet = play::PacketLogin {
+        entity_id: 1,
+        is_hardcore: false,
+        world_names: vec!["minecraft:overworld".to_string()],
+        max_players: 100,
+        view_distance: 10,
+        simulation_distance: 10,
+        reduced_debug_info: false,
+        enable_respawn_screen: true,
+        do_limited_crafting: false,
+        world_state: play::SpawnInfo {
+            dimension: 0,
+            name: "minecraft:overworld".to_string(),
+            hashed_seed: 0,
+            gamemode: play::SpawnInfoGamemode::Survival,
+            previous_gamemode: 255, // -1: no previous gamemode
+            is_debug: false,
+            is_flat: false,
+            death: None,
+            portal_cooldown: 0,
+            sea_level: 63,
+        },
+        enforces_secure_chat: false,
+    };
+    let mut w = PacketWriter::new();
+    packet
+        .encode(&mut w)
+        .map_err(|e| MineRiderError::Protocol(format!("mock server: encode login: {e}")))?;
+    conn.send_packet(play::CLIENTBOUND_LOGIN_ID, &w.into_inner())
+        .await?;
+    Ok(())
+}
+
+/// Sends one chunk batch: start, a minimal (empty-data) chunk, finished.
+async fn send_chunk_batch(conn: &mut Connection) -> Result<()> {
+    conn.send_packet(play::CLIENTBOUND_CHUNK_BATCH_START_ID, &[])
+        .await?;
+    // Minimal level_chunk_with_light: chunk (0,0), empty data, no block
+    // entities, empty light masks and arrays.
+    let mut w = PacketWriter::new();
+    w.put_i32(0);
+    w.put_i32(0);
+    w.put_varint(0); // chunk data length
+    w.put_varint(0); // block entities
+    w.put_varint(0); // sky light mask (empty bitset)
+    w.put_varint(0); // block light mask
+    w.put_varint(0); // sky light arrays
+    w.put_varint(0); // block light arrays
+    conn.send_packet(play::CLIENTBOUND_MAP_CHUNK_ID, &w.into_inner())
+        .await?;
+    let mut w = PacketWriter::new();
+    w.put_varint(1); // batch size
+    conn.send_packet(play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, &w.into_inner())
+        .await?;
+    Ok(())
+}
+
+/// Sends Synchronize Player Position with teleport id 1.
+async fn send_position(conn: &mut Connection) -> Result<()> {
+    use minerider_protocol::traits::Encode;
+    let packet = play::PacketPosition {
+        teleport_id: 1,
+        x: 0.5,
+        y: 64.0,
+        z: 0.5,
+        dx: 0.0,
+        dy: 0.0,
+        dz: 0.0,
+        yaw: 0.0,
+        pitch: 0.0,
+        flags: play::PositionUpdateRelatives(0),
+    };
+    let mut w = PacketWriter::new();
+    packet
+        .encode(&mut w)
+        .map_err(|e| MineRiderError::Protocol(format!("mock server: encode position: {e}")))?;
+    conn.send_packet(play::CLIENTBOUND_POSITION_ID, &w.into_inner())
+        .await?;
     Ok(())
 }
 

@@ -111,16 +111,16 @@ fn normalize_correlates_keepalive_echo() {
     let events = vec![
         with_fields(
             event(Direction::Clientbound, "play", 39, "keep_alive", 5.0),
-            json!({"id": 123456789}),
+            json!({"keep_alive_id": 123456789}),
         ),
         with_fields(
             event(Direction::Serverbound, "play", 26, "keep_alive", 6.0),
-            json!({"id": 123456789}),
+            json!({"keep_alive_id": 123456789}),
         ),
     ];
     let normalized = normalize(&events);
-    let a = &normalized[0].fields.as_ref().unwrap()["id"];
-    let b = &normalized[1].fields.as_ref().unwrap()["id"];
+    let a = &normalized[0].fields.as_ref().unwrap()["keep_alive_id"];
+    let b = &normalized[1].fields.as_ref().unwrap()["keep_alive_id"];
     assert_eq!(a, b);
     assert_eq!(a, "KEEPALIVE_ID_1");
 }

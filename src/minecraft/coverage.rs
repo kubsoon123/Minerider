@@ -315,7 +315,7 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "join_idle",
         )),
         play::CLIENTBOUND_POSITION_ID => ignored(not_implemented(
-            Some("accept_teleportation"),
+            Some("teleport_confirm"),
             TimingClass::Strict,
             "update position/rotation; echo movement",
             "teleport_correction",

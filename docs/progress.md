@@ -242,3 +242,62 @@ disconnect with NBT reason surfaces as `Disconnected`).
 
 **Next step:** Phase 3 — tick engine, player/world/entity state on top of
 the generated packet layer.
+
+---
+
+## Vanilla conformance infrastructure (capture, coverage, scenarios 1-4)
+
+**Completed:**
+- Trace capture (`src/trace/`): JSONL format with mono/relative timestamps,
+  tick, direction, state, id, generated name, decoded fields (serde on
+  generated packets), payload hex, crypto flags, size, session, scenario,
+  step. Recorder hooked into `Connection::send_packet`/`read_packet`;
+  `Client::connect_with_trace` captures the full session from handshake.
+- Normalization (`src/trace/normalize.rs`): session-specific values become
+  stable symbols preserving cross-packet relations — `UUID_N`,
+  `TELEPORT_ID_N`, `KEEPALIVE_ID_N`, `ENTITY_ID_N`, `TIMESTAMP_N`,
+  `SALT_N`, `SEQUENCE_N`, `SERVER_HOST/PORT`, `SESSION_N`. Absolute
+  timestamps and raw payloads redacted in fixtures.
+- Semantic diff engine (`src/trace/diff.rs`): first meaningful divergence
+  (missing/extra/wrong packet, wrong field, timing violation) with fallout
+  grouping; timing tolerance classes (strict/tick-bound/periodic/
+  best-effort) driven by the coverage obligation table.
+- Packet coverage classification (`src/minecraft/coverage.rs`): every
+  clientbound login/configuration/play packet classified as
+  handled/ignored/stored/unsupported with vanilla obligations (response,
+  timing, state update, status, scenario, evidence). Structured warnings
+  in play/configuration loops — no packet disappears silently.
+- Obligation matrix `docs/vanilla_conformance_1_21_4.md` generated from
+  the live coverage table against generated registries
+  (`cargo run --bin conformance_matrix`); drift test keeps it in sync.
+- Scenarios (`tests/conformance.rs` + 3 new mock server modes):
+  1. configuration completion — PASS vs mock, fixture committed
+  2. join and idle (play login + 3 keep-alives) — PASS vs mock, fixture
+     committed; keep-alive echo correlation verified
+  3. initial chunk streaming — BLOCKED as expected: diff reports
+     `MissingPacket: chunk_batch_received` (Phase 3 behavior)
+  4. teleport correction — BLOCKED as expected: diff reports
+     `MissingPacket: teleport_confirm` (Phase 3 behavior)
+
+**Files changed:** `src/trace/**` (new: format, decode, recorder,
+normalize, diff), `src/minecraft/coverage.rs` (new),
+`src/bin/conformance_matrix.rs` (new), `src/core/client.rs`,
+`src/minecraft/{mod,play,configuration}.rs`, `src/network/connection.rs`,
+`crates/minerider-codegen/src/emit.rs` (CLIENTBOUND_IDS/SERVERBOUND_IDS),
+`tests/conformance.rs`, `tests/conformance/fixtures/*.jsonl`,
+`tests/common/mod.rs`, `tests/{trace,conformance_matrix}.rs`,
+`docs/vanilla_conformance_1_21_4.md`.
+
+**Tests:** 146 passed, 0 failed (`cargo test --workspace`). Clippy
+`-D warnings` and rustfmt clean; codegen drift and matrix drift gates OK.
+
+**Problems:**
+- Zero PASS statuses that require vanilla: no vanilla/Paper 1.21.4 server
+  available, so all mock-backed entries remain PARTIAL. When a server is
+  available: capture vanilla traces with the same recorder and diff
+  against `tests/conformance/fixtures/`.
+- Scenarios 3-4 intentionally blocked until Phase 3 implements
+  `chunk_batch_received` and `teleport_confirm` responses.
+
+**Next step:** Phase 3 — tick engine, player state, then implement the
+two blocked responses to unblock scenarios 3-4.

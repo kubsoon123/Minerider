@@ -114,7 +114,7 @@ or lose an id.
 | 63 | player_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 64 | player_info | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 65 | face_player | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 66 | position | ignored | accept_teleportation | strict | update position/rotation; echo movement | NOT IMPLEMENTED | teleport_correction | none |
+| 66 | position | ignored | teleport_confirm | strict | update position/rotation; echo movement | NOT IMPLEMENTED | teleport_correction | none |
 | 67 | player_rotation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 68 | recipe_book_add | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 69 | recipe_book_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |

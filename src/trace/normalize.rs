@@ -53,12 +53,18 @@ fn symbol_kind(key: &str) -> Option<&'static str> {
         Some("UUID")
     } else if key == "teleport_id" {
         Some("TELEPORT_ID")
+    } else if key == "keep_alive_id" {
+        Some("KEEPALIVE_ID")
     } else if key == "entity_id" || key == "player_id" || key.ends_with("_entity_id") {
         Some("ENTITY_ID")
     } else if key.contains("timestamp") {
         Some("TIMESTAMP")
     } else if key == "salt" {
         Some("SALT")
+    } else if key == "server_host" || key == "server_address" {
+        Some("SERVER_HOST")
+    } else if key == "server_port" {
+        Some("SERVER_PORT")
     } else if key == "sequence" || key == "sequence_number" {
         Some("SEQUENCE")
     } else {
@@ -95,13 +101,6 @@ fn normalize_event(event: &mut TraceEvent, symbols: &mut SymbolTable) {
     // Raw payloads embed the un-normalized ids; drop them in fixtures.
     event.payload_hex.clear();
     if let Some(fields) = &mut event.fields {
-        // Keep-alive ids are correlated between directions; give them a
-        // dedicated symbol kind so echoes map to the same symbol.
-        if event.name == "keep_alive" {
-            if let Some(id) = fields.get_mut("id") {
-                *id = Value::String(symbols.symbol("KEEPALIVE_ID", id));
-            }
-        }
         normalize_value(fields, symbols);
     }
 }
