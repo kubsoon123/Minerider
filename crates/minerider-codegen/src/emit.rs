@@ -3287,7 +3287,15 @@ fn emit_direction<'a>(
             p.id
         );
     }
-    let _ = writeln!(body);
+    let _ = writeln!(
+        body,
+        "pub const {prefix}_IDS: &[i32] = &[{}];\n",
+        dir.packets
+            .iter()
+            .map(|p| p.id.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 
     // Enum.
     let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq, serde::Serialize)]");

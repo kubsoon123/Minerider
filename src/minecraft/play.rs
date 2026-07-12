@@ -9,9 +9,11 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_KICK_DISCONNECT_ID, SERVERBOUND_KEEP_ALIVE_ID,
 };
 use minerider_protocol::traits::{Decode, Encode};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::core::error::{MineRiderError, Result};
+use crate::core::state::ConnectionState;
+use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::nbt_reason_text;
 use crate::network::connection::Connection;
 
@@ -37,11 +39,27 @@ pub async fn run_play(conn: &mut Connection) -> Result<()> {
                 )));
             }
             other => {
-                debug!(
-                    id = format_args!("0x{other:02x}"),
-                    len = packet.payload.len(),
-                    "ignoring play packet"
-                );
+                let entry = clientbound_coverage(ConnectionState::Play, other);
+                match entry.class {
+                    CoverageClass::Handled => debug!(
+                        id = format_args!("0x{other:02x}"),
+                        len = packet.payload.len(),
+                        "ignoring play packet"
+                    ),
+                    CoverageClass::IntentionallyIgnored | CoverageClass::StoredForLater => warn!(
+                        id = format_args!("0x{other:02x}"),
+                        len = packet.payload.len(),
+                        coverage = ?entry.class,
+                        status = ?entry.obligation.status,
+                        "play packet decoded but not handled"
+                    ),
+                    CoverageClass::Unsupported => warn!(
+                        id = format_args!("0x{other:02x}"),
+                        len = packet.payload.len(),
+                        status = ?entry.obligation.status,
+                        "UNSUPPORTED play packet; server may expect a response"
+                    ),
+                }
             }
         }
     }

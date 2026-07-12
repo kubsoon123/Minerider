@@ -12,10 +12,11 @@ use minerider_protocol::generated::v1_21_4::configuration::{
     SERVERBOUND_SELECT_KNOWN_PACKS_ID,
 };
 use minerider_protocol::traits::Decode;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
+use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::nbt_reason_text;
 use crate::network::connection::Connection;
 
@@ -55,11 +56,22 @@ pub async fn run_configuration(conn: &mut Connection) -> Result<()> {
                 conn.send_packet(response_id, &packet.payload).await?;
             }
             other => {
-                debug!(
-                    id = format_args!("0x{other:02x}"),
-                    len = packet.payload.len(),
-                    "ignoring configuration packet"
-                );
+                let entry = clientbound_coverage(ConnectionState::Configuration, other);
+                match entry.class {
+                    CoverageClass::Handled | CoverageClass::IntentionallyIgnored => debug!(
+                        id = format_args!("0x{other:02x}"),
+                        len = packet.payload.len(),
+                        coverage = ?entry.class,
+                        "ignoring configuration packet"
+                    ),
+                    CoverageClass::StoredForLater | CoverageClass::Unsupported => warn!(
+                        id = format_args!("0x{other:02x}"),
+                        len = packet.payload.len(),
+                        coverage = ?entry.class,
+                        status = ?entry.obligation.status,
+                        "configuration packet not handled"
+                    ),
+                }
             }
         }
     }

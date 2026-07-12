@@ -248,6 +248,7 @@ pub const CLIENTBOUND_TAGS_ID: i32 = 13;
 pub const CLIENTBOUND_SELECT_KNOWN_PACKS_ID: i32 = 14;
 pub const CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID: i32 = 15;
 pub const CLIENTBOUND_SERVER_LINKS_ID: i32 = 16;
+pub const CLIENTBOUND_IDS: &[i32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundConfigurationPacket {
@@ -444,6 +445,7 @@ pub const SERVERBOUND_RESOURCE_PACK_RECEIVE_ID: i32 = 6;
 pub const SERVERBOUND_SELECT_KNOWN_PACKS_ID: i32 = 7;
 pub const SERVERBOUND_CUSTOM_REPORT_DETAILS_ID: i32 = 8;
 pub const SERVERBOUND_SERVER_LINKS_ID: i32 = 9;
+pub const SERVERBOUND_IDS: &[i32] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundConfigurationPacket {

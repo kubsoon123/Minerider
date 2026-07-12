@@ -54,6 +54,7 @@ impl crate::traits::Decode for PacketLegacyServerListPing {
     }
 }
 
+pub const CLIENTBOUND_IDS: &[i32] = &[];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundHandshakingPacket {
@@ -85,6 +86,7 @@ impl crate::traits::Encode for ClientboundHandshakingPacket {
 
 pub const SERVERBOUND_SET_PROTOCOL_ID: i32 = 0;
 pub const SERVERBOUND_LEGACY_SERVER_LIST_PING_ID: i32 = 254;
+pub const SERVERBOUND_IDS: &[i32] = &[0, 254];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundHandshakingPacket {

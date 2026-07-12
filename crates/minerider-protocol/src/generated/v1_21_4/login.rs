@@ -223,6 +223,7 @@ pub const CLIENTBOUND_SUCCESS_ID: i32 = 2;
 pub const CLIENTBOUND_COMPRESS_ID: i32 = 3;
 pub const CLIENTBOUND_LOGIN_PLUGIN_REQUEST_ID: i32 = 4;
 pub const CLIENTBOUND_COOKIE_REQUEST_ID: i32 = 5;
+pub const CLIENTBOUND_IDS: &[i32] = &[0, 1, 2, 3, 4, 5];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundLoginPacket {
@@ -317,6 +318,7 @@ pub const SERVERBOUND_ENCRYPTION_BEGIN_ID: i32 = 1;
 pub const SERVERBOUND_LOGIN_PLUGIN_RESPONSE_ID: i32 = 2;
 pub const SERVERBOUND_LOGIN_ACKNOWLEDGED_ID: i32 = 3;
 pub const SERVERBOUND_COOKIE_RESPONSE_ID: i32 = 4;
+pub const SERVERBOUND_IDS: &[i32] = &[0, 1, 2, 3, 4];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundLoginPacket {

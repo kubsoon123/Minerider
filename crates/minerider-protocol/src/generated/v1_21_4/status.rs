@@ -47,6 +47,7 @@ impl crate::traits::Decode for PacketPing {
 
 pub const CLIENTBOUND_SERVER_INFO_ID: i32 = 0;
 pub const CLIENTBOUND_PING_ID: i32 = 1;
+pub const CLIENTBOUND_IDS: &[i32] = &[0, 1];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundStatusPacket {
@@ -102,6 +103,7 @@ impl crate::traits::Encode for ClientboundStatusPacket {
 
 pub const SERVERBOUND_PING_START_ID: i32 = 0;
 pub const SERVERBOUND_PING_ID: i32 = 1;
+pub const SERVERBOUND_IDS: &[i32] = &[0, 1];
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundStatusPacket {

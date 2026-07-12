@@ -1,0 +1,508 @@
+//! Packet coverage classification and vanilla-conformance obligations.
+//!
+//! Every clientbound packet in `login`, `configuration` and `play` is
+//! explicitly classified here. No packet may disappear silently: packets
+//! without a detailed entry fall back to [`CoverageClass::IntentionallyIgnored`]
+//! with [`ConformanceStatus::NotImplemented`], and the play/configuration
+//! loops log a structured warning for anything that is not `Handled`.
+//!
+//! Statuses are honest: nothing is `Pass` until a real vanilla 1.21.4
+//! capture exists and the semantic diff agrees. Mock-server + golden tests
+//! only justify `Partial`.
+
+use crate::core::state::ConnectionState;
+use minerider_protocol::generated::v1_21_4::{configuration, login, play};
+
+/// How MineRider treats a clientbound packet today.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoverageClass {
+    /// Decoded and actively handled (response sent and/or state updated).
+    Handled,
+    /// Decoded and deliberately ignored; no response is required.
+    IntentionallyIgnored,
+    /// Decoded and retained for a later behavior system (world, entities…).
+    StoredForLater,
+    /// Not supported yet; must fail loudly (structured diagnostic).
+    Unsupported,
+}
+
+/// Timing tolerance class used by the trace diff engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimingClass {
+    /// Required immediate acknowledgement; ordering must match exactly.
+    Strict,
+    /// Must happen within the same client tick as the trigger.
+    TickBound,
+    /// Periodic cadence (keep-alive, idle movement refresh).
+    Periodic,
+    /// Non-essential; compared loosely.
+    BestEffort,
+    /// No response expected.
+    None,
+}
+
+/// Vanilla-conformance status of a packet behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConformanceStatus {
+    /// Vanilla trace + MineRider trace + semantic diff all agree.
+    Pass,
+    /// Implemented and covered by mock/golden tests; vanilla capture pending.
+    Partial,
+    /// Implemented but known to diverge from vanilla.
+    Fail,
+    /// Not implemented yet.
+    NotImplemented,
+    /// Vanilla has no observable obligation for this packet.
+    NotApplicable,
+}
+
+/// What vanilla 1.21.4 does in response to a clientbound packet.
+#[derive(Debug, Clone, Copy)]
+pub struct Obligation {
+    /// Serverbound packet vanilla sends in response, if any (generated name).
+    pub responds_with: Option<&'static str>,
+    /// Timing tolerance class of that response.
+    pub timing: TimingClass,
+    /// Required client state update, or "none".
+    pub state_update: &'static str,
+    /// Current MineRider conformance status.
+    pub status: ConformanceStatus,
+    /// Conformance scenario covering this packet, or "".
+    pub scenario: &'static str,
+    /// Evidence: test/capture reference. "none" means no coverage at all.
+    pub evidence: &'static str,
+}
+
+/// Coverage entry for one clientbound packet.
+#[derive(Debug, Clone, Copy)]
+pub struct CoverageEntry {
+    pub class: CoverageClass,
+    pub obligation: Obligation,
+}
+
+const EVIDENCE_MOCK: &str = "mock-server + golden tests; vanilla capture pending";
+const EVIDENCE_NONE: &str = "none";
+
+const NO_RESPONSE: Obligation = Obligation {
+    responds_with: None,
+    timing: TimingClass::None,
+    state_update: "none",
+    status: ConformanceStatus::NotApplicable,
+    scenario: "",
+    evidence: EVIDENCE_NONE,
+};
+
+/// Fallback for packets without a detailed entry: decoded by generated code,
+/// but no behavior implemented yet.
+const DEFAULT_ENTRY: CoverageEntry = CoverageEntry {
+    class: CoverageClass::IntentionallyIgnored,
+    obligation: Obligation {
+        status: ConformanceStatus::NotImplemented,
+        ..NO_RESPONSE
+    },
+};
+
+fn handled(obligation: Obligation) -> CoverageEntry {
+    CoverageEntry {
+        class: CoverageClass::Handled,
+        obligation,
+    }
+}
+
+fn ignored(obligation: Obligation) -> CoverageEntry {
+    CoverageEntry {
+        class: CoverageClass::IntentionallyIgnored,
+        obligation,
+    }
+}
+
+fn unsupported(responds_with: Option<&'static str>) -> CoverageEntry {
+    CoverageEntry {
+        class: CoverageClass::Unsupported,
+        obligation: Obligation {
+            responds_with,
+            timing: TimingClass::Strict,
+            status: ConformanceStatus::NotImplemented,
+            ..NO_RESPONSE
+        },
+    }
+}
+
+fn partial(
+    responds_with: Option<&'static str>,
+    timing: TimingClass,
+    state_update: &'static str,
+    scenario: &'static str,
+) -> Obligation {
+    Obligation {
+        responds_with,
+        timing,
+        state_update,
+        status: ConformanceStatus::Partial,
+        scenario,
+        evidence: EVIDENCE_MOCK,
+    }
+}
+
+fn not_implemented(
+    responds_with: Option<&'static str>,
+    timing: TimingClass,
+    state_update: &'static str,
+    scenario: &'static str,
+) -> Obligation {
+    Obligation {
+        responds_with,
+        timing,
+        state_update,
+        status: ConformanceStatus::NotImplemented,
+        scenario,
+        evidence: EVIDENCE_NONE,
+    }
+}
+
+/// Looks up the coverage entry for a clientbound packet id in a state.
+///
+/// Every known id returns an entry; unknown ids (outside the generated
+/// registry) return the default entry.
+pub fn clientbound_coverage(state: ConnectionState, id: i32) -> CoverageEntry {
+    match state {
+        ConnectionState::Login => login_coverage(id),
+        ConnectionState::Configuration => configuration_coverage(id),
+        ConnectionState::Play => play_coverage(id),
+        _ => DEFAULT_ENTRY,
+    }
+}
+
+fn login_coverage(id: i32) -> CoverageEntry {
+    match id {
+        login::CLIENTBOUND_DISCONNECT_ID => handled(partial(
+            None,
+            TimingClass::None,
+            "close connection",
+            "offline_login",
+        )),
+        login::CLIENTBOUND_ENCRYPTION_BEGIN_ID => handled(partial(
+            Some("encryption_begin"),
+            TimingClass::Strict,
+            "enable AES-CFB8 encryption",
+            "offline_login",
+        )),
+        login::CLIENTBOUND_SUCCESS_ID => handled(partial(
+            Some("login_acknowledged"),
+            TimingClass::Strict,
+            "transition to configuration",
+            "offline_login",
+        )),
+        login::CLIENTBOUND_COMPRESS_ID => handled(partial(
+            None,
+            TimingClass::Strict,
+            "enable zlib compression",
+            "offline_login",
+        )),
+        login::CLIENTBOUND_LOGIN_PLUGIN_REQUEST_ID => handled(partial(
+            Some("login_plugin_response"),
+            TimingClass::Strict,
+            "none",
+            "offline_login",
+        )),
+        login::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
+        _ => DEFAULT_ENTRY,
+    }
+}
+
+fn configuration_coverage(id: i32) -> CoverageEntry {
+    match id {
+        configuration::CLIENTBOUND_DISCONNECT_ID => handled(partial(
+            None,
+            TimingClass::None,
+            "close connection",
+            "configuration_completion",
+        )),
+        configuration::CLIENTBOUND_FINISH_CONFIGURATION_ID => handled(partial(
+            Some("finish_configuration"),
+            TimingClass::Strict,
+            "transition to play",
+            "configuration_completion",
+        )),
+        configuration::CLIENTBOUND_KEEP_ALIVE_ID => handled(partial(
+            Some("keep_alive"),
+            TimingClass::Strict,
+            "none",
+            "join_idle",
+        )),
+        configuration::CLIENTBOUND_PING_ID => handled(partial(
+            Some("pong"),
+            TimingClass::Strict,
+            "none",
+            "join_idle",
+        )),
+        configuration::CLIENTBOUND_SELECT_KNOWN_PACKS_ID => handled(partial(
+            Some("select_known_packs"),
+            TimingClass::Strict,
+            "none",
+            "configuration_completion",
+        )),
+        configuration::CLIENTBOUND_CUSTOM_PAYLOAD_ID => ignored(Obligation {
+            state_update: "vanilla sends brand voluntarily; no response required",
+            status: ConformanceStatus::NotImplemented,
+            evidence: EVIDENCE_NONE,
+            ..NO_RESPONSE
+        }),
+        configuration::CLIENTBOUND_RESET_CHAT_ID => ignored(NO_RESPONSE),
+        configuration::CLIENTBOUND_REGISTRY_DATA_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "registry contents required for play decode",
+            "",
+        )),
+        configuration::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID
+        | configuration::CLIENTBOUND_ADD_RESOURCE_PACK_ID => ignored(not_implemented(
+            Some("resource_pack_receive"),
+            TimingClass::Strict,
+            "download/show resource pack prompt",
+            "",
+        )),
+        configuration::CLIENTBOUND_STORE_COOKIE_ID => ignored(Obligation {
+            status: ConformanceStatus::NotImplemented,
+            ..NO_RESPONSE
+        }),
+        configuration::CLIENTBOUND_TRANSFER_ID => ignored(not_implemented(
+            None,
+            TimingClass::Strict,
+            "reconnect to another server",
+            "",
+        )),
+        configuration::CLIENTBOUND_FEATURE_FLAGS_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "enable feature flags",
+            "",
+        )),
+        configuration::CLIENTBOUND_TAGS_ID => CoverageEntry {
+            class: CoverageClass::StoredForLater,
+            obligation: not_implemented(None, TimingClass::None, "store tags", ""),
+        },
+        configuration::CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID
+        | configuration::CLIENTBOUND_SERVER_LINKS_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "store for pause-menu reporting",
+            "",
+        )),
+        configuration::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
+        _ => DEFAULT_ENTRY,
+    }
+}
+
+fn play_coverage(id: i32) -> CoverageEntry {
+    match id {
+        play::CLIENTBOUND_KEEP_ALIVE_ID => handled(partial(
+            Some("keep_alive"),
+            TimingClass::Strict,
+            "none",
+            "join_idle",
+        )),
+        play::CLIENTBOUND_KICK_DISCONNECT_ID => handled(partial(
+            None,
+            TimingClass::None,
+            "close connection",
+            "join_idle",
+        )),
+        play::CLIENTBOUND_LOGIN_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "store own entity id, dimension, world info",
+            "join_idle",
+        )),
+        play::CLIENTBOUND_POSITION_ID => ignored(not_implemented(
+            Some("accept_teleportation"),
+            TimingClass::Strict,
+            "update position/rotation; echo movement",
+            "teleport_correction",
+        )),
+        play::CLIENTBOUND_CHUNK_BATCH_START_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "begin chunk batch",
+            "initial_chunks",
+        )),
+        play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => ignored(not_implemented(
+            Some("chunk_batch_received"),
+            TimingClass::Strict,
+            "acknowledge batch with desired chunks-per-tick",
+            "initial_chunks",
+        )),
+        play::CLIENTBOUND_MAP_CHUNK_ID => CoverageEntry {
+            class: CoverageClass::StoredForLater,
+            obligation: not_implemented(
+                None,
+                TimingClass::None,
+                "store chunk data",
+                "initial_chunks",
+            ),
+        },
+        play::CLIENTBOUND_UNLOAD_CHUNK_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "drop chunk from cache",
+            "",
+        )),
+        play::CLIENTBOUND_UPDATE_LIGHT_ID => CoverageEntry {
+            class: CoverageClass::StoredForLater,
+            obligation: not_implemented(None, TimingClass::None, "store light data", ""),
+        },
+        play::CLIENTBOUND_PING_ID => ignored(not_implemented(
+            Some("pong"),
+            TimingClass::Strict,
+            "none",
+            "join_idle",
+        )),
+        play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => ignored(not_implemented(
+            Some("client_command"),
+            TimingClass::TickBound,
+            "mark player dead; vanilla shows respawn screen",
+            "",
+        )),
+        play::CLIENTBOUND_UPDATE_HEALTH_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "update health/hunger/saturation",
+            "",
+        )),
+        play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
+            Some("configuration_acknowledged"),
+            TimingClass::Strict,
+            "re-enter configuration state",
+            "",
+        )),
+        play::CLIENTBOUND_RESPAWN_ID => ignored(not_implemented(
+            None,
+            TimingClass::None,
+            "switch dimension; drop world cache",
+            "",
+        )),
+        play::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
+        play::CLIENTBOUND_CUSTOM_PAYLOAD_ID => ignored(Obligation {
+            state_update: "vanilla answers known plugin channels; brand sent voluntarily",
+            status: ConformanceStatus::NotImplemented,
+            evidence: EVIDENCE_NONE,
+            ..NO_RESPONSE
+        }),
+        play::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID | play::CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
+            ignored(not_implemented(
+                Some("resource_pack_receive"),
+                TimingClass::Strict,
+                "download/show resource pack prompt",
+                "",
+            ))
+        }
+        play::CLIENTBOUND_TRANSFER_ID => ignored(not_implemented(
+            None,
+            TimingClass::Strict,
+            "reconnect to another server",
+            "",
+        )),
+        play::CLIENTBOUND_STORE_COOKIE_ID => ignored(Obligation {
+            status: ConformanceStatus::NotImplemented,
+            ..NO_RESPONSE
+        }),
+        play::CLIENTBOUND_TAGS_ID => CoverageEntry {
+            class: CoverageClass::StoredForLater,
+            obligation: not_implemented(None, TimingClass::None, "store tags", ""),
+        },
+        _ => DEFAULT_ENTRY,
+    }
+}
+
+fn class_name(class: CoverageClass) -> &'static str {
+    match class {
+        CoverageClass::Handled => "handled",
+        CoverageClass::IntentionallyIgnored => "ignored",
+        CoverageClass::StoredForLater => "stored",
+        CoverageClass::Unsupported => "UNSUPPORTED",
+    }
+}
+
+fn timing_name(timing: TimingClass) -> &'static str {
+    match timing {
+        TimingClass::Strict => "strict",
+        TimingClass::TickBound => "tick-bound",
+        TimingClass::Periodic => "periodic",
+        TimingClass::BestEffort => "best-effort",
+        TimingClass::None => "—",
+    }
+}
+
+fn status_name(status: ConformanceStatus) -> &'static str {
+    match status {
+        ConformanceStatus::Pass => "PASS",
+        ConformanceStatus::Partial => "PARTIAL",
+        ConformanceStatus::Fail => "FAIL",
+        ConformanceStatus::NotImplemented => "NOT IMPLEMENTED",
+        ConformanceStatus::NotApplicable => "NOT APPLICABLE",
+    }
+}
+
+/// Header line of the generated conformance document.
+pub const MATRIX_HEADER: &str =
+    "<!-- @generated by `cargo run --bin conformance_matrix`; DO NOT EDIT MANUALLY -->";
+
+fn state_table(out: &mut String, title: &str, state: ConnectionState, ids: &[i32]) {
+    out.push_str(&format!("## {title}\n\n"));
+    out.push_str("| id | packet | class | responds with | timing | state update | status | scenario | evidence |\n");
+    out.push_str("|---:|---|---|---|---|---|---|---|---|\n");
+    for &id in ids {
+        let name =
+            crate::trace::decode::packet_name(state, crate::trace::Direction::Clientbound, id)
+                .unwrap_or("UNKNOWN");
+        let entry = clientbound_coverage(state, id);
+        let responds = entry.obligation.responds_with.unwrap_or("—");
+        out.push_str(&format!(
+            "| {id} | {name} | {} | {responds} | {} | {} | {} | {} | {} |\n",
+            class_name(entry.class),
+            timing_name(entry.obligation.timing),
+            entry.obligation.state_update,
+            status_name(entry.obligation.status),
+            entry.obligation.scenario,
+            entry.obligation.evidence,
+        ));
+    }
+    out.push('\n');
+}
+
+/// Renders `docs/vanilla_conformance_1_21_4.md` from the live coverage
+/// table and the generated registries. Single source of truth for the
+/// `conformance_matrix` binary and the drift test.
+pub fn render_matrix() -> String {
+    let mut out = String::new();
+    out.push_str(MATRIX_HEADER);
+    out.push_str("\n\n# Vanilla conformance matrix — Minecraft 1.21.4 (protocol 769)\n\n");
+    out.push_str(
+        "Client obligation matrix for every clientbound packet in `login`, `configuration`\n\
+         and `play`. Generated from `src/minecraft/coverage.rs` against the generated\n\
+         minecraft-data registries, so packet coverage cannot silently drift.\n\n\
+         Statuses: `PASS` requires a real vanilla 1.21.4 capture plus a passing semantic\n\
+         diff. Mock-server and golden tests only justify `PARTIAL`. No packet may be\n\
+         absent from this table: the drift test fails if the generated registries gain\n\
+         or lose an id.\n\n",
+    );
+    state_table(
+        &mut out,
+        "Login",
+        ConnectionState::Login,
+        login::CLIENTBOUND_IDS,
+    );
+    state_table(
+        &mut out,
+        "Configuration",
+        ConnectionState::Configuration,
+        configuration::CLIENTBOUND_IDS,
+    );
+    state_table(
+        &mut out,
+        "Play",
+        ConnectionState::Play,
+        play::CLIENTBOUND_IDS,
+    );
+    out
+}

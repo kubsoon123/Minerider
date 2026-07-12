@@ -3,6 +3,7 @@
 use minerider_protocol::nbt::Nbt;
 
 pub mod configuration;
+pub mod coverage;
 pub mod handshake;
 pub mod login;
 pub mod play;
