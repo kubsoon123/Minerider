@@ -34,6 +34,25 @@ fn main() -> ExitCode {
     let username = &args[3];
 
     let cfg = ClientConfig::new(host.clone(), port, username.clone());
+    // Optional trace capture: MINERIDER_TRACE=<path> records every packet
+    // in both directions (used by the real-server validation scripts).
+    let trace = match std::env::var("MINERIDER_TRACE") {
+        Ok(path) => {
+            let scenario =
+                std::env::var("MINERIDER_TRACE_SCENARIO").unwrap_or_else(|_| "cli".to_string());
+            match minerider::trace::TraceRecorder::create(&path, "SESSION_1", scenario) {
+                Ok(recorder) => {
+                    eprintln!("recording packet trace to {path}");
+                    Some(recorder)
+                }
+                Err(e) => {
+                    eprintln!("cannot create trace file {path}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        Err(_) => None,
+    };
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -46,7 +65,11 @@ fn main() -> ExitCode {
     };
 
     runtime.block_on(async move {
-        let mut client = match Client::connect(&cfg).await {
+        let connect = match trace {
+            Some(recorder) => Client::connect_with_trace(&cfg, recorder).await,
+            None => Client::connect(&cfg).await,
+        };
+        let mut client = match connect {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("connect failed: {e}");

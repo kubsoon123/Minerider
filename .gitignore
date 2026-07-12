@@ -1,2 +1,17 @@
 /target
 **/*.rs.bk
+
+# Local test servers and everything they produce (never commit)
+/.test-servers/
+*.log
+*.tmp
+*.jar
+crash-reports/
+logs/
+world/
+world_nether/
+world_the_end/
+usercache.json
+banned-*.json
+ops.json
+whitelist.json
