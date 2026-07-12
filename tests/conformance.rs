@@ -258,14 +258,15 @@ async fn scenario_3_initial_chunks_blocked() {
 }
 
 // ---------------------------------------------------------------------------
-// Scenario 4: teleport correction (BLOCKED: client does not yet send
-// accept_teleportation — Phase 3 behavior)
+// Scenario 4: teleport correction
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn scenario_4_teleport_correction_blocked() {
+async fn scenario_4_teleport_correction() {
     let server = MockServer::start_teleport_correction().await;
     let captured = capture(&server, "teleport_correction").await;
+    // The mock asserts the confirmation arrived with the right id; a
+    // failure here means the client did not confirm the teleport.
     server.finish().await.expect("mock server flow failed");
 
     // The position packet arrived and was decoded with teleport id 1.
@@ -278,20 +279,15 @@ async fn scenario_4_teleport_correction_blocked() {
         Some(&serde_json::Value::String("TELEPORT_ID_1".to_string()))
     );
 
-    // Vanilla answers with accept_teleportation echoing the teleport id.
-    // MineRider does not yet: the diff must report exactly that.
-    let expected = with_expected_response(
-        &captured,
-        (ConnectionState::Play, 66),
-        (ConnectionState::Play, 0),
-        json!({"teleport_id": "TELEPORT_ID_1"}),
+    // The confirmation echoed the same (normalized) teleport id.
+    let confirm = captured
+        .iter()
+        .find(|e| e.dir == Direction::Serverbound && e.state == "play" && e.id == 0)
+        .expect("teleport_confirm in capture");
+    assert_eq!(
+        find_field(confirm, "teleport_id"),
+        find_field(position, "teleport_id"),
+        "teleport_confirm must echo the server's teleport id"
     );
-    let report = diff(&expected, &captured);
-    let divergence = report.divergence.expect("blocked scenario must diverge");
-    assert_eq!(divergence.kind, DivergenceKind::MissingPacket);
-    assert!(
-        divergence.detail.contains("teleport_confirm"),
-        "unexpected divergence: {}",
-        divergence.detail
-    );
+    check_fixture("teleport_correction", &captured);
 }

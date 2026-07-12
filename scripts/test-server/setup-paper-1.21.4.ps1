@@ -40,13 +40,13 @@ if (-not (Test-Path $JavaExe)) {
     Write-Host "JDK already present: $JavaExe"
 }
 
-# --- Paper 1.21.4 (official PaperMC API) ---------------------------------
-$buildsUrl = "https://api.papermc.io/v2/projects/paper/versions/$McVersion/builds"
-$builds = Invoke-RestMethod -Uri $buildsUrl
-$latest = $builds.builds | Select-Object -Last 1
-$build = $latest.build
-$jarName = $latest.downloads.application.name
-$expectedSha = $latest.downloads.application.sha256
+# --- Paper 1.21.4 (official PaperMC "Fill" download service, v3) -------
+$buildsUrl = "https://fill.papermc.io/v3/projects/paper/versions/$McVersion/builds/latest"
+$latest = Invoke-RestMethod -Uri $buildsUrl
+$build = $latest.id
+$download = $latest.downloads.'server:default'
+$jarName = $download.name
+$expectedSha = $download.checksums.sha256
 if (-not $jarName -or -not $expectedSha) { throw "PaperMC API response missing download metadata" }
 
 $downloadOk = $false
@@ -56,8 +56,8 @@ if (Test-Path $JarPath) {
     if ($downloadOk) { Write-Host "Paper build $build already present, checksum OK" }
 }
 if (-not $downloadOk) {
-    $jarUrl = "https://api.papermc.io/v2/projects/paper/versions/$McVersion/builds/$build/downloads/$jarName"
-    Write-Host "Downloading Paper $McVersion build $build from PaperMC API..."
+    $jarUrl = $download.url
+    Write-Host "Downloading Paper $McVersion build $build from fill.papermc.io..."
     Invoke-WebRequest -Uri $jarUrl -OutFile $JarPath -UseBasicParsing
     $actualSha = (Get-FileHash $JarPath -Algorithm SHA256).Hash.ToLower()
     if ($actualSha -ne $expectedSha) {
@@ -73,7 +73,7 @@ if (-not $downloadOk) {
     build             = $build
     jar_name          = $jarName
     sha256            = $expectedSha
-    download_source   = "https://api.papermc.io/v2/projects/paper"
+    download_source   = "https://fill.papermc.io/v3/projects/paper"
     downloaded_at     = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json | Set-Content -Path $MetaPath -Encoding UTF8
 Write-Host "Wrote $MetaPath"

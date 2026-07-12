@@ -15,11 +15,11 @@ or lose an id.
 
 | id | packet | class | responds with | timing | state update | status | scenario | evidence |
 |---:|---|---|---|---|---|---|---|---|
-| 0 | disconnect | handled | — | — | close connection | PARTIAL | offline_login | mock-server + golden tests; vanilla capture pending |
-| 1 | encryption_begin | handled | encryption_begin | strict | enable AES-CFB8 encryption | PARTIAL | offline_login | mock-server + golden tests; vanilla capture pending |
-| 2 | success | handled | login_acknowledged | strict | transition to configuration | PARTIAL | offline_login | mock-server + golden tests; vanilla capture pending |
-| 3 | compress | handled | — | strict | enable zlib compression | PARTIAL | offline_login | mock-server + golden tests; vanilla capture pending |
-| 4 | login_plugin_request | handled | login_plugin_response | strict | none | PARTIAL | offline_login | mock-server + golden tests; vanilla capture pending |
+| 0 | disconnect | handled | — | — | close connection | PARTIAL | offline_login | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 1 | encryption_begin | handled | encryption_begin | strict | enable AES-CFB8 encryption | PARTIAL | offline_login | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 2 | success | handled | login_acknowledged | strict | transition to configuration | PARTIAL | offline_login | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 3 | compress | handled | — | strict | enable zlib compression | PARTIAL | offline_login | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 4 | login_plugin_request | handled | login_plugin_response | strict | none | PARTIAL | offline_login | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 5 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
 
 ## Configuration
@@ -28,10 +28,10 @@ or lose an id.
 |---:|---|---|---|---|---|---|---|---|
 | 0 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
 | 1 | custom_payload | ignored | — | — | vanilla sends brand voluntarily; no response required | NOT IMPLEMENTED |  | none |
-| 2 | disconnect | handled | — | — | close connection | PARTIAL | configuration_completion | mock-server + golden tests; vanilla capture pending |
-| 3 | finish_configuration | handled | finish_configuration | strict | transition to play | PARTIAL | configuration_completion | mock-server + golden tests; vanilla capture pending |
-| 4 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock-server + golden tests; vanilla capture pending |
-| 5 | ping | handled | pong | strict | none | PARTIAL | join_idle | mock-server + golden tests; vanilla capture pending |
+| 2 | disconnect | handled | — | — | close connection | PARTIAL | configuration_completion | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 3 | finish_configuration | handled | finish_configuration | strict | transition to play | PARTIAL | configuration_completion | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 4 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 5 | ping | handled | pong | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 6 | reset_chat | ignored | — | — | none | NOT APPLICABLE |  | none |
 | 7 | registry_data | ignored | — | — | registry contents required for play decode | NOT IMPLEMENTED |  | none |
 | 8 | remove_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
@@ -40,7 +40,7 @@ or lose an id.
 | 11 | transfer | ignored | — | strict | reconnect to another server | NOT IMPLEMENTED |  | none |
 | 12 | feature_flags | ignored | — | — | enable feature flags | NOT IMPLEMENTED |  | none |
 | 13 | tags | stored | — | — | store tags | NOT IMPLEMENTED |  | none |
-| 14 | select_known_packs | handled | select_known_packs | strict | none | PARTIAL | configuration_completion | mock-server + golden tests; vanilla capture pending |
+| 14 | select_known_packs | handled | select_known_packs | strict | none | PARTIAL | configuration_completion | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 15 | custom_report_details | ignored | — | — | store for pause-menu reporting | NOT IMPLEMENTED |  | none |
 | 16 | server_links | ignored | — | — | store for pause-menu reporting | NOT IMPLEMENTED |  | none |
 
@@ -77,7 +77,7 @@ or lose an id.
 | 26 | damage_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 27 | debug_sample | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 28 | hide_message | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 29 | kick_disconnect | handled | — | — | close connection | PARTIAL | join_idle | mock-server + golden tests; vanilla capture pending |
+| 29 | kick_disconnect | handled | — | — | close connection | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 30 | profileless_chat | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 31 | entity_status | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 32 | sync_entity_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -87,7 +87,7 @@ or lose an id.
 | 36 | open_horse_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 37 | hurt_animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 38 | initialize_world_border | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 39 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock-server + golden tests; vanilla capture pending |
+| 39 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 40 | map_chunk | stored | — | — | store chunk data | NOT IMPLEMENTED | initial_chunks | none |
 | 41 | world_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 42 | world_particles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -114,7 +114,7 @@ or lose an id.
 | 63 | player_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 64 | player_info | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 65 | face_player | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 66 | position | ignored | teleport_confirm | strict | update position/rotation; echo movement | NOT IMPLEMENTED | teleport_correction | none |
+| 66 | position | handled | teleport_confirm | strict | update position/rotation (relative flags applied) | PARTIAL | teleport_correction | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 67 | player_rotation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 68 | recipe_book_add | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 69 | recipe_book_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |

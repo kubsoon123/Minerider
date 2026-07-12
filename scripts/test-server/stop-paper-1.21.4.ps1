@@ -11,10 +11,10 @@ if (-not (Test-Path $PidFile)) {
     Write-Host "No PID file; server is not running."
     exit 0
 }
-$pid = [int](Get-Content $PidFile)
-$proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+$serverPid = [int](Get-Content $PidFile)
+$proc = Get-Process -Id $serverPid -ErrorAction SilentlyContinue
 if (-not $proc) {
-    Write-Host "Process $pid already gone; cleaning PID file."
+    Write-Host "Process $serverPid already gone; cleaning PID file."
     Remove-Item $PidFile -Force
     exit 0
 }
@@ -36,6 +36,6 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 1
 }
 
-Write-Warning "Server did not exit within 60s; terminating process $pid."
-Stop-Process -Id $pid -Force
+Write-Warning "Server did not exit within 60s; terminating process $serverPid."
+Stop-Process -Id $serverPid -Force
 Remove-Item $PidFile -Force

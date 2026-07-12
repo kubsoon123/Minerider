@@ -19,9 +19,13 @@ function Send-RconPacket($stream, [int]$id, [int]$type, [string]$payload) {
     $bw.Write([byte]0)
     $bw.Write([byte]0)
     $body = $ms.ToArray()
-    $lenBytes = [System.BitConverter]::GetBytes([int]$body.Length)
-    $stream.Write($lenBytes, 0, 4)
-    $stream.Write($body, 0, $body.Length)
+    # Write length prefix and body as ONE buffer: Paper's RCON reads a
+    # single packet per socket read and resets the connection when the
+    # length prefix arrives in its own segment.
+    $packet = New-Object byte[] (4 + $body.Length)
+    [Array]::Copy([System.BitConverter]::GetBytes([int]$body.Length), 0, $packet, 0, 4)
+    [Array]::Copy($body, 0, $packet, 4, $body.Length)
+    $stream.Write($packet, 0, $packet.Length)
     $stream.Flush()
 }
 

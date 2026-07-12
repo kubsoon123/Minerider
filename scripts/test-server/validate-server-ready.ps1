@@ -11,12 +11,12 @@ $Port      = 25565
 $ok = $true
 
 if (Test-Path $PidFile) {
-    $pid = [int](Get-Content $PidFile)
-    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $serverPid = [int](Get-Content $PidFile)
+    $proc = Get-Process -Id $serverPid -ErrorAction SilentlyContinue
     if ($proc) {
         Write-Host "OK  process alive (PID $pid)"
     } else {
-        Write-Host "FAIL process $pid not running"; $ok = $false
+        Write-Host "FAIL process $serverPid not running"; $ok = $false
     }
 } else {
     Write-Host "FAIL no PID file"; $ok = $false
@@ -49,3 +49,4 @@ if (Test-Path $LatestLog) {
 
 if (-not $ok) { exit 1 }
 Write-Host "Server ready."
+exit 0

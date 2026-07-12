@@ -80,7 +80,8 @@ pub struct CoverageEntry {
     pub obligation: Obligation,
 }
 
-const EVIDENCE_MOCK: &str = "mock-server + golden tests; vanilla capture pending";
+const EVIDENCE_MOCK: &str =
+    "mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending";
 const EVIDENCE_NONE: &str = "none";
 
 const NO_RESPONSE: Obligation = Obligation {
@@ -314,10 +315,10 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "store own entity id, dimension, world info",
             "join_idle",
         )),
-        play::CLIENTBOUND_POSITION_ID => ignored(not_implemented(
+        play::CLIENTBOUND_POSITION_ID => handled(partial(
             Some("teleport_confirm"),
             TimingClass::Strict,
-            "update position/rotation; echo movement",
+            "update position/rotation (relative flags applied)",
             "teleport_correction",
         )),
         play::CLIENTBOUND_CHUNK_BATCH_START_ID => ignored(not_implemented(

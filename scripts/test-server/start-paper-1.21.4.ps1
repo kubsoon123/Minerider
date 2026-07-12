@@ -27,10 +27,15 @@ if ($listener) { throw "Port $Port already in use (PID $($listener.OwningProcess
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $stdout = Join-Path $LogDir "server-stdout.log"
 $stderr = Join-Path $LogDir "server-stderr.log"
+# Redirect stdin too: without it the java process inherits the caller's
+# handles, which makes callers (e.g. Git Bash) hang until the server exits.
+$stdinFile = Join-Path $LogDir "stdin.empty"
+if (-not (Test-Path $stdinFile)) { New-Item -ItemType File -Path $stdinFile | Out-Null }
 
 $proc = Start-Process -FilePath $JavaExe `
     -ArgumentList "-Xms512M","-Xmx1G","-jar","paper.jar","--nogui" `
     -WorkingDirectory $ServerDir `
+    -RedirectStandardInput $stdinFile `
     -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
     -WindowStyle Hidden -PassThru
 Set-Content -Path $PidFile -Value $proc.Id -Encoding ASCII

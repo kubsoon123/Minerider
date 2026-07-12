@@ -248,10 +248,25 @@ async fn run_server(
         }
         Mode::TeleportCorrection => {
             send_position(&mut conn).await?;
-            // Vanilla clients answer with accept_teleportation; tolerate
-            // its absence (client under test).
-            let _ = tokio::time::timeout(std::time::Duration::from_millis(300), conn.read_packet())
-                .await;
+            // Vanilla clients answer with teleport_confirm echoing the id.
+            let confirm =
+                tokio::time::timeout(std::time::Duration::from_secs(3), conn.read_packet())
+                    .await
+                    .map_err(|_| {
+                        MineRiderError::Protocol(
+                            "mock server: no teleport_confirm within 3s".to_string(),
+                        )
+                    })??;
+            ensure(
+                confirm.id == play::SERVERBOUND_TELEPORT_CONFIRM_ID,
+                format!("expected teleport_confirm 0x00, got 0x{:02x}", confirm.id),
+            )?;
+            let mut r = PacketReader::new(&confirm.payload);
+            let teleport_id = r.get_varint()?;
+            ensure(
+                teleport_id == 1,
+                format!("teleport_confirm id {teleport_id}, expected 1"),
+            )?;
             conn.close().await?;
             return Ok(());
         }
