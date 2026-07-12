@@ -1,20 +1,19 @@
 //! Play state entry point: keep-alive handling. Full behavior in phase 3.
+//!
+//! Packet ids and layouts come from the generated protocol
+//! (`minerider_protocol::generated::v1_21_4::play`).
 
-use minerider_protocol::buffer::PacketReader;
+use minerider_protocol::buffer::{PacketReader, PacketWriter};
+use minerider_protocol::generated::v1_21_4::play::{
+    PacketKeepAlive, PacketKickDisconnect, CLIENTBOUND_KEEP_ALIVE_ID,
+    CLIENTBOUND_KICK_DISCONNECT_ID, SERVERBOUND_KEEP_ALIVE_ID,
+};
+use minerider_protocol::traits::{Decode, Encode};
 use tracing::debug;
 
 use crate::core::error::{MineRiderError, Result};
+use crate::minecraft::nbt_reason_text;
 use crate::network::connection::Connection;
-
-/// Clientbound play: Keep Alive (1.21.4, payload: i64).
-pub const CLIENTBOUND_KEEP_ALIVE: i32 = 0x27;
-/// Serverbound play: Keep Alive (1.21.4, payload: i64).
-pub const SERVERBOUND_KEEP_ALIVE: i32 = 0x1a;
-/// Clientbound play: Disconnect (1.21.4, payload: NBT text component reason).
-pub const CLIENTBOUND_DISCONNECT: i32 = 0x1d;
-
-// NOTE: these packet ids are hard-coded for phase 1. From phase 2 on they
-// come from the registry generated out of minecraft-data.
 
 /// Runs the minimal play-state loop: answers keep-alives, reports
 /// disconnects, ignores everything else. Returns only on error/disconnect.
@@ -22,19 +21,20 @@ pub async fn run_play(conn: &mut Connection) -> Result<()> {
     loop {
         let packet = conn.read_packet().await?;
         match packet.id {
-            CLIENTBOUND_KEEP_ALIVE => {
-                // Echo the same i64 payload back.
-                conn.send_packet(SERVERBOUND_KEEP_ALIVE, &packet.payload)
+            CLIENTBOUND_KEEP_ALIVE_ID => {
+                let mut r = PacketReader::new(&packet.payload);
+                let keep_alive = PacketKeepAlive::decode(&mut r)?;
+                let mut w = PacketWriter::new();
+                keep_alive.encode(&mut w)?;
+                conn.send_packet(SERVERBOUND_KEEP_ALIVE_ID, &w.freeze())
                     .await?;
             }
-            CLIENTBOUND_DISCONNECT => {
-                let r = PacketReader::new(&packet.payload);
-                // The reason is a network NBT text component (anonymousNbt).
-                // We keep the raw NBT payload as lossy UTF-8 — the component
-                // text stays readable; proper decoding lands with the
-                // generated protocol in Phase 2.
-                let reason = String::from_utf8_lossy(r.rest()).into_owned();
-                return Err(MineRiderError::Disconnected(reason));
+            CLIENTBOUND_KICK_DISCONNECT_ID => {
+                let mut r = PacketReader::new(&packet.payload);
+                let disconnect = PacketKickDisconnect::decode(&mut r)?;
+                return Err(MineRiderError::Disconnected(nbt_reason_text(
+                    &disconnect.reason,
+                )));
             }
             other => {
                 debug!(

@@ -108,7 +108,7 @@ pub fn generate(ir: &Ir) -> Result<(Vec<GeneratedFile>, EmitStats)> {
 
     // versions.rs
     let versions = format!(
-        "{}pub struct ProtocolVersion {{\n    pub protocol: i32,\n    pub minecraft: &'static str,\n}}\n\n\
+        "{}#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct ProtocolVersion {{\n    pub protocol: i32,\n    pub minecraft: &'static str,\n}}\n\n\
          pub const V1_21_4: ProtocolVersion = ProtocolVersion {{\n    protocol: {PROTOCOL},\n    minecraft: \"{MC_VERSION}\",\n}};\n\n\
          pub const SUPPORTED: &[ProtocolVersion] = &[V1_21_4];\n",
         header()

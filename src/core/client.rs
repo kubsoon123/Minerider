@@ -3,13 +3,12 @@
 
 use tracing::info;
 
+use minerider_protocol::generated::versions::{ProtocolVersion, V1_21_4};
+
 use crate::core::error::Result;
 use crate::core::state::ConnectionState;
 use crate::minecraft::{configuration, handshake, login, play};
 use crate::network::connection::Connection;
-
-/// Protocol version of Minecraft Java Edition 1.21.4.
-pub const PROTOCOL_VERSION_1_21_4: i32 = 769;
 
 /// Parameters required to connect to a server.
 #[derive(Debug, Clone)]
@@ -21,7 +20,7 @@ pub struct ClientConfig {
     /// Offline-mode username.
     pub username: String,
     /// Protocol version to advertise in the handshake.
-    pub protocol_version: i32,
+    pub version: ProtocolVersion,
 }
 
 impl ClientConfig {
@@ -31,7 +30,7 @@ impl ClientConfig {
             host: host.into(),
             port,
             username: username.into(),
-            protocol_version: PROTOCOL_VERSION_1_21_4,
+            version: V1_21_4,
         }
     }
 }
@@ -49,16 +48,10 @@ impl Client {
     /// Connects and logs in: TCP → handshake → login → configuration.
     /// Returns the client ready for the play state.
     pub async fn connect(cfg: &ClientConfig) -> Result<Client> {
-        info!(host = %cfg.host, port = cfg.port, "connecting");
+        info!(host = %cfg.host, port = cfg.port, version = %cfg.version.minecraft, "connecting");
         let mut conn = Connection::connect(&cfg.host, cfg.port).await?;
 
-        let hs = handshake::Handshake {
-            protocol_version: cfg.protocol_version,
-            server_address: &cfg.host,
-            server_port: cfg.port,
-            next_state: 2, // login
-        };
-        handshake::send(&mut conn, &hs).await?;
+        handshake::send(&mut conn, cfg.version.protocol, &cfg.host, cfg.port).await?;
         conn.set_state(ConnectionState::Login);
         info!("handshake sent, entering login state");
 

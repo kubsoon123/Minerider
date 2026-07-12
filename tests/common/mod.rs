@@ -15,12 +15,14 @@ use minerider::core::error::{MineRiderError, Result};
 use minerider::network::connection::Connection;
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::crypto::rsa;
+use minerider_protocol::generated::v1_21_4::{configuration, handshaking, login, play};
+use minerider_protocol::generated::versions::V1_21_4;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 /// Protocol version the mock server expects in the handshake.
-pub const EXPECTED_PROTOCOL: i32 = 769;
+pub const EXPECTED_PROTOCOL: i32 = V1_21_4.protocol;
 
 /// A mock Minecraft server running the full connect flow on a background
 /// task against `127.0.0.1:<port>`.
@@ -111,7 +113,10 @@ async fn run_server(
 
     // Handshake (C2S 0x00).
     let hs = conn.read_packet().await?;
-    ensure(hs.id == 0x00, "expected handshake packet 0x00")?;
+    ensure(
+        hs.id == handshaking::SERVERBOUND_SET_PROTOCOL_ID,
+        "expected handshake packet 0x00",
+    )?;
     {
         let mut r = PacketReader::new(&hs.payload);
         let protocol = r.get_varint()?;
@@ -130,7 +135,10 @@ async fn run_server(
 
     // Login Start (C2S 0x00).
     let ls = conn.read_packet().await?;
-    ensure(ls.id == 0x00, "expected login start 0x00")?;
+    ensure(
+        ls.id == login::SERVERBOUND_LOGIN_START_ID,
+        "expected login start 0x00",
+    )?;
     {
         let mut r = PacketReader::new(&ls.payload);
         let _username = r.read_string()?;
@@ -149,7 +157,8 @@ async fn run_server(
     };
     let mut w = PacketWriter::new();
     w.put_varint(threshold);
-    conn.send_packet(0x03, &w.into_inner()).await?;
+    conn.send_packet(login::CLIENTBOUND_COMPRESS_ID, &w.into_inner())
+        .await?;
     conn.set_compression(threshold);
 
     // Login Success (S2C 0x02). Payload must be ≥ threshold so the
@@ -162,12 +171,13 @@ async fn run_server(
     w.put_uuid(0x00112233445566778899AABBCCDDEEFF);
     w.put_string(&username)?;
     w.put_varint(0); // zero properties
-    conn.send_packet(0x02, &w.into_inner()).await?;
+    conn.send_packet(login::CLIENTBOUND_SUCCESS_ID, &w.into_inner())
+        .await?;
 
     // Login Acknowledged (C2S 0x03).
     let ack = conn.read_packet().await?;
     ensure(
-        ack.id == 0x03,
+        ack.id == login::SERVERBOUND_LOGIN_ACKNOWLEDGED_ID,
         format!("expected login acknowledged 0x03, got 0x{:02x}", ack.id),
     )?;
     ensure(ack.payload.is_empty(), "login acknowledged must be empty")?;
@@ -182,14 +192,16 @@ async fn run_server(
             0x0A, 0x08, 0x00, 0x04, b't', b'e', b'x', b't', 0x00, 0x06, b'k', b'i', b'c', b'k',
             b'e', b'd', 0x00,
         ];
-        conn.send_packet(0x02, reason_nbt).await?;
+        conn.send_packet(configuration::CLIENTBOUND_DISCONNECT_ID, reason_nbt)
+            .await?;
         conn.close().await?;
         return Ok(());
     }
-    conn.send_packet(0x03, &[]).await?;
+    conn.send_packet(configuration::CLIENTBOUND_FINISH_CONFIGURATION_ID, &[])
+        .await?;
     let fin = conn.read_packet().await?;
     ensure(
-        fin.id == 0x03,
+        fin.id == configuration::SERVERBOUND_FINISH_CONFIGURATION_ID,
         format!("expected finish configuration 0x03, got 0x{:02x}", fin.id),
     )?;
 
@@ -202,11 +214,12 @@ async fn run_server(
     for &id in keepalive_ids {
         let mut w = PacketWriter::new();
         w.put_i64(id);
-        conn.send_packet(0x27, &w.into_inner()).await?;
+        conn.send_packet(play::CLIENTBOUND_KEEP_ALIVE_ID, &w.into_inner())
+            .await?;
 
         let echo = conn.read_packet().await?;
         ensure(
-            echo.id == 0x1a,
+            echo.id == play::SERVERBOUND_KEEP_ALIVE_ID,
             format!("expected keep-alive echo 0x1a, got 0x{:02x}", echo.id),
         )?;
         let mut r = PacketReader::new(&echo.payload);
@@ -233,11 +246,15 @@ async fn encryption_exchange(conn: &mut Connection) -> Result<()> {
     w.put_byte_array(der.as_bytes());
     w.put_byte_array(&verify_token);
     w.put_bool(false); // should_authenticate
-    conn.send_packet(0x01, &w.into_inner()).await?;
+    conn.send_packet(login::CLIENTBOUND_ENCRYPTION_BEGIN_ID, &w.into_inner())
+        .await?;
 
     // Encryption Response (C2S 0x01), still unencrypted.
     let resp = conn.read_packet().await?;
-    ensure(resp.id == 0x01, "expected encryption response 0x01")?;
+    ensure(
+        resp.id == login::SERVERBOUND_ENCRYPTION_BEGIN_ID,
+        "expected encryption response 0x01",
+    )?;
     let (encrypted_secret, encrypted_token) = {
         let mut r = PacketReader::new(&resp.payload);
         let secret = r.read_byte_array()?.to_vec();
