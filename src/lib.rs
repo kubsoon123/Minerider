@@ -27,3 +27,4 @@
 pub mod core;
 pub mod minecraft;
 pub mod network;
+pub mod trace;

@@ -7,7 +7,7 @@
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
 #![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSpawnEntity {
     pub entity_id: i32,
     pub object_uuid: u128,
@@ -56,7 +56,7 @@ impl crate::traits::Decode for PacketSpawnEntity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSpawnEntityExperienceOrb {
     pub entity_id: i32,
     pub x: f64,
@@ -87,7 +87,7 @@ impl crate::traits::Decode for PacketSpawnEntityExperienceOrb {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAnimation {
     pub entity_id: i32,
     pub animation: u8,
@@ -109,7 +109,7 @@ impl crate::traits::Decode for PacketAnimation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketStatisticsEntriesItem {
     pub category_id: i32,
     pub statistic_id: i32,
@@ -134,7 +134,7 @@ impl crate::traits::Decode for PacketStatisticsEntriesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketStatistics {
     pub entries: Vec<PacketStatisticsEntriesItem>,
 }
@@ -153,7 +153,7 @@ impl crate::traits::Decode for PacketStatistics {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAcknowledgePlayerDigging {
     pub sequence_id: i32,
 }
@@ -172,7 +172,7 @@ impl crate::traits::Decode for PacketAcknowledgePlayerDigging {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketBlockBreakAnimation {
     pub entity_id: i32,
     pub location: super::types::Position,
@@ -197,7 +197,7 @@ impl crate::traits::Decode for PacketBlockBreakAnimation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTileEntityData {
     pub location: super::types::Position,
     pub action: i32,
@@ -222,7 +222,7 @@ impl crate::traits::Decode for PacketTileEntityData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketBlockAction {
     pub location: super::types::Position,
     pub byte1: u8,
@@ -250,7 +250,7 @@ impl crate::traits::Decode for PacketBlockAction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketBlockChange {
     pub location: super::types::Position,
     pub r#type: i32,
@@ -272,7 +272,7 @@ impl crate::traits::Decode for PacketBlockChange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketBossBarTitle {
     V0(crate::nbt::Nbt),
     V3(crate::nbt::Nbt),
@@ -307,7 +307,7 @@ impl PacketBossBarTitle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketBossBarHealth {
     V0(f32),
     V2(f32),
@@ -342,7 +342,7 @@ impl PacketBossBarHealth {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketBossBarColor {
     V0(i32),
     V4(i32),
@@ -377,7 +377,7 @@ impl PacketBossBarColor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketBossBarDividers {
     V0(i32),
     V4(i32),
@@ -412,7 +412,7 @@ impl PacketBossBarDividers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketBossBarFlags {
     V0(u8),
     V5(u8),
@@ -447,7 +447,7 @@ impl PacketBossBarFlags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketBossBar {
     pub entity_uuid: u128,
     pub action: i32,
@@ -534,7 +534,7 @@ impl crate::traits::Decode for PacketBossBar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDifficulty {
     pub difficulty: u8,
     pub difficulty_locked: bool,
@@ -556,7 +556,7 @@ impl crate::traits::Decode for PacketDifficulty {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChunkBatchFinished {
     pub batch_size: i32,
 }
@@ -575,7 +575,7 @@ impl crate::traits::Decode for PacketChunkBatchFinished {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChunkBiomesBiomesItem {
     pub position: super::types::PackedChunkPos,
     pub data: super::types::ByteArray,
@@ -597,7 +597,7 @@ impl crate::traits::Decode for PacketChunkBiomesBiomesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChunkBiomes {
     pub biomes: Vec<PacketChunkBiomesBiomesItem>,
 }
@@ -616,7 +616,7 @@ impl crate::traits::Decode for PacketChunkBiomes {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketClearTitles {
     pub reset: bool,
 }
@@ -635,7 +635,7 @@ impl crate::traits::Decode for PacketClearTitles {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTabCompleteMatchesItem {
     pub r#match: super::types::String,
     pub tooltip: Option<crate::nbt::Nbt>,
@@ -657,7 +657,7 @@ impl crate::traits::Decode for PacketTabCompleteMatchesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTabComplete {
     pub transaction_id: i32,
     pub start: i32,
@@ -685,7 +685,7 @@ impl crate::traits::Decode for PacketTabComplete {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDeclareCommands {
     pub nodes: Vec<super::types::CommandNode>,
     pub root_index: i32,
@@ -707,7 +707,7 @@ impl crate::traits::Decode for PacketDeclareCommands {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCloseWindow {
     pub window_id: i32,
 }
@@ -726,7 +726,7 @@ impl crate::traits::Decode for PacketCloseWindow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWindowItems {
     pub window_id: i32,
     pub state_id: i32,
@@ -754,7 +754,7 @@ impl crate::traits::Decode for PacketWindowItems {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCraftProgressBar {
     pub window_id: i32,
     pub property: i16,
@@ -779,7 +779,7 @@ impl crate::traits::Decode for PacketCraftProgressBar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetSlot {
     pub window_id: i32,
     pub state_id: i32,
@@ -807,7 +807,7 @@ impl crate::traits::Decode for PacketSetSlot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetCooldown {
     pub cooldown_group: super::types::String,
     pub cooldown_ticks: i32,
@@ -829,7 +829,7 @@ impl crate::traits::Decode for PacketSetCooldown {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChatSuggestions {
     pub action: i32,
     pub entries: Vec<super::types::String>,
@@ -851,7 +851,7 @@ impl crate::traits::Decode for PacketChatSuggestions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCustomPayload {
     pub channel: super::types::String,
     pub data: Vec<u8>,
@@ -873,7 +873,7 @@ impl crate::traits::Decode for PacketCustomPayload {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDamageEvent {
     pub entity_id: i32,
     pub source_type_id: i32,
@@ -904,7 +904,7 @@ impl crate::traits::Decode for PacketDamageEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDebugSample {
     pub sample: Vec<i64>,
     pub r#type: i32,
@@ -929,7 +929,7 @@ impl crate::traits::Decode for PacketDebugSample {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketHideMessageSignature {
     V0(Vec<u8>),
     Default,
@@ -960,7 +960,7 @@ impl PacketHideMessageSignature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketHideMessage {
     pub id: i32,
     pub signature: PacketHideMessageSignature,
@@ -990,7 +990,7 @@ impl crate::traits::Decode for PacketHideMessage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketKickDisconnect {
     pub reason: crate::nbt::Nbt,
 }
@@ -1009,7 +1009,7 @@ impl crate::traits::Decode for PacketKickDisconnect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ChatTypeParameterType {
     Content,
     Sender,
@@ -1039,7 +1039,7 @@ impl crate::traits::Decode for ChatTypeParameterType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ChatType {
     pub translation_key: super::types::String,
     pub parameters: Vec<ChatTypeParameterType>,
@@ -1064,7 +1064,7 @@ impl crate::traits::Decode for ChatType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ChatTypes {
     pub chat: ChatType,
     pub narration: ChatType,
@@ -1088,7 +1088,7 @@ impl crate::traits::Decode for ChatTypes {
 
 pub type ChatTypesHolder = crate::holder::Holder<ChatTypes>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketProfilelessChat {
     pub message: crate::nbt::Nbt,
     pub r#type: ChatTypesHolder,
@@ -1116,7 +1116,7 @@ impl crate::traits::Decode for PacketProfilelessChat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityStatus {
     pub entity_id: i32,
     pub entity_status: i8,
@@ -1138,7 +1138,7 @@ impl crate::traits::Decode for PacketEntityStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSyncEntityPosition {
     pub entity_id: i32,
     pub x: f64,
@@ -1184,7 +1184,7 @@ impl crate::traits::Decode for PacketSyncEntityPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketExplosion {
     pub x: f64,
     pub y: f64,
@@ -1218,7 +1218,7 @@ impl crate::traits::Decode for PacketExplosion {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUnloadChunk {
     pub chunk_z: i32,
     pub chunk_x: i32,
@@ -1240,7 +1240,7 @@ impl crate::traits::Decode for PacketUnloadChunk {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketGameStateChange {
     pub reason: u8,
     pub game_mode: f32,
@@ -1262,7 +1262,7 @@ impl crate::traits::Decode for PacketGameStateChange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketOpenHorseWindow {
     pub window_id: i32,
     pub nb_slots: i32,
@@ -1287,7 +1287,7 @@ impl crate::traits::Decode for PacketOpenHorseWindow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketHurtAnimation {
     pub entity_id: i32,
     pub yaw: f32,
@@ -1309,7 +1309,7 @@ impl crate::traits::Decode for PacketHurtAnimation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketInitializeWorldBorder {
     pub x: f64,
     pub z: f64,
@@ -1349,7 +1349,7 @@ impl crate::traits::Decode for PacketInitializeWorldBorder {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketKeepAlive {
     pub keep_alive_id: i64,
 }
@@ -1368,7 +1368,7 @@ impl crate::traits::Decode for PacketKeepAlive {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMapChunk {
     pub x: i32,
     pub z: i32,
@@ -1429,7 +1429,7 @@ impl crate::traits::Decode for PacketMapChunk {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldEvent {
     pub effect_id: i32,
     pub location: super::types::Position,
@@ -1457,7 +1457,7 @@ impl crate::traits::Decode for PacketWorldEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldParticles {
     pub long_distance: bool,
     pub always_show: bool,
@@ -1506,7 +1506,7 @@ impl crate::traits::Decode for PacketWorldParticles {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateLight {
     pub chunk_x: i32,
     pub chunk_z: i32,
@@ -1558,7 +1558,7 @@ impl crate::traits::Decode for PacketUpdateLight {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SpawnInfoGamemode {
     Survival,
     Creative,
@@ -1591,7 +1591,7 @@ impl crate::traits::Decode for SpawnInfoGamemode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SpawnInfoDeathValue {
     pub dimension_name: super::types::String,
     pub location: super::types::Position,
@@ -1613,7 +1613,7 @@ impl crate::traits::Decode for SpawnInfoDeathValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SpawnInfo {
     pub dimension: i32,
     pub name: super::types::String,
@@ -1659,7 +1659,7 @@ impl crate::traits::Decode for SpawnInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLogin {
     pub entity_id: i32,
     pub is_hardcore: bool,
@@ -1708,7 +1708,7 @@ impl crate::traits::Decode for PacketLogin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMapIconsValueItem {
     pub r#type: i32,
     pub x: i8,
@@ -1739,7 +1739,7 @@ impl crate::traits::Decode for PacketMapIconsValueItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketMapRows {
     V0,
     Default(u8),
@@ -1769,7 +1769,7 @@ impl PacketMapRows {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketMapX {
     V0,
     Default(u8),
@@ -1799,7 +1799,7 @@ impl PacketMapX {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketMapY {
     V0,
     Default(u8),
@@ -1829,7 +1829,7 @@ impl PacketMapY {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketMapData {
     V0,
     Default(Vec<u8>),
@@ -1859,7 +1859,7 @@ impl PacketMapData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMap {
     pub item_damage: i32,
     pub scale: i8,
@@ -1930,7 +1930,7 @@ impl crate::traits::Decode for PacketMap {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTradeListTradesItemInputItem1 {
     pub item_id: i32,
     pub item_count: i32,
@@ -1961,7 +1961,7 @@ impl crate::traits::Decode for PacketTradeListTradesItemInputItem1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTradeListTradesItemInputItem2Value {
     pub item_id: i32,
     pub item_count: i32,
@@ -1992,7 +1992,7 @@ impl crate::traits::Decode for PacketTradeListTradesItemInputItem2Value {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTradeListTradesItem {
     pub input_item1: PacketTradeListTradesItemInputItem1,
     pub output_item: super::types::Slot,
@@ -2038,7 +2038,7 @@ impl crate::traits::Decode for PacketTradeListTradesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTradeList {
     pub window_id: i32,
     pub trades: Vec<PacketTradeListTradesItem>,
@@ -2072,7 +2072,7 @@ impl crate::traits::Decode for PacketTradeList {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRelEntityMove {
     pub entity_id: i32,
     pub d_x: i16,
@@ -2103,7 +2103,7 @@ impl crate::traits::Decode for PacketRelEntityMove {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityMoveLook {
     pub entity_id: i32,
     pub d_x: i16,
@@ -2140,7 +2140,7 @@ impl crate::traits::Decode for PacketEntityMoveLook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMoveMinecartStepsItem {
     pub position: super::types::Vec3f,
     pub movement: super::types::Vec3f,
@@ -2171,7 +2171,7 @@ impl crate::traits::Decode for PacketMoveMinecartStepsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMoveMinecart {
     pub entity_id: i32,
     pub steps: Vec<PacketMoveMinecartStepsItem>,
@@ -2193,7 +2193,7 @@ impl crate::traits::Decode for PacketMoveMinecart {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityLook {
     pub entity_id: i32,
     pub yaw: i8,
@@ -2221,7 +2221,7 @@ impl crate::traits::Decode for PacketEntityLook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketVehicleMove {
     pub x: f64,
     pub y: f64,
@@ -2252,7 +2252,7 @@ impl crate::traits::Decode for PacketVehicleMove {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketOpenBook {
     pub hand: i32,
 }
@@ -2271,7 +2271,7 @@ impl crate::traits::Decode for PacketOpenBook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketOpenWindow {
     pub window_id: i32,
     pub inventory_type: i32,
@@ -2296,7 +2296,7 @@ impl crate::traits::Decode for PacketOpenWindow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketOpenSignEntity {
     pub location: super::types::Position,
     pub is_front_text: bool,
@@ -2318,7 +2318,7 @@ impl crate::traits::Decode for PacketOpenSignEntity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPing {
     pub id: i32,
 }
@@ -2337,7 +2337,7 @@ impl crate::traits::Decode for PacketPing {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPingResponse {
     pub id: i64,
 }
@@ -2356,7 +2356,7 @@ impl crate::traits::Decode for PacketPingResponse {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum RecipeDisplayType {
     CraftingShapeless,
     CraftingShaped,
@@ -2392,7 +2392,7 @@ impl crate::traits::Decode for RecipeDisplayType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotDisplayType {
     Empty,
     AnyFuel,
@@ -2437,7 +2437,7 @@ impl crate::traits::Decode for SlotDisplayType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotDisplayDataSmithingTrim {
     pub base: Box<SlotDisplay>,
     pub material: Box<SlotDisplay>,
@@ -2462,7 +2462,7 @@ impl crate::traits::Decode for SlotDisplayDataSmithingTrim {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotDisplayDataWithRemainder {
     pub input_: Box<SlotDisplay>,
     pub remainder: Box<SlotDisplay>,
@@ -2484,7 +2484,7 @@ impl crate::traits::Decode for SlotDisplayDataWithRemainder {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum SlotDisplayData {
     AnyFuel,
     Composite(Vec<Box<SlotDisplay>>),
@@ -2542,7 +2542,7 @@ impl SlotDisplayData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotDisplay {
     pub r#type: SlotDisplayType,
     pub data: SlotDisplayData,
@@ -2586,7 +2586,7 @@ impl crate::traits::Decode for SlotDisplay {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RecipeDisplayDataCraftingShaped {
     pub width: i32,
     pub height: i32,
@@ -2617,7 +2617,7 @@ impl crate::traits::Decode for RecipeDisplayDataCraftingShaped {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RecipeDisplayDataCraftingShapeless {
     pub ingredients: Vec<SlotDisplay>,
     pub result: SlotDisplay,
@@ -2642,7 +2642,7 @@ impl crate::traits::Decode for RecipeDisplayDataCraftingShapeless {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RecipeDisplayDataFurnace {
     pub ingredient: SlotDisplay,
     pub fuel: SlotDisplay,
@@ -2676,7 +2676,7 @@ impl crate::traits::Decode for RecipeDisplayDataFurnace {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RecipeDisplayDataSmithing {
     pub template: SlotDisplay,
     pub base: SlotDisplay,
@@ -2707,7 +2707,7 @@ impl crate::traits::Decode for RecipeDisplayDataSmithing {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RecipeDisplayDataStonecutter {
     pub ingredient: SlotDisplay,
     pub result: SlotDisplay,
@@ -2732,7 +2732,7 @@ impl crate::traits::Decode for RecipeDisplayDataStonecutter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum RecipeDisplayData {
     CraftingShaped(RecipeDisplayDataCraftingShaped),
     CraftingShapeless(RecipeDisplayDataCraftingShapeless),
@@ -2779,7 +2779,7 @@ impl RecipeDisplayData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RecipeDisplay {
     pub r#type: RecipeDisplayType,
     pub data: RecipeDisplayData,
@@ -2818,7 +2818,7 @@ impl crate::traits::Decode for RecipeDisplay {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCraftRecipeResponse {
     pub window_id: i32,
     pub recipe_display: RecipeDisplay,
@@ -2840,7 +2840,7 @@ impl crate::traits::Decode for PacketCraftRecipeResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAbilities {
     pub flags: i8,
     pub flying_speed: f32,
@@ -2865,7 +2865,7 @@ impl crate::traits::Decode for PacketAbilities {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerChatFilterTypeMask {
     V2(Vec<i64>),
     Default,
@@ -2898,7 +2898,7 @@ impl PacketPlayerChatFilterTypeMask {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerChat {
     pub sender_uuid: u128,
     pub index: i32,
@@ -2967,7 +2967,7 @@ impl crate::traits::Decode for PacketPlayerChat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEndCombatEvent {
     pub duration: i32,
 }
@@ -2986,7 +2986,7 @@ impl crate::traits::Decode for PacketEndCombatEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDeathCombatEvent {
     pub player_id: i32,
     pub message: crate::nbt::Nbt,
@@ -3008,7 +3008,7 @@ impl crate::traits::Decode for PacketDeathCombatEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerRemove {
     pub players: Vec<u128>,
 }
@@ -3027,7 +3027,7 @@ impl crate::traits::Decode for PacketPlayerRemove {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PacketPlayerInfoAction(pub u8);
 
 impl PacketPlayerInfoAction {
@@ -3055,7 +3055,7 @@ impl crate::traits::Decode for PacketPlayerInfoAction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemPlayer {
     True(super::types::GameProfile),
     Default,
@@ -3085,7 +3085,7 @@ impl PacketPlayerInfoDataItemPlayer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemChatSession {
     True(super::types::ChatSession),
     Default,
@@ -3115,7 +3115,7 @@ impl PacketPlayerInfoDataItemChatSession {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemGamemode {
     True(i32),
     Default,
@@ -3145,7 +3145,7 @@ impl PacketPlayerInfoDataItemGamemode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemListed {
     True(i32),
     Default,
@@ -3175,7 +3175,7 @@ impl PacketPlayerInfoDataItemListed {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemLatency {
     True(i32),
     Default,
@@ -3205,7 +3205,7 @@ impl PacketPlayerInfoDataItemLatency {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemDisplayName {
     True(Option<crate::nbt::Nbt>),
     Default,
@@ -3235,7 +3235,7 @@ impl PacketPlayerInfoDataItemDisplayName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemListPriority {
     True(i32),
     Default,
@@ -3265,7 +3265,7 @@ impl PacketPlayerInfoDataItemListPriority {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketPlayerInfoDataItemShowHat {
     True(bool),
     Default,
@@ -3295,7 +3295,7 @@ impl PacketPlayerInfoDataItemShowHat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerInfoDataItem {
     pub uuid: u128,
     pub player: PacketPlayerInfoDataItemPlayer,
@@ -3348,7 +3348,7 @@ impl PacketPlayerInfoDataItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerInfo {
     pub action: PacketPlayerInfoAction,
     pub data: Vec<PacketPlayerInfoDataItem>,
@@ -3373,7 +3373,7 @@ impl crate::traits::Decode for PacketPlayerInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketFacePlayerEntityId {
     True(i32),
     Default,
@@ -3403,7 +3403,7 @@ impl PacketFacePlayerEntityId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketFacePlayerEntityFeetEyes {
     True(i32),
     Default,
@@ -3433,7 +3433,7 @@ impl PacketFacePlayerEntityFeetEyes {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketFacePlayer {
     pub feet_eyes: i32,
     pub x: f64,
@@ -3484,7 +3484,7 @@ impl crate::traits::Decode for PacketFacePlayer {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PositionUpdateRelatives(pub u32);
 
 impl PositionUpdateRelatives {
@@ -3513,7 +3513,7 @@ impl crate::traits::Decode for PositionUpdateRelatives {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPosition {
     pub teleport_id: i32,
     pub x: f64,
@@ -3559,7 +3559,7 @@ impl crate::traits::Decode for PacketPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerRotation {
     pub yaw: f32,
     pub pitch: f32,
@@ -3581,7 +3581,7 @@ impl crate::traits::Decode for PacketPlayerRotation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum PacketRecipeBookAddEntriesItemRecipeCategory {
     CraftingBuildingBlocks,
     CraftingRedstone,
@@ -3641,7 +3641,7 @@ impl crate::traits::Decode for PacketRecipeBookAddEntriesItemRecipeCategory {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRecipeBookAddEntriesItemRecipe {
     pub display_id: i32,
     pub display: RecipeDisplay,
@@ -3672,7 +3672,7 @@ impl crate::traits::Decode for PacketRecipeBookAddEntriesItemRecipe {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PacketRecipeBookAddEntriesItemFlags(pub u8);
 
 impl PacketRecipeBookAddEntriesItemFlags {
@@ -3694,7 +3694,7 @@ impl crate::traits::Decode for PacketRecipeBookAddEntriesItemFlags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRecipeBookAddEntriesItem {
     pub recipe: PacketRecipeBookAddEntriesItemRecipe,
     pub flags: PacketRecipeBookAddEntriesItemFlags,
@@ -3716,7 +3716,7 @@ impl crate::traits::Decode for PacketRecipeBookAddEntriesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRecipeBookAdd {
     pub entries: Vec<PacketRecipeBookAddEntriesItem>,
     pub replace: bool,
@@ -3738,7 +3738,7 @@ impl crate::traits::Decode for PacketRecipeBookAdd {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRecipeBookRemove {
     pub recipe_ids: Vec<i32>,
 }
@@ -3760,7 +3760,7 @@ impl crate::traits::Decode for PacketRecipeBookRemove {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRecipeBookSettings {
     pub crafting_gui_open: bool,
     pub crafting_filtering_craftable: bool,
@@ -3800,7 +3800,7 @@ impl crate::traits::Decode for PacketRecipeBookSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityDestroy {
     pub entity_ids: Vec<i32>,
 }
@@ -3822,7 +3822,7 @@ impl crate::traits::Decode for PacketEntityDestroy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRemoveEntityEffect {
     pub entity_id: i32,
     pub effect_id: i32,
@@ -3844,7 +3844,7 @@ impl crate::traits::Decode for PacketRemoveEntityEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketResetScore {
     pub entity_name: super::types::String,
     pub objective_name: Option<super::types::String>,
@@ -3866,7 +3866,7 @@ impl crate::traits::Decode for PacketResetScore {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRespawn {
     pub world_state: SpawnInfo,
     pub copy_metadata: u8,
@@ -3888,7 +3888,7 @@ impl crate::traits::Decode for PacketRespawn {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityHeadRotation {
     pub entity_id: i32,
     pub head_yaw: i8,
@@ -3910,7 +3910,7 @@ impl crate::traits::Decode for PacketEntityHeadRotation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PacketMultiBlockChangeChunkCoordinates {
     pub x: i32,
     pub z: i32,
@@ -3932,7 +3932,7 @@ impl crate::traits::Decode for PacketMultiBlockChangeChunkCoordinates {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMultiBlockChange {
     pub chunk_coordinates: PacketMultiBlockChangeChunkCoordinates,
     pub records: Vec<i32>,
@@ -3957,7 +3957,7 @@ impl crate::traits::Decode for PacketMultiBlockChange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSelectAdvancementTab {
     pub id: Option<super::types::String>,
 }
@@ -3976,7 +3976,7 @@ impl crate::traits::Decode for PacketSelectAdvancementTab {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketServerData {
     pub motd: crate::nbt::Nbt,
     pub icon_bytes: Option<super::types::ByteArray>,
@@ -3998,7 +3998,7 @@ impl crate::traits::Decode for PacketServerData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketActionBar {
     pub text: crate::nbt::Nbt,
 }
@@ -4017,7 +4017,7 @@ impl crate::traits::Decode for PacketActionBar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldBorderCenter {
     pub x: f64,
     pub z: f64,
@@ -4039,7 +4039,7 @@ impl crate::traits::Decode for PacketWorldBorderCenter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldBorderLerpSize {
     pub old_diameter: f64,
     pub new_diameter: f64,
@@ -4064,7 +4064,7 @@ impl crate::traits::Decode for PacketWorldBorderLerpSize {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldBorderSize {
     pub diameter: f64,
 }
@@ -4083,7 +4083,7 @@ impl crate::traits::Decode for PacketWorldBorderSize {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldBorderWarningDelay {
     pub warning_time: i32,
 }
@@ -4102,7 +4102,7 @@ impl crate::traits::Decode for PacketWorldBorderWarningDelay {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWorldBorderWarningReach {
     pub warning_blocks: i32,
 }
@@ -4121,7 +4121,7 @@ impl crate::traits::Decode for PacketWorldBorderWarningReach {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCamera {
     pub camera_id: i32,
 }
@@ -4140,7 +4140,7 @@ impl crate::traits::Decode for PacketCamera {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateViewPosition {
     pub chunk_x: i32,
     pub chunk_z: i32,
@@ -4162,7 +4162,7 @@ impl crate::traits::Decode for PacketUpdateViewPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateViewDistance {
     pub view_distance: i32,
 }
@@ -4181,7 +4181,7 @@ impl crate::traits::Decode for PacketUpdateViewDistance {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetCursorItem {
     pub contents: super::types::Slot,
 }
@@ -4200,7 +4200,7 @@ impl crate::traits::Decode for PacketSetCursorItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSpawnPosition {
     pub location: super::types::Position,
     pub angle: f32,
@@ -4222,7 +4222,7 @@ impl crate::traits::Decode for PacketSpawnPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketScoreboardDisplayObjective {
     pub position: i32,
     pub name: super::types::String,
@@ -4244,7 +4244,7 @@ impl crate::traits::Decode for PacketScoreboardDisplayObjective {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityMetadata {
     pub entity_id: i32,
     pub metadata: super::types::EntityMetadata,
@@ -4266,7 +4266,7 @@ impl crate::traits::Decode for PacketEntityMetadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAttachEntity {
     pub entity_id: i32,
     pub vehicle_id: i32,
@@ -4288,7 +4288,7 @@ impl crate::traits::Decode for PacketAttachEntity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityVelocity {
     pub entity_id: i32,
     pub velocity: super::types::Vec3i16,
@@ -4310,7 +4310,7 @@ impl crate::traits::Decode for PacketEntityVelocity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityEquipmentEquipmentsItem {
     pub slot: i8,
     pub item: super::types::Slot,
@@ -4338,7 +4338,7 @@ impl PacketEntityEquipmentEquipmentsItem {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct PacketEntityEquipmentEquipments(pub Vec<PacketEntityEquipmentEquipmentsItem>);
 
 impl crate::traits::Encode for PacketEntityEquipmentEquipments {
@@ -4365,7 +4365,7 @@ impl crate::traits::Decode for PacketEntityEquipmentEquipments {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityEquipment {
     pub entity_id: i32,
     pub equipments: PacketEntityEquipmentEquipments,
@@ -4387,7 +4387,7 @@ impl crate::traits::Decode for PacketEntityEquipment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketExperience {
     pub experience_bar: f32,
     pub level: i32,
@@ -4412,7 +4412,7 @@ impl crate::traits::Decode for PacketExperience {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateHealth {
     pub health: f32,
     pub food: i32,
@@ -4437,7 +4437,7 @@ impl crate::traits::Decode for PacketUpdateHealth {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketHeldItemSlot {
     pub slot: i32,
 }
@@ -4456,7 +4456,7 @@ impl crate::traits::Decode for PacketHeldItemSlot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardObjectiveDisplayText {
     V0(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -4491,7 +4491,7 @@ impl PacketScoreboardObjectiveDisplayText {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardObjectiveType {
     V0(i32),
     V2(i32),
@@ -4526,7 +4526,7 @@ impl PacketScoreboardObjectiveType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardObjectiveNumberFormat {
     V0(Option<i32>),
     V2(Option<i32>),
@@ -4563,7 +4563,7 @@ impl PacketScoreboardObjectiveNumberFormat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardObjectiveStylingV0 {
     V1(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -4598,7 +4598,7 @@ impl PacketScoreboardObjectiveStylingV0 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardObjectiveStylingV2 {
     V1(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -4633,7 +4633,7 @@ impl PacketScoreboardObjectiveStylingV2 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardObjectiveStyling {
     V0(PacketScoreboardObjectiveStylingV0),
     V2(PacketScoreboardObjectiveStylingV2),
@@ -4669,7 +4669,7 @@ impl PacketScoreboardObjectiveStyling {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketScoreboardObjective {
     pub name: super::types::String,
     pub action: i8,
@@ -4745,7 +4745,7 @@ impl crate::traits::Decode for PacketScoreboardObjective {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetPassengers {
     pub entity_id: i32,
     pub passengers: Vec<i32>,
@@ -4770,7 +4770,7 @@ impl crate::traits::Decode for PacketSetPassengers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetPlayerInventory {
     pub slot_id: i32,
     pub contents: super::types::Slot,
@@ -4792,7 +4792,7 @@ impl crate::traits::Decode for PacketSetPlayerInventory {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsName {
     V0(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -4827,7 +4827,7 @@ impl PacketTeamsName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsFriendlyFire {
     V0(i8),
     V2(i8),
@@ -4862,7 +4862,7 @@ impl PacketTeamsFriendlyFire {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsNameTagVisibility {
     V0(super::types::String),
     V2(super::types::String),
@@ -4897,7 +4897,7 @@ impl PacketTeamsNameTagVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsCollisionRule {
     V0(super::types::String),
     V2(super::types::String),
@@ -4932,7 +4932,7 @@ impl PacketTeamsCollisionRule {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsFormatting {
     V0(i32),
     V2(i32),
@@ -4967,7 +4967,7 @@ impl PacketTeamsFormatting {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsPrefix {
     V0(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -5002,7 +5002,7 @@ impl PacketTeamsPrefix {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsSuffix {
     V0(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -5037,7 +5037,7 @@ impl PacketTeamsSuffix {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketTeamsPlayers {
     V0(Vec<super::types::String>),
     V3(Vec<super::types::String>),
@@ -5077,7 +5077,7 @@ impl PacketTeamsPlayers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTeams {
     pub team: super::types::String,
     pub mode: i8,
@@ -5206,7 +5206,7 @@ impl crate::traits::Decode for PacketTeams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketScoreboardScoreStyling {
     V1(crate::nbt::Nbt),
     V2(crate::nbt::Nbt),
@@ -5241,7 +5241,7 @@ impl PacketScoreboardScoreStyling {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketScoreboardScore {
     pub item_name: super::types::String,
     pub score_name: super::types::String,
@@ -5286,7 +5286,7 @@ impl crate::traits::Decode for PacketScoreboardScore {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSimulationDistance {
     pub distance: i32,
 }
@@ -5305,7 +5305,7 @@ impl crate::traits::Decode for PacketSimulationDistance {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetTitleSubtitle {
     pub text: crate::nbt::Nbt,
 }
@@ -5324,7 +5324,7 @@ impl crate::traits::Decode for PacketSetTitleSubtitle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateTime {
     pub age: i64,
     pub time: i64,
@@ -5349,7 +5349,7 @@ impl crate::traits::Decode for PacketUpdateTime {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetTitleText {
     pub text: crate::nbt::Nbt,
 }
@@ -5368,7 +5368,7 @@ impl crate::traits::Decode for PacketSetTitleText {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetTitleTime {
     pub fade_in: i32,
     pub stay: i32,
@@ -5393,7 +5393,7 @@ impl crate::traits::Decode for PacketSetTitleTime {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntitySoundEffect {
     pub sound: super::types::ItemSoundHolder,
     pub sound_category: super::types::SoundSource,
@@ -5427,7 +5427,7 @@ impl crate::traits::Decode for PacketEntitySoundEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSoundEffect {
     pub sound: super::types::ItemSoundHolder,
     pub sound_category: super::types::SoundSource,
@@ -5467,7 +5467,7 @@ impl crate::traits::Decode for PacketSoundEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketStopSoundSource {
     V1(i32),
     V3(i32),
@@ -5502,7 +5502,7 @@ impl PacketStopSoundSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketStopSoundSound {
     V2(super::types::String),
     V3(super::types::String),
@@ -5537,7 +5537,7 @@ impl PacketStopSoundSound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketStopSound {
     pub flags: i8,
     pub source: PacketStopSoundSource,
@@ -5582,7 +5582,7 @@ impl crate::traits::Decode for PacketStopSound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSystemChat {
     pub content: crate::nbt::Nbt,
     pub is_action_bar: bool,
@@ -5604,7 +5604,7 @@ impl crate::traits::Decode for PacketSystemChat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerlistHeader {
     pub header: crate::nbt::Nbt,
     pub footer: crate::nbt::Nbt,
@@ -5626,7 +5626,7 @@ impl crate::traits::Decode for PacketPlayerlistHeader {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketNbtQueryResponse {
     pub transaction_id: i32,
     pub nbt: Option<crate::nbt::Nbt>,
@@ -5648,7 +5648,7 @@ impl crate::traits::Decode for PacketNbtQueryResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCollect {
     pub collected_entity_id: i32,
     pub collector_entity_id: i32,
@@ -5673,7 +5673,7 @@ impl crate::traits::Decode for PacketCollect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityTeleport {
     pub entity_id: i32,
     pub x: f64,
@@ -5710,7 +5710,7 @@ impl crate::traits::Decode for PacketEntityTeleport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetTickingState {
     pub tick_rate: f32,
     pub is_frozen: bool,
@@ -5732,7 +5732,7 @@ impl crate::traits::Decode for PacketSetTickingState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketStepTick {
     pub tick_steps: i32,
 }
@@ -5751,7 +5751,7 @@ impl crate::traits::Decode for PacketStepTick {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PacketAdvancementsAdvancementMappingItemValueDisplayDataValueFlags {
     pub unused: u32,
     pub hidden: bool,
@@ -5774,7 +5774,7 @@ impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItemValueDisp
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundTexture {
     True(super::types::String),
     Default,
@@ -5804,7 +5804,7 @@ impl PacketAdvancementsAdvancementMappingItemValueDisplayDataValueBackgroundText
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancementsAdvancementMappingItemValueDisplayDataValue {
     pub title: crate::nbt::Nbt,
     pub description: crate::nbt::Nbt,
@@ -5851,7 +5851,7 @@ impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItemValueDisp
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancementsAdvancementMappingItemValue {
     pub parent_id: Option<super::types::String>,
     pub display_data: Option<PacketAdvancementsAdvancementMappingItemValueDisplayDataValue>,
@@ -5879,7 +5879,7 @@ impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItemValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancementsAdvancementMappingItem {
     pub key: super::types::String,
     pub value: PacketAdvancementsAdvancementMappingItemValue,
@@ -5901,7 +5901,7 @@ impl crate::traits::Decode for PacketAdvancementsAdvancementMappingItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancementsProgressMappingItemValueItem {
     pub criterion_identifier: super::types::String,
     pub criterion_progress: Option<i64>,
@@ -5926,7 +5926,7 @@ impl crate::traits::Decode for PacketAdvancementsProgressMappingItemValueItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancementsProgressMappingItem {
     pub key: super::types::String,
     pub value: Vec<PacketAdvancementsProgressMappingItemValueItem>,
@@ -5948,7 +5948,7 @@ impl crate::traits::Decode for PacketAdvancementsProgressMappingItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancements {
     pub reset: bool,
     pub advancement_mapping: Vec<PacketAdvancementsAdvancementMappingItem>,
@@ -5976,7 +5976,7 @@ impl crate::traits::Decode for PacketAdvancements {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum PacketEntityUpdateAttributesPropertiesItemKey {
     GenericArmor,
     GenericArmorToughness,
@@ -6063,7 +6063,7 @@ impl crate::traits::Decode for PacketEntityUpdateAttributesPropertiesItemKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityUpdateAttributesPropertiesItemModifiersItem {
     pub uuid: super::types::String,
     pub amount: f64,
@@ -6088,7 +6088,7 @@ impl crate::traits::Decode for PacketEntityUpdateAttributesPropertiesItemModifie
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityUpdateAttributesPropertiesItem {
     pub key: PacketEntityUpdateAttributesPropertiesItemKey,
     pub value: f64,
@@ -6113,7 +6113,7 @@ impl crate::traits::Decode for PacketEntityUpdateAttributesPropertiesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityUpdateAttributes {
     pub entity_id: i32,
     pub properties: Vec<PacketEntityUpdateAttributesPropertiesItem>,
@@ -6135,7 +6135,7 @@ impl crate::traits::Decode for PacketEntityUpdateAttributes {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityEffect {
     pub entity_id: i32,
     pub effect_id: i32,
@@ -6166,7 +6166,7 @@ impl crate::traits::Decode for PacketEntityEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDeclareRecipesRecipesItem {
     pub name: super::types::String,
     pub items: Vec<i32>,
@@ -6191,7 +6191,7 @@ impl crate::traits::Decode for PacketDeclareRecipesRecipesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDeclareRecipesStoneCutterRecipesItem {
     pub input_: super::types::IdSet,
     pub slot_display: SlotDisplay,
@@ -6213,7 +6213,7 @@ impl crate::traits::Decode for PacketDeclareRecipesStoneCutterRecipesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDeclareRecipes {
     pub recipes: Vec<PacketDeclareRecipesRecipesItem>,
     pub stone_cutter_recipes: Vec<PacketDeclareRecipesStoneCutterRecipesItem>,
@@ -6235,7 +6235,7 @@ impl crate::traits::Decode for PacketDeclareRecipes {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTagsTagsItem {
     pub tag_type: super::types::String,
     pub tags: super::types::Tags,
@@ -6257,7 +6257,7 @@ impl crate::traits::Decode for PacketTagsTagsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTags {
     pub tags: Vec<PacketTagsTagsItem>,
 }
@@ -6276,7 +6276,7 @@ impl crate::traits::Decode for PacketTags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetProjectilePower {
     pub id: i32,
     pub acceleration_power: f64,
@@ -6298,7 +6298,7 @@ impl crate::traits::Decode for PacketSetProjectilePower {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTeleportConfirm {
     pub teleport_id: i32,
 }
@@ -6317,7 +6317,7 @@ impl crate::traits::Decode for PacketTeleportConfirm {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketQueryBlockNbt {
     pub transaction_id: i32,
     pub location: super::types::Position,
@@ -6339,7 +6339,7 @@ impl crate::traits::Decode for PacketQueryBlockNbt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSelectBundleItem {
     pub slot_id: i32,
     pub selected_item_index: i32,
@@ -6361,7 +6361,7 @@ impl crate::traits::Decode for PacketSelectBundleItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetDifficulty {
     pub new_difficulty: u8,
 }
@@ -6380,7 +6380,7 @@ impl crate::traits::Decode for PacketSetDifficulty {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketMessageAcknowledgement {
     pub count: i32,
 }
@@ -6399,7 +6399,7 @@ impl crate::traits::Decode for PacketMessageAcknowledgement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChatCommand {
     pub command: super::types::String,
 }
@@ -6418,7 +6418,7 @@ impl crate::traits::Decode for PacketChatCommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChatCommandSignedArgumentSignaturesItem {
     pub argument_name: super::types::String,
     pub signature: Vec<u8>,
@@ -6441,7 +6441,7 @@ impl crate::traits::Decode for PacketChatCommandSignedArgumentSignaturesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChatCommandSigned {
     pub command: super::types::String,
     pub timestamp: i64,
@@ -6476,7 +6476,7 @@ impl crate::traits::Decode for PacketChatCommandSigned {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChatMessage {
     pub message: super::types::String,
     pub timestamp: i64,
@@ -6515,7 +6515,7 @@ impl crate::traits::Decode for PacketChatMessage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChatSessionUpdate {
     pub session_uuid: u128,
     pub expire_time: i64,
@@ -6543,7 +6543,7 @@ impl crate::traits::Decode for PacketChatSessionUpdate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketChunkBatchReceived {
     pub chunks_per_tick: f32,
 }
@@ -6562,7 +6562,7 @@ impl crate::traits::Decode for PacketChunkBatchReceived {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketClientCommand {
     pub action_id: i32,
 }
@@ -6581,7 +6581,7 @@ impl crate::traits::Decode for PacketClientCommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTabCompleteServerbound {
     pub transaction_id: i32,
     pub text: super::types::String,
@@ -6603,7 +6603,7 @@ impl crate::traits::Decode for PacketTabCompleteServerbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEnchantItem {
     pub window_id: i32,
     pub enchantment: i32,
@@ -6625,7 +6625,7 @@ impl crate::traits::Decode for PacketEnchantItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWindowClickChangedSlotsItem {
     pub location: i16,
     pub item: super::types::Slot,
@@ -6647,7 +6647,7 @@ impl crate::traits::Decode for PacketWindowClickChangedSlotsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketWindowClick {
     pub window_id: i32,
     pub state_id: i32,
@@ -6684,7 +6684,7 @@ impl crate::traits::Decode for PacketWindowClick {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetSlotState {
     pub slot_id: i32,
     pub window_id: i32,
@@ -6709,7 +6709,7 @@ impl crate::traits::Decode for PacketSetSlotState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDebugSampleSubscription {
     pub r#type: i32,
 }
@@ -6728,7 +6728,7 @@ impl crate::traits::Decode for PacketDebugSampleSubscription {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEditBook {
     pub hand: i32,
     pub pages: Vec<super::types::String>,
@@ -6753,7 +6753,7 @@ impl crate::traits::Decode for PacketEditBook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketQueryEntityNbt {
     pub transaction_id: i32,
     pub entity_id: i32,
@@ -6775,7 +6775,7 @@ impl crate::traits::Decode for PacketQueryEntityNbt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketUseEntityX {
     V2(f32),
     Default,
@@ -6805,7 +6805,7 @@ impl PacketUseEntityX {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketUseEntityY {
     V2(f32),
     Default,
@@ -6835,7 +6835,7 @@ impl PacketUseEntityY {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketUseEntityZ {
     V2(f32),
     Default,
@@ -6865,7 +6865,7 @@ impl PacketUseEntityZ {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketUseEntityHand {
     V0(i32),
     V2(i32),
@@ -6900,7 +6900,7 @@ impl PacketUseEntityHand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUseEntity {
     pub target: i32,
     pub mouse: i32,
@@ -6968,7 +6968,7 @@ impl crate::traits::Decode for PacketUseEntity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketGenerateStructure {
     pub location: super::types::Position,
     pub levels: i32,
@@ -6993,7 +6993,7 @@ impl crate::traits::Decode for PacketGenerateStructure {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLockDifficulty {
     pub locked: bool,
 }
@@ -7012,7 +7012,7 @@ impl crate::traits::Decode for PacketLockDifficulty {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct MovementFlags(pub u8);
 
 impl MovementFlags {
@@ -7034,7 +7034,7 @@ impl crate::traits::Decode for MovementFlags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPositionServerbound {
     pub x: f64,
     pub y: f64,
@@ -7062,7 +7062,7 @@ impl crate::traits::Decode for PacketPositionServerbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPositionLook {
     pub x: f64,
     pub y: f64,
@@ -7096,7 +7096,7 @@ impl crate::traits::Decode for PacketPositionLook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLook {
     pub yaw: f32,
     pub pitch: f32,
@@ -7121,7 +7121,7 @@ impl crate::traits::Decode for PacketLook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketFlying {
     pub flags: MovementFlags,
 }
@@ -7140,7 +7140,7 @@ impl crate::traits::Decode for PacketFlying {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketVehicleMoveServerbound {
     pub x: f64,
     pub y: f64,
@@ -7174,7 +7174,7 @@ impl crate::traits::Decode for PacketVehicleMoveServerbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSteerBoat {
     pub left_paddle: bool,
     pub right_paddle: bool,
@@ -7196,7 +7196,7 @@ impl crate::traits::Decode for PacketSteerBoat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPickItemFromBlock {
     pub position: super::types::Position,
     pub include_data: bool,
@@ -7218,7 +7218,7 @@ impl crate::traits::Decode for PacketPickItemFromBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPickItemFromEntity {
     pub entity_id: i32,
     pub include_data: bool,
@@ -7240,7 +7240,7 @@ impl crate::traits::Decode for PacketPickItemFromEntity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPingRequest {
     pub id: i64,
 }
@@ -7259,7 +7259,7 @@ impl crate::traits::Decode for PacketPingRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCraftRecipeRequest {
     pub window_id: i32,
     pub recipe_id: i32,
@@ -7284,7 +7284,7 @@ impl crate::traits::Decode for PacketCraftRecipeRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAbilitiesServerbound {
     pub flags: i8,
 }
@@ -7303,7 +7303,7 @@ impl crate::traits::Decode for PacketAbilitiesServerbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketBlockDig {
     pub status: i32,
     pub location: super::types::Position,
@@ -7331,7 +7331,7 @@ impl crate::traits::Decode for PacketBlockDig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEntityAction {
     pub entity_id: i32,
     pub action_id: i32,
@@ -7356,7 +7356,7 @@ impl crate::traits::Decode for PacketEntityAction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PacketPlayerInputInputs(pub u8);
 
 impl PacketPlayerInputInputs {
@@ -7383,7 +7383,7 @@ impl crate::traits::Decode for PacketPlayerInputInputs {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPlayerInput {
     pub inputs: PacketPlayerInputInputs,
 }
@@ -7402,7 +7402,7 @@ impl crate::traits::Decode for PacketPlayerInput {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPong {
     pub id: i32,
 }
@@ -7421,7 +7421,7 @@ impl crate::traits::Decode for PacketPong {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRecipeBook {
     pub book_id: i32,
     pub book_open: bool,
@@ -7446,7 +7446,7 @@ impl crate::traits::Decode for PacketRecipeBook {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDisplayedRecipe {
     pub recipe_id: i32,
 }
@@ -7465,7 +7465,7 @@ impl crate::traits::Decode for PacketDisplayedRecipe {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketNameItem {
     pub name: super::types::String,
 }
@@ -7484,7 +7484,7 @@ impl crate::traits::Decode for PacketNameItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketResourcePackReceive {
     pub uuid: u128,
     pub result: i32,
@@ -7506,7 +7506,7 @@ impl crate::traits::Decode for PacketResourcePackReceive {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketAdvancementTabTabId {
     V0(super::types::String),
     V1,
@@ -7539,7 +7539,7 @@ impl PacketAdvancementTabTabId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketAdvancementTab {
     pub action: i32,
     pub tab_id: PacketAdvancementTabTabId,
@@ -7569,7 +7569,7 @@ impl crate::traits::Decode for PacketAdvancementTab {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSelectTrade {
     pub slot: i32,
 }
@@ -7588,7 +7588,7 @@ impl crate::traits::Decode for PacketSelectTrade {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetBeaconEffect {
     pub primary_effect: Option<i32>,
     pub secondary_effect: Option<i32>,
@@ -7612,7 +7612,7 @@ impl crate::traits::Decode for PacketSetBeaconEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketHeldItemSlotServerbound {
     pub slot_id: i16,
 }
@@ -7631,7 +7631,7 @@ impl crate::traits::Decode for PacketHeldItemSlotServerbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateCommandBlock {
     pub location: super::types::Position,
     pub command: super::types::String,
@@ -7659,7 +7659,7 @@ impl crate::traits::Decode for PacketUpdateCommandBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateCommandBlockMinecart {
     pub entity_id: i32,
     pub command: super::types::String,
@@ -7684,7 +7684,7 @@ impl crate::traits::Decode for PacketUpdateCommandBlockMinecart {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetCreativeSlot {
     pub slot: i16,
     pub item: super::types::Slot,
@@ -7706,7 +7706,7 @@ impl crate::traits::Decode for PacketSetCreativeSlot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateJigsawBlock {
     pub location: super::types::Position,
     pub name: super::types::String,
@@ -7746,7 +7746,7 @@ impl crate::traits::Decode for PacketUpdateJigsawBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateStructureBlock {
     pub location: super::types::Position,
     pub action: i32,
@@ -7810,7 +7810,7 @@ impl crate::traits::Decode for PacketUpdateStructureBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUpdateSign {
     pub location: super::types::Position,
     pub is_front_text: bool,
@@ -7844,7 +7844,7 @@ impl crate::traits::Decode for PacketUpdateSign {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketArmAnimation {
     pub hand: i32,
 }
@@ -7863,7 +7863,7 @@ impl crate::traits::Decode for PacketArmAnimation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSpectate {
     pub target: u128,
 }
@@ -7882,7 +7882,7 @@ impl crate::traits::Decode for PacketSpectate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketBlockPlace {
     pub hand: i32,
     pub location: super::types::Position,
@@ -7925,7 +7925,7 @@ impl crate::traits::Decode for PacketBlockPlace {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketUseItem {
     pub hand: i32,
     pub sequence: i32,
@@ -8082,7 +8082,7 @@ pub const CLIENTBOUND_SET_PROJECTILE_POWER_ID: i32 = 128;
 pub const CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID: i32 = 129;
 pub const CLIENTBOUND_SERVER_LINKS_ID: i32 = 130;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundPlayPacket {
     BundleDelimiter,
     SpawnEntity(PacketSpawnEntity),
@@ -9354,7 +9354,7 @@ pub const SERVERBOUND_SPECTATE_ID: i32 = 59;
 pub const SERVERBOUND_BLOCK_PLACE_ID: i32 = 60;
 pub const SERVERBOUND_USE_ITEM_ID: i32 = 61;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundPlayPacket {
     TeleportConfirm(PacketTeleportConfirm),
     QueryBlockNbt(PacketQueryBlockNbt),

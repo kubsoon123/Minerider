@@ -9,7 +9,7 @@
 #![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
 pub type String = std::string::String;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ArmorTrimMaterialOverrideArmorAssetsItem {
     pub key: String,
     pub value: String,
@@ -31,7 +31,7 @@ impl crate::traits::Decode for ArmorTrimMaterialOverrideArmorAssetsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ArmorTrimMaterial {
     pub asset_name: String,
     pub ingredient_id: i32,
@@ -59,7 +59,7 @@ impl crate::traits::Decode for ArmorTrimMaterial {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ArmorTrimPattern {
     pub asset_id: String,
     pub template_item_id: i32,
@@ -87,7 +87,7 @@ impl crate::traits::Decode for ArmorTrimPattern {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct BannerPattern {
     pub asset_id: String,
     pub translation_key: String,
@@ -109,7 +109,7 @@ impl crate::traits::Decode for BannerPattern {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct BannerPatternLayer {
     pub pattern: crate::holder::Holder<BannerPattern>,
     pub color_id: i32,
@@ -133,7 +133,7 @@ impl crate::traits::Decode for BannerPatternLayer {
 
 pub type ByteArray = Vec<u8>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct EntityMetadataPaintingVariant {
     pub width: i32,
     pub height: i32,
@@ -166,7 +166,7 @@ impl crate::traits::Decode for EntityMetadataPaintingVariant {
 
 pub type IdSet = crate::holder::HolderSet;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct EntityMetadataWolfVariant {
     pub wild_texture: String,
     pub tame_texture: String,
@@ -194,7 +194,7 @@ impl crate::traits::Decode for EntityMetadataWolfVariant {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemSoundEvent {
     pub sound_name: String,
     pub fixed_range: Option<f32>,
@@ -218,7 +218,7 @@ impl crate::traits::Decode for ItemSoundEvent {
 
 pub type ItemSoundHolder = crate::holder::Holder<ItemSoundEvent>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct InstrumentData {
     pub sound_event: ItemSoundHolder,
     pub use_duration: f32,
@@ -246,7 +246,7 @@ impl crate::traits::Decode for InstrumentData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemBlockPropertyValueFalse {
     pub min_value: String,
     pub max_value: String,
@@ -268,7 +268,7 @@ impl crate::traits::Decode for ItemBlockPropertyValueFalse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemBlockPropertyValueTrue {
     pub exact_value: String,
 }
@@ -287,7 +287,7 @@ impl crate::traits::Decode for ItemBlockPropertyValueTrue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ItemBlockPropertyValue {
     False(ItemBlockPropertyValueFalse),
     True(ItemBlockPropertyValueTrue),
@@ -319,7 +319,7 @@ impl ItemBlockPropertyValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemBlockProperty {
     pub name: String,
     pub is_exact_match: bool,
@@ -352,7 +352,7 @@ impl crate::traits::Decode for ItemBlockProperty {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemBlockPredicate {
     pub block_set: Option<crate::holder::HolderSet>,
     pub properties: Option<Vec<ItemBlockProperty>>,
@@ -377,7 +377,7 @@ impl crate::traits::Decode for ItemBlockPredicate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemBookPage {
     pub content: String,
     pub filtered_content: Option<String>,
@@ -399,7 +399,7 @@ impl crate::traits::Decode for ItemBookPage {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ItemConsumeEffectType {
     ApplyEffects,
     RemoveEffects,
@@ -435,7 +435,7 @@ impl crate::traits::Decode for ItemConsumeEffectType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemEffectDetail {
     pub amplifier: i32,
     pub duration: i32,
@@ -469,7 +469,7 @@ impl crate::traits::Decode for ItemEffectDetail {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemPotionEffect {
     pub id: i32,
     pub details: ItemEffectDetail,
@@ -491,7 +491,7 @@ impl crate::traits::Decode for ItemPotionEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemConsumeEffectValueApplyEffects {
     pub effects: Vec<ItemPotionEffect>,
     pub probability: f32,
@@ -513,7 +513,7 @@ impl crate::traits::Decode for ItemConsumeEffectValueApplyEffects {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemConsumeEffectValuePlaySound {
     pub sound: ItemSoundHolder,
 }
@@ -532,7 +532,7 @@ impl crate::traits::Decode for ItemConsumeEffectValuePlaySound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemConsumeEffectValueRemoveEffects {
     pub effects: IdSet,
 }
@@ -551,7 +551,7 @@ impl crate::traits::Decode for ItemConsumeEffectValueRemoveEffects {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemConsumeEffectValueTeleportRandomly {
     pub diameter: f32,
 }
@@ -570,7 +570,7 @@ impl crate::traits::Decode for ItemConsumeEffectValueTeleportRandomly {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ItemConsumeEffectValue {
     ApplyEffects(ItemConsumeEffectValueApplyEffects),
     ClearAllEffects,
@@ -615,7 +615,7 @@ impl ItemConsumeEffectValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemConsumeEffect {
     pub r#type: ItemConsumeEffectType,
     pub value: ItemConsumeEffectValue,
@@ -652,7 +652,7 @@ impl crate::traits::Decode for ItemConsumeEffect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ItemFireworkExplosionShape {
     SmallBall,
     LargeBall,
@@ -688,7 +688,7 @@ impl crate::traits::Decode for ItemFireworkExplosionShape {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemFireworkExplosion {
     pub shape: ItemFireworkExplosionShape,
     pub colors: Vec<i32>,
@@ -725,7 +725,7 @@ impl crate::traits::Decode for ItemFireworkExplosion {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ItemWrittenBookPage {
     pub content: crate::nbt::Nbt,
     pub filtered_content: Option<crate::nbt::Nbt>,
@@ -747,7 +747,7 @@ impl crate::traits::Decode for ItemWrittenBookPage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct JukeboxSongData {
     pub sound_event: ItemSoundHolder,
     pub description: crate::nbt::Nbt,
@@ -775,7 +775,7 @@ impl crate::traits::Decode for JukeboxSongData {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ParticleType {
     AngryVillager,
     Block,
@@ -1132,7 +1132,7 @@ impl crate::traits::Decode for ParticleType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ParticleDataDust {
     pub red: f32,
     pub green: f32,
@@ -1160,7 +1160,7 @@ impl crate::traits::Decode for ParticleDataDust {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ParticleDataDustColorTransition {
     pub from_red: f32,
     pub from_green: f32,
@@ -1197,7 +1197,7 @@ impl crate::traits::Decode for ParticleDataDustColorTransition {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotComponentType {
     CustomData,
     MaxStackSize,
@@ -1419,7 +1419,7 @@ impl crate::traits::Decode for SlotComponentType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotComponentDataAttributeModifiersAttributesItemOperation {
     Add,
     MultiplyBase,
@@ -1449,7 +1449,7 @@ impl crate::traits::Decode for SlotComponentDataAttributeModifiersAttributesItem
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotComponentDataAttributeModifiersAttributesItemSlot {
     Any,
     MainHand,
@@ -1500,7 +1500,7 @@ impl crate::traits::Decode for SlotComponentDataAttributeModifiersAttributesItem
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataAttributeModifiersAttributesItem {
     pub type_id: i32,
     pub name: String,
@@ -1531,7 +1531,7 @@ impl crate::traits::Decode for SlotComponentDataAttributeModifiersAttributesItem
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataAttributeModifiers {
     pub attributes: Vec<SlotComponentDataAttributeModifiersAttributesItem>,
     pub show_tooltip: bool,
@@ -1553,7 +1553,7 @@ impl crate::traits::Decode for SlotComponentDataAttributeModifiers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataBannerPatterns {
     pub layers: Vec<BannerPatternLayer>,
 }
@@ -1572,7 +1572,7 @@ impl crate::traits::Decode for SlotComponentDataBannerPatterns {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataBeesBeesItem {
     pub nbt_data: crate::nbt::Nbt,
     pub ticks_in_hive: i32,
@@ -1597,7 +1597,7 @@ impl crate::traits::Decode for SlotComponentDataBeesBeesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataBees {
     pub bees: Vec<SlotComponentDataBeesBeesItem>,
 }
@@ -1616,7 +1616,7 @@ impl crate::traits::Decode for SlotComponentDataBees {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataBlockStatePropertiesItem {
     pub name: String,
     pub value: String,
@@ -1638,7 +1638,7 @@ impl crate::traits::Decode for SlotComponentDataBlockStatePropertiesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataBlockState {
     pub properties: Vec<SlotComponentDataBlockStatePropertiesItem>,
 }
@@ -1657,7 +1657,7 @@ impl crate::traits::Decode for SlotComponentDataBlockState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataBundleContents {
     pub contents: Vec<Slot>,
 }
@@ -1676,7 +1676,7 @@ impl crate::traits::Decode for SlotComponentDataBundleContents {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataCanBreak {
     pub predicates: Vec<ItemBlockPredicate>,
     pub show_tooltip: bool,
@@ -1698,7 +1698,7 @@ impl crate::traits::Decode for SlotComponentDataCanBreak {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataCanPlaceOn {
     pub predicates: Vec<ItemBlockPredicate>,
     pub show_tooltip: bool,
@@ -1720,7 +1720,7 @@ impl crate::traits::Decode for SlotComponentDataCanPlaceOn {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataChargedProjectiles {
     pub projectiles: Vec<Slot>,
 }
@@ -1739,7 +1739,7 @@ impl crate::traits::Decode for SlotComponentDataChargedProjectiles {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotComponentDataConsumableAnimation {
     None,
     Eat,
@@ -1790,7 +1790,7 @@ impl crate::traits::Decode for SlotComponentDataConsumableAnimation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataConsumable {
     pub consume_seconds: f32,
     pub animation: SlotComponentDataConsumableAnimation,
@@ -1821,7 +1821,7 @@ impl crate::traits::Decode for SlotComponentDataConsumable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataContainer {
     pub contents: Vec<Slot>,
 }
@@ -1840,7 +1840,7 @@ impl crate::traits::Decode for SlotComponentDataContainer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataCustomModelData {
     pub floats: Vec<f32>,
     pub flags: Vec<bool>,
@@ -1871,7 +1871,7 @@ impl crate::traits::Decode for SlotComponentDataCustomModelData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataDeathProtection {
     pub effects: Vec<ItemConsumeEffect>,
 }
@@ -1890,7 +1890,7 @@ impl crate::traits::Decode for SlotComponentDataDeathProtection {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataDyedColor {
     pub color: i32,
     pub show_tooltip: bool,
@@ -1912,7 +1912,7 @@ impl crate::traits::Decode for SlotComponentDataDyedColor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataEnchantmentsEnchantmentsItem {
     pub id: i32,
     pub level: i32,
@@ -1934,7 +1934,7 @@ impl crate::traits::Decode for SlotComponentDataEnchantmentsEnchantmentsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataEnchantments {
     pub enchantments: Vec<SlotComponentDataEnchantmentsEnchantmentsItem>,
     pub show_tooltip: bool,
@@ -1956,7 +1956,7 @@ impl crate::traits::Decode for SlotComponentDataEnchantments {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotComponentDataEquippableSlot {
     MainHand,
     OffHand,
@@ -1998,7 +1998,7 @@ impl crate::traits::Decode for SlotComponentDataEquippableSlot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataEquippable {
     pub slot: SlotComponentDataEquippableSlot,
     pub sound: ItemSoundHolder,
@@ -2038,7 +2038,7 @@ impl crate::traits::Decode for SlotComponentDataEquippable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataFireworks {
     pub flight_duration: i32,
     pub explosions: Vec<ItemFireworkExplosion>,
@@ -2060,7 +2060,7 @@ impl crate::traits::Decode for SlotComponentDataFireworks {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataFood {
     pub nutrition: i32,
     pub saturation_modifier: f32,
@@ -2085,7 +2085,7 @@ impl crate::traits::Decode for SlotComponentDataFood {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum SlotComponentDataJukeboxPlayableSong {
     False(String),
     True(crate::holder::Holder<JukeboxSongData>),
@@ -2117,7 +2117,7 @@ impl SlotComponentDataJukeboxPlayableSong {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataJukeboxPlayable {
     pub has_holder: bool,
     pub song: SlotComponentDataJukeboxPlayableSong,
@@ -2150,7 +2150,7 @@ impl crate::traits::Decode for SlotComponentDataJukeboxPlayable {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct Position {
     pub x: i32,
     pub z: i32,
@@ -2172,7 +2172,7 @@ impl crate::traits::Decode for Position {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataLodestoneTrackerGlobalPositionValue {
     pub dimension: String,
     pub position: Position,
@@ -2194,7 +2194,7 @@ impl crate::traits::Decode for SlotComponentDataLodestoneTrackerGlobalPositionVa
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataLodestoneTracker {
     pub global_position: Option<SlotComponentDataLodestoneTrackerGlobalPositionValue>,
     pub tracked: bool,
@@ -2216,7 +2216,7 @@ impl crate::traits::Decode for SlotComponentDataLodestoneTracker {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataPotDecorations {
     pub decorations: Vec<i32>,
 }
@@ -2238,7 +2238,7 @@ impl crate::traits::Decode for SlotComponentDataPotDecorations {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataPotionContents {
     pub potion_id: Option<i32>,
     pub custom_color: Option<i32>,
@@ -2270,7 +2270,7 @@ impl crate::traits::Decode for SlotComponentDataPotionContents {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataProfilePropertiesItem {
     pub name: String,
     pub value: String,
@@ -2295,7 +2295,7 @@ impl crate::traits::Decode for SlotComponentDataProfilePropertiesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataProfile {
     pub name: Option<String>,
     pub uuid: Option<u128>,
@@ -2320,7 +2320,7 @@ impl crate::traits::Decode for SlotComponentDataProfile {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SlotComponentDataRarity {
     Common,
     Uncommon,
@@ -2353,7 +2353,7 @@ impl crate::traits::Decode for SlotComponentDataRarity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataRepairable {
     pub items: IdSet,
 }
@@ -2372,7 +2372,7 @@ impl crate::traits::Decode for SlotComponentDataRepairable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataStoredEnchantmentsEnchantmentsItem {
     pub id: i32,
     pub level: i32,
@@ -2394,7 +2394,7 @@ impl crate::traits::Decode for SlotComponentDataStoredEnchantmentsEnchantmentsIt
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataStoredEnchantments {
     pub enchantments: Vec<SlotComponentDataStoredEnchantmentsEnchantmentsItem>,
     pub show_in_tooltip: bool,
@@ -2416,7 +2416,7 @@ impl crate::traits::Decode for SlotComponentDataStoredEnchantments {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataSuspiciousStewEffectsEffectsItem {
     pub effect: i32,
     pub duration: i32,
@@ -2438,7 +2438,7 @@ impl crate::traits::Decode for SlotComponentDataSuspiciousStewEffectsEffectsItem
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataSuspiciousStewEffects {
     pub effects: Vec<SlotComponentDataSuspiciousStewEffectsEffectsItem>,
 }
@@ -2457,7 +2457,7 @@ impl crate::traits::Decode for SlotComponentDataSuspiciousStewEffects {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataToolRulesItem {
     pub blocks: IdSet,
     pub speed: Option<f32>,
@@ -2482,7 +2482,7 @@ impl crate::traits::Decode for SlotComponentDataToolRulesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataTool {
     pub rules: Vec<SlotComponentDataToolRulesItem>,
     pub default_mining_speed: f32,
@@ -2507,7 +2507,7 @@ impl crate::traits::Decode for SlotComponentDataTool {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataTrim {
     pub material: crate::holder::Holder<ArmorTrimMaterial>,
     pub pattern: crate::holder::Holder<ArmorTrimPattern>,
@@ -2532,7 +2532,7 @@ impl crate::traits::Decode for SlotComponentDataTrim {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataUseCooldown {
     pub seconds: f32,
     pub cooldown_group: Option<String>,
@@ -2554,7 +2554,7 @@ impl crate::traits::Decode for SlotComponentDataUseCooldown {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataWritableBookContent {
     pub pages: Vec<ItemBookPage>,
 }
@@ -2573,7 +2573,7 @@ impl crate::traits::Decode for SlotComponentDataWritableBookContent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponentDataWrittenBookContent {
     pub raw_title: String,
     pub filtered_title: Option<String>,
@@ -2607,7 +2607,7 @@ impl crate::traits::Decode for SlotComponentDataWrittenBookContent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum SlotComponentData {
     AttributeModifiers(SlotComponentDataAttributeModifiers),
     BannerPatterns(SlotComponentDataBannerPatterns),
@@ -2959,7 +2959,7 @@ impl SlotComponentData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotComponent {
     pub r#type: SlotComponentType,
     pub data: SlotComponentData,
@@ -3179,7 +3179,7 @@ impl crate::traits::Decode for SlotComponent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotValueDefaultRemoveComponentsItem {
     pub r#type: SlotComponentType,
 }
@@ -3198,7 +3198,7 @@ impl crate::traits::Decode for SlotValueDefaultRemoveComponentsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SlotValueDefault {
     pub item_id: i32,
     pub added_component_count: i32,
@@ -3235,7 +3235,7 @@ impl crate::traits::Decode for SlotValueDefault {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum SlotValue {
     V0,
     Default(SlotValueDefault),
@@ -3265,7 +3265,7 @@ impl SlotValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Slot {
     pub item_count: i32,
     pub value: SlotValue,
@@ -3294,7 +3294,7 @@ impl crate::traits::Decode for Slot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Vec3f64 {
     pub x: f64,
     pub y: f64,
@@ -3319,7 +3319,7 @@ impl crate::traits::Decode for Vec3f64 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ParticleDataTrail {
     pub target: Vec3f64,
     pub color: u8,
@@ -3341,7 +3341,7 @@ impl crate::traits::Decode for ParticleDataTrail {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ParticleDataVibrationPositionType {
     Block,
     Entity,
@@ -3368,7 +3368,7 @@ impl crate::traits::Decode for ParticleDataVibrationPositionType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ParticleDataVibrationPositionEntity {
     pub entity_id: i32,
     pub entity_eye_height: f32,
@@ -3390,7 +3390,7 @@ impl crate::traits::Decode for ParticleDataVibrationPositionEntity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ParticleDataVibrationPosition {
     Block(Position),
     Entity(ParticleDataVibrationPositionEntity),
@@ -3422,7 +3422,7 @@ impl ParticleDataVibrationPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ParticleDataVibration {
     pub position_type: ParticleDataVibrationPositionType,
     pub position: ParticleDataVibrationPosition,
@@ -3455,7 +3455,7 @@ impl crate::traits::Decode for ParticleDataVibration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ParticleData {
     Block(i32),
     BlockCrumble(i32),
@@ -3545,7 +3545,7 @@ impl ParticleData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Particle {
     pub r#type: ParticleType,
     pub data: ParticleData,
@@ -3610,7 +3610,7 @@ impl crate::traits::Decode for Particle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ServerLinkType {
     BugReport,
     CommunityGuidelines,
@@ -3661,7 +3661,7 @@ impl crate::traits::Decode for ServerLinkType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ChatSessionValuePublicKey {
     pub expire_time: i64,
     pub key_bytes: Vec<u8>,
@@ -3686,7 +3686,7 @@ impl crate::traits::Decode for ChatSessionValuePublicKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ChatSessionValue {
     pub uuid: u128,
     pub public_key: ChatSessionValuePublicKey,
@@ -3710,7 +3710,7 @@ impl crate::traits::Decode for ChatSessionValue {
 
 pub type ChatSession = Option<ChatSessionValue>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct ChunkBlockEntityValue {
     pub x: u8,
     pub z: u8,
@@ -3731,7 +3731,7 @@ impl crate::traits::Decode for ChunkBlockEntityValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ChunkBlockEntity {
     pub value: ChunkBlockEntityValue,
     pub y: i16,
@@ -3759,7 +3759,7 @@ impl crate::traits::Decode for ChunkBlockEntity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeFlags {
     pub unused: u8,
     pub has_custom_suggestions: bool,
@@ -3783,7 +3783,7 @@ impl crate::traits::Decode for CommandNodeFlags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeRedirectNode {
     True(i32),
     Default,
@@ -3813,7 +3813,7 @@ impl CommandNodeRedirectNode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV1 {
     pub name: String,
 }
@@ -3832,7 +3832,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2Parser {
     BrigadierBool,
     BrigadierFloat,
@@ -4015,7 +4015,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2Parser {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleFlags {
     pub unused: u8,
     pub max_present: bool,
@@ -4037,7 +4037,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierDoub
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleMin {
     True(f64),
     Default,
@@ -4067,7 +4067,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleMin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleMax {
     True(f64),
     Default,
@@ -4097,7 +4097,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleMax {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierDouble {
     pub flags: CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleFlags,
     pub min: CommandNodeExtraNodeDataV2PropertiesBrigadierDoubleMin,
@@ -4136,7 +4136,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierDoub
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierFloatFlags {
     pub unused: u8,
     pub max_present: bool,
@@ -4158,7 +4158,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierFloa
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierFloatMin {
     True(f32),
     Default,
@@ -4188,7 +4188,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierFloatMin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierFloatMax {
     True(f32),
     Default,
@@ -4218,7 +4218,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierFloatMax {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierFloat {
     pub flags: CommandNodeExtraNodeDataV2PropertiesBrigadierFloatFlags,
     pub min: CommandNodeExtraNodeDataV2PropertiesBrigadierFloatMin,
@@ -4257,7 +4257,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierFloa
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerFlags {
     pub unused: u8,
     pub max_present: bool,
@@ -4279,7 +4279,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierInte
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerMin {
     True(i32),
     Default,
@@ -4309,7 +4309,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerMin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerMax {
     True(i32),
     Default,
@@ -4339,7 +4339,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerMax {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierInteger {
     pub flags: CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerFlags,
     pub min: CommandNodeExtraNodeDataV2PropertiesBrigadierIntegerMin,
@@ -4378,7 +4378,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierInte
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierLongFlags {
     pub unused: u8,
     pub max_present: bool,
@@ -4400,7 +4400,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierLong
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierLongMin {
     True(i64),
     Default,
@@ -4430,7 +4430,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierLongMin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierLongMax {
     True(i64),
     Default,
@@ -4460,7 +4460,7 @@ impl CommandNodeExtraNodeDataV2PropertiesBrigadierLongMax {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesBrigadierLong {
     pub flags: CommandNodeExtraNodeDataV2PropertiesBrigadierLongFlags,
     pub min: CommandNodeExtraNodeDataV2PropertiesBrigadierLongMin,
@@ -4499,7 +4499,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierLong
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2PropertiesBrigadierString {
     SingleWord,
     QuotablePhrase,
@@ -4529,7 +4529,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesBrigadierStri
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftEntity {
     pub unused: u8,
     pub only_allow_players: bool,
@@ -4551,7 +4551,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftEnti
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftResource {
     pub registry: String,
 }
@@ -4570,7 +4570,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftReso
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftResourceKey {
     pub registry: String,
 }
@@ -4589,7 +4589,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftReso
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftResourceOrTag {
     pub registry: String,
 }
@@ -4608,7 +4608,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftReso
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftResourceOrTagKey {
     pub registry: String,
 }
@@ -4627,7 +4627,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftReso
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftScoreHolder {
     pub unused: u8,
     pub allow_multiple: bool,
@@ -4648,7 +4648,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftScor
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2PropertiesMinecraftTime {
     pub min: i32,
 }
@@ -4667,7 +4667,7 @@ impl crate::traits::Decode for CommandNodeExtraNodeDataV2PropertiesMinecraftTime
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2Properties {
     BrigadierBool,
     BrigadierDouble(CommandNodeExtraNodeDataV2PropertiesBrigadierDouble),
@@ -4860,7 +4860,7 @@ impl CommandNodeExtraNodeDataV2Properties {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeDataV2SuggestionType {
     True(String),
     Default,
@@ -4890,7 +4890,7 @@ impl CommandNodeExtraNodeDataV2SuggestionType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNodeExtraNodeDataV2 {
     pub name: String,
     pub parser: CommandNodeExtraNodeDataV2Parser,
@@ -4997,7 +4997,7 @@ impl CommandNodeExtraNodeDataV2 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum CommandNodeExtraNodeData {
     V0,
     V1(CommandNodeExtraNodeDataV1),
@@ -5036,7 +5036,7 @@ impl CommandNodeExtraNodeData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CommandNode {
     pub flags: CommandNodeFlags,
     pub children: Vec<i32>,
@@ -5085,7 +5085,7 @@ impl crate::traits::Decode for CommandNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum EntityMetadataEntryType {
     Byte,
     Int,
@@ -5199,7 +5199,7 @@ impl crate::traits::Decode for EntityMetadataEntryType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Vec4f {
     pub x: f32,
     pub y: f32,
@@ -5227,7 +5227,7 @@ impl crate::traits::Decode for Vec4f {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct EntityMetadataEntryValueRotations {
     pub pitch: f32,
     pub yaw: f32,
@@ -5252,7 +5252,7 @@ impl crate::traits::Decode for EntityMetadataEntryValueRotations {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Vec3f {
     pub x: f32,
     pub y: f32,
@@ -5277,7 +5277,7 @@ impl crate::traits::Decode for Vec3f {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct EntityMetadataEntryValueVillagerData {
     pub villager_type: i32,
     pub villager_profession: i32,
@@ -5302,7 +5302,7 @@ impl crate::traits::Decode for EntityMetadataEntryValueVillagerData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum EntityMetadataEntryValue {
     ArmadilloState(i32),
     BlockPos(Position),
@@ -5479,7 +5479,7 @@ impl EntityMetadataEntryValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct EntityMetadataEntry {
     pub key: u8,
     pub r#type: EntityMetadataEntryType,
@@ -5599,7 +5599,7 @@ impl crate::traits::Decode for EntityMetadataEntry {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct EntityMetadata(pub Vec<EntityMetadataEntry>);
 
 impl crate::traits::Encode for EntityMetadata {
@@ -5626,7 +5626,7 @@ impl crate::traits::Decode for EntityMetadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct GameProfilePropertiesItem {
     pub name: String,
     pub value: String,
@@ -5651,7 +5651,7 @@ impl crate::traits::Decode for GameProfilePropertiesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct GameProfile {
     pub name: String,
     pub properties: Vec<GameProfilePropertiesItem>,
@@ -5675,7 +5675,7 @@ impl crate::traits::Decode for GameProfile {
 
 pub type Ingredient = Vec<Slot>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PackedChunkPos {
     pub z: i32,
     pub x: i32,
@@ -5697,7 +5697,7 @@ impl crate::traits::Decode for PackedChunkPos {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonAddResourcePack {
     pub uuid: u128,
     pub url: String,
@@ -5728,7 +5728,7 @@ impl crate::traits::Decode for PacketCommonAddResourcePack {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonCookieRequest {
     pub cookie: String,
 }
@@ -5747,7 +5747,7 @@ impl crate::traits::Decode for PacketCommonCookieRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonCookieResponse {
     pub key: String,
     pub value: Option<ByteArray>,
@@ -5769,7 +5769,7 @@ impl crate::traits::Decode for PacketCommonCookieResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonCustomReportDetailsDetailsItem {
     pub key: String,
     pub value: String,
@@ -5791,7 +5791,7 @@ impl crate::traits::Decode for PacketCommonCustomReportDetailsDetailsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonCustomReportDetails {
     pub details: Vec<PacketCommonCustomReportDetailsDetailsItem>,
 }
@@ -5810,7 +5810,7 @@ impl crate::traits::Decode for PacketCommonCustomReportDetails {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonRemoveResourcePack {
     pub uuid: Option<u128>,
 }
@@ -5829,7 +5829,7 @@ impl crate::traits::Decode for PacketCommonRemoveResourcePack {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonSelectKnownPacksPacksItem {
     pub namespace: String,
     pub id: String,
@@ -5854,7 +5854,7 @@ impl crate::traits::Decode for PacketCommonSelectKnownPacksPacksItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonSelectKnownPacks {
     pub packs: Vec<PacketCommonSelectKnownPacksPacksItem>,
 }
@@ -5873,7 +5873,7 @@ impl crate::traits::Decode for PacketCommonSelectKnownPacks {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketCommonServerLinksLinksItemKnownType {
     True(ServerLinkType),
     False,
@@ -5903,7 +5903,7 @@ impl PacketCommonServerLinksLinksItemKnownType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PacketCommonServerLinksLinksItemUnknownType {
     False(crate::nbt::Nbt),
     True,
@@ -5933,7 +5933,7 @@ impl PacketCommonServerLinksLinksItemUnknownType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonServerLinksLinksItem {
     pub has_known_type: bool,
     pub known_type: PacketCommonServerLinksLinksItemKnownType,
@@ -5973,7 +5973,7 @@ impl crate::traits::Decode for PacketCommonServerLinksLinksItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonServerLinks {
     pub links: Vec<PacketCommonServerLinksLinksItem>,
 }
@@ -5992,7 +5992,7 @@ impl crate::traits::Decode for PacketCommonServerLinks {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum PacketCommonSettingsParticleStatus {
     All,
     Decreased,
@@ -6022,7 +6022,7 @@ impl crate::traits::Decode for PacketCommonSettingsParticleStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonSettings {
     pub locale: String,
     pub view_distance: i8,
@@ -6065,7 +6065,7 @@ impl crate::traits::Decode for PacketCommonSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonStoreCookie {
     pub key: String,
     pub value: ByteArray,
@@ -6087,7 +6087,7 @@ impl crate::traits::Decode for PacketCommonStoreCookie {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCommonTransfer {
     pub host: String,
     pub port: i32,
@@ -6109,7 +6109,7 @@ impl crate::traits::Decode for PacketCommonTransfer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum PreviousMessagesItemSignature {
     V0(Vec<u8>),
     Default,
@@ -6140,7 +6140,7 @@ impl PreviousMessagesItemSignature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PreviousMessagesItem {
     pub id: i32,
     pub signature: PreviousMessagesItemSignature,
@@ -6172,7 +6172,7 @@ impl crate::traits::Decode for PreviousMessagesItem {
 
 pub type PreviousMessages = Vec<PreviousMessagesItem>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum SoundSource {
     Master,
     Music,
@@ -6223,7 +6223,7 @@ impl crate::traits::Decode for SoundSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct TagsItem {
     pub tag_name: String,
     pub entries: Vec<i32>,
@@ -6250,7 +6250,7 @@ impl crate::traits::Decode for TagsItem {
 
 pub type Tags = Vec<TagsItem>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Vec2f {
     pub x: f32,
     pub y: f32,
@@ -6272,7 +6272,7 @@ impl crate::traits::Decode for Vec2f {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Vec3i16 {
     pub x: i16,
     pub y: i16,

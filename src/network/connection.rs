@@ -14,6 +14,8 @@ use tokio::net::TcpStream;
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
+use crate::trace::format::Direction;
+use crate::trace::recorder::TraceRecorder;
 
 use super::tcp::TcpTransport;
 
@@ -40,6 +42,7 @@ pub struct Connection {
     cipher: Option<StreamCipher>,
     read_timeout: Duration,
     state: ConnectionState,
+    trace: Option<TraceRecorder>,
 }
 
 impl Connection {
@@ -54,6 +57,7 @@ impl Connection {
             cipher: None,
             read_timeout: DEFAULT_READ_TIMEOUT,
             state: ConnectionState::Handshaking,
+            trace: None,
         })
     }
 
@@ -70,7 +74,19 @@ impl Connection {
             cipher: None,
             read_timeout: DEFAULT_READ_TIMEOUT,
             state: ConnectionState::Handshaking,
+            trace: None,
         })
+    }
+
+    /// Attaches a trace recorder; every subsequent packet in both
+    /// directions is written to the trace.
+    pub fn set_trace(&mut self, recorder: TraceRecorder) {
+        self.trace = Some(recorder);
+    }
+
+    /// Mutable access to the trace recorder (scenario/step markers).
+    pub fn trace_mut(&mut self) -> Option<&mut TraceRecorder> {
+        self.trace.as_mut()
     }
 
     /// Frames and sends one packet, encrypting the frame if a cipher is set.
@@ -82,6 +98,16 @@ impl Connection {
         }
         self.write.write_all(&frame).await?;
         self.write.flush().await?;
+        if let Some(trace) = &mut self.trace {
+            trace.record(
+                Direction::Serverbound,
+                self.state,
+                id,
+                payload,
+                self.cipher.is_some(),
+                self.codec.compression_threshold().is_some(),
+            );
+        }
         Ok(())
     }
 
@@ -93,6 +119,16 @@ impl Connection {
     pub async fn read_packet(&mut self) -> Result<RawPacket> {
         loop {
             if let Some(packet) = self.codec.try_decode(&mut self.read_buf)? {
+                if let Some(trace) = &mut self.trace {
+                    trace.record(
+                        Direction::Clientbound,
+                        self.state,
+                        packet.id,
+                        &packet.payload,
+                        self.cipher.is_some(),
+                        self.codec.compression_threshold().is_some(),
+                    );
+                }
                 return Ok(packet);
             }
             let mut chunk = [0u8; READ_CHUNK];

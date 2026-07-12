@@ -12,7 +12,7 @@ use crate::traits::{Decode, Encode};
 ///
 /// On the wire a VarInt `n` of 0 means an inline value follows; otherwise
 /// the entry is the registry id `n - 1`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum Holder<T> {
     /// Registry id reference (wire value minus one).
     Reference(i32),
@@ -58,7 +58,7 @@ impl<T: Decode> Decode for Holder<T> {
 ///
 /// On the wire a VarInt `n` of 0 means a tag name string follows; otherwise
 /// `n - 1` VarInt ids follow.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum HolderSet {
     /// A registry tag, e.g. `minecraft:wooden_slabs`.
     Tag(String),

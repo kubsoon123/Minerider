@@ -7,7 +7,7 @@
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
 #![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDisconnect {
     pub reason: super::types::String,
 }
@@ -26,7 +26,7 @@ impl crate::traits::Decode for PacketDisconnect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEncryptionBegin {
     pub server_id: super::types::String,
     pub public_key: Vec<u8>,
@@ -54,7 +54,7 @@ impl crate::traits::Decode for PacketEncryptionBegin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSuccessPropertiesItem {
     pub name: super::types::String,
     pub value: super::types::String,
@@ -79,7 +79,7 @@ impl crate::traits::Decode for PacketSuccessPropertiesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSuccess {
     pub uuid: u128,
     pub username: super::types::String,
@@ -104,7 +104,7 @@ impl crate::traits::Decode for PacketSuccess {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCompress {
     pub threshold: i32,
 }
@@ -123,7 +123,7 @@ impl crate::traits::Decode for PacketCompress {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLoginPluginRequest {
     pub message_id: i32,
     pub channel: super::types::String,
@@ -148,7 +148,7 @@ impl crate::traits::Decode for PacketLoginPluginRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLoginStart {
     pub username: super::types::String,
     pub player_uuid: u128,
@@ -170,7 +170,7 @@ impl crate::traits::Decode for PacketLoginStart {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketEncryptionBeginServerbound {
     pub shared_secret: Vec<u8>,
     pub verify_token: Vec<u8>,
@@ -192,7 +192,7 @@ impl crate::traits::Decode for PacketEncryptionBeginServerbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLoginPluginResponse {
     pub message_id: i32,
     pub data: Option<Vec<u8>>,
@@ -224,7 +224,7 @@ pub const CLIENTBOUND_COMPRESS_ID: i32 = 3;
 pub const CLIENTBOUND_LOGIN_PLUGIN_REQUEST_ID: i32 = 4;
 pub const CLIENTBOUND_COOKIE_REQUEST_ID: i32 = 5;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundLoginPacket {
     Disconnect(PacketDisconnect),
     EncryptionBegin(PacketEncryptionBegin),
@@ -318,7 +318,7 @@ pub const SERVERBOUND_LOGIN_PLUGIN_RESPONSE_ID: i32 = 2;
 pub const SERVERBOUND_LOGIN_ACKNOWLEDGED_ID: i32 = 3;
 pub const SERVERBOUND_COOKIE_RESPONSE_ID: i32 = 4;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundLoginPacket {
     LoginStart(PacketLoginStart),
     EncryptionBegin(PacketEncryptionBeginServerbound),

@@ -2008,7 +2008,7 @@ impl<'a> ModuleCtx<'a> {
         }
 
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq)]");
+        let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq, serde::Serialize)]");
         let _ = writeln!(body, "pub struct {rust} {{");
         for field in &out_fields {
             let _ = writeln!(body, "    pub {}: {},", field.rust, field.ty.rust);
@@ -2552,7 +2552,7 @@ impl<'a> ModuleCtx<'a> {
 
         // ---- emit the enum ----
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq)]");
+        let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq, serde::Serialize)]");
         let _ = writeln!(body, "pub enum {enum_rust} {{");
         for v in &variants {
             match &v.payload {
@@ -2743,7 +2743,10 @@ impl<'a> ModuleCtx<'a> {
         let mut variants: Vec<(String, String)> = Vec::new();
         let mut seen_values: std::collections::HashSet<i64> = std::collections::HashSet::new();
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]");
+        let _ = writeln!(
+            body,
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]"
+        );
         let _ = writeln!(body, "pub enum {rust} {{");
         for (key, name) in mappings {
             let value = crate::ir::parse_mapper_key(key).ok_or_else(|| {
@@ -2851,7 +2854,10 @@ impl<'a> ModuleCtx<'a> {
             }
         };
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]");
+        let _ = writeln!(
+            body,
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]"
+        );
         let _ = writeln!(body, "pub struct {rust} {{");
         for (m, (_, name, _)) in members.iter().zip(&member_names) {
             let _ = writeln!(body, "    pub {name}: {},", member_ty(m.size, m.signed));
@@ -2988,7 +2994,10 @@ impl<'a> ModuleCtx<'a> {
             flag_names.push((f.clone(), name));
         }
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]");
+        let _ = writeln!(
+            body,
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]"
+        );
         let _ = writeln!(body, "pub struct {rust}(pub {brust});\n");
         let _ = writeln!(body, "impl {rust} {{");
         for (i, (_, name)) in flag_names.iter().enumerate() {
@@ -3035,7 +3044,10 @@ impl<'a> ModuleCtx<'a> {
             )));
         }
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, Default, PartialEq)]");
+        let _ = writeln!(
+            body,
+            "#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]"
+        );
         let _ = writeln!(body, "pub struct {rust}(pub Vec<{}>);\n", elem.rust);
         let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
         let _ = writeln!(
@@ -3105,7 +3117,10 @@ impl<'a> ModuleCtx<'a> {
             )));
         }
         let mut body = String::new();
-        let _ = writeln!(body, "#[derive(Debug, Clone, Default, PartialEq)]");
+        let _ = writeln!(
+            body,
+            "#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]"
+        );
         let _ = writeln!(body, "pub struct {rust}(pub Vec<{elem_rust}>);\n");
         let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
         let _ = writeln!(
@@ -3275,7 +3290,7 @@ fn emit_direction<'a>(
     let _ = writeln!(body);
 
     // Enum.
-    let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq)]");
+    let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq, serde::Serialize)]");
     let _ = writeln!(body, "pub enum {enum_rust} {{");
     for (variant, payload, _) in &variants {
         match payload {

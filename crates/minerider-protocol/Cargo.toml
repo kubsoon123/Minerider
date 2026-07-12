@@ -13,6 +13,7 @@ flate2 = { workspace = true }
 rsa = { workspace = true }
 aes = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

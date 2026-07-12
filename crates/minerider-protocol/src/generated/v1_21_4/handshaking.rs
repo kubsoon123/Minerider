@@ -7,7 +7,7 @@
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
 #![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketSetProtocol {
     pub protocol_version: i32,
     pub server_host: super::types::String,
@@ -35,7 +35,7 @@ impl crate::traits::Decode for PacketSetProtocol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketLegacyServerListPing {
     pub payload: u8,
 }
@@ -55,7 +55,7 @@ impl crate::traits::Decode for PacketLegacyServerListPing {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundHandshakingPacket {
 }
 
@@ -86,7 +86,7 @@ impl crate::traits::Encode for ClientboundHandshakingPacket {
 pub const SERVERBOUND_SET_PROTOCOL_ID: i32 = 0;
 pub const SERVERBOUND_LEGACY_SERVER_LIST_PING_ID: i32 = 254;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundHandshakingPacket {
     SetProtocol(PacketSetProtocol),
     LegacyServerListPing(PacketLegacyServerListPing),

@@ -7,7 +7,7 @@
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
 #![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketServerInfo {
     pub response: super::types::String,
 }
@@ -26,7 +26,7 @@ impl crate::traits::Decode for PacketServerInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPing {
     pub time: i64,
 }
@@ -48,7 +48,7 @@ impl crate::traits::Decode for PacketPing {
 pub const CLIENTBOUND_SERVER_INFO_ID: i32 = 0;
 pub const CLIENTBOUND_PING_ID: i32 = 1;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundStatusPacket {
     ServerInfo(PacketServerInfo),
     Ping(PacketPing),
@@ -103,7 +103,7 @@ impl crate::traits::Encode for ClientboundStatusPacket {
 pub const SERVERBOUND_PING_START_ID: i32 = 0;
 pub const SERVERBOUND_PING_ID: i32 = 1;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundStatusPacket {
     PingStart,
     Ping(PacketPing),

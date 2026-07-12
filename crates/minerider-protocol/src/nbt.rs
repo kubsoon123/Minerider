@@ -36,7 +36,7 @@ const TAG_INT_ARRAY: u8 = 11;
 const TAG_LONG_ARRAY: u8 = 12;
 
 /// An NBT value.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum Nbt {
     /// TAG_Byte.
     Byte(i8),
@@ -65,7 +65,7 @@ pub enum Nbt {
 }
 
 /// The payload of a TAG_List.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct NbtList {
     /// Tag id of the elements (0 when the list is empty).
     pub tag: u8,

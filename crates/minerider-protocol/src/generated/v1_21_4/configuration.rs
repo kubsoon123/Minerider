@@ -7,7 +7,7 @@
 // Machine-generated code: style lints are waived here; correctness is
 // enforced by the generator's tests and the golden/round-trip suite.
 #![allow(clippy::all, unused_parens, unused_variables, unused_braces)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketCustomPayload {
     pub channel: super::types::String,
     pub data: Vec<u8>,
@@ -29,7 +29,7 @@ impl crate::traits::Decode for PacketCustomPayload {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketDisconnect {
     pub reason: crate::nbt::Nbt,
 }
@@ -48,7 +48,7 @@ impl crate::traits::Decode for PacketDisconnect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketKeepAlive {
     pub keep_alive_id: i64,
 }
@@ -67,7 +67,7 @@ impl crate::traits::Decode for PacketKeepAlive {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPing {
     pub id: i32,
 }
@@ -86,7 +86,7 @@ impl crate::traits::Decode for PacketPing {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRegistryDataEntriesItem {
     pub key: super::types::String,
     pub value: Option<crate::nbt::Nbt>,
@@ -108,7 +108,7 @@ impl crate::traits::Decode for PacketRegistryDataEntriesItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketRegistryData {
     pub id: super::types::String,
     pub entries: Vec<PacketRegistryDataEntriesItem>,
@@ -130,7 +130,7 @@ impl crate::traits::Decode for PacketRegistryData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketFeatureFlags {
     pub features: Vec<super::types::String>,
 }
@@ -149,7 +149,7 @@ impl crate::traits::Decode for PacketFeatureFlags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTagsTagsItem {
     pub tag_type: super::types::String,
     pub tags: super::types::Tags,
@@ -171,7 +171,7 @@ impl crate::traits::Decode for PacketTagsTagsItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketTags {
     pub tags: Vec<PacketTagsTagsItem>,
 }
@@ -190,7 +190,7 @@ impl crate::traits::Decode for PacketTags {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketPong {
     pub id: i32,
 }
@@ -209,7 +209,7 @@ impl crate::traits::Decode for PacketPong {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct PacketResourcePackReceive {
     pub uuid: u128,
     pub result: i32,
@@ -249,7 +249,7 @@ pub const CLIENTBOUND_SELECT_KNOWN_PACKS_ID: i32 = 14;
 pub const CLIENTBOUND_CUSTOM_REPORT_DETAILS_ID: i32 = 15;
 pub const CLIENTBOUND_SERVER_LINKS_ID: i32 = 16;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ClientboundConfigurationPacket {
     CookieRequest(super::types::PacketCommonCookieRequest),
     CustomPayload(PacketCustomPayload),
@@ -445,7 +445,7 @@ pub const SERVERBOUND_SELECT_KNOWN_PACKS_ID: i32 = 7;
 pub const SERVERBOUND_CUSTOM_REPORT_DETAILS_ID: i32 = 8;
 pub const SERVERBOUND_SERVER_LINKS_ID: i32 = 9;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum ServerboundConfigurationPacket {
     Settings(super::types::PacketCommonSettings),
     CookieResponse(super::types::PacketCommonCookieResponse),

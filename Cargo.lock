@@ -468,6 +468,8 @@ dependencies = [
  "minerider-protocol",
  "rand",
  "rsa",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -494,6 +496,7 @@ dependencies = [
  "flate2",
  "rand",
  "rsa",
+ "serde",
  "thiserror",
 ]
 
