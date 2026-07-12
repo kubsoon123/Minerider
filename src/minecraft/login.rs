@@ -181,6 +181,5 @@ fn parse_login_success(payload: &[u8]) -> Result<LoginSuccess> {
             let _signature = r.read_string()?;
         }
     }
-    let _strict_error_handling = r.get_bool()?;
     Ok(LoginSuccess { uuid, username })
 }

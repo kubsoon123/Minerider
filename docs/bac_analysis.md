@@ -108,6 +108,15 @@
 
 ## Minecraft 1.21.4 protocol facts (verified against live servers)
 
+> **Corrections (engineering audit):** two facts below came from BAC's
+> 1.21.1-vintage observations and were wrong for 1.21.4, verified against
+> PrismarineJS `minecraft-data` `data/pc/1.21.4/protocol.json`:
+>
+> - Play-state keep-alive ids are **S2C 0x27 / C2S 0x1a** (1.21.1 had
+>   0x26/0x18).
+> - **Login Success** has no trailing `strict_error_handling` bool in 1.21.4;
+>   the field list is `{uuid, username, properties}` only.
+
 Protocol version: **769**.
 
 ### Handshake (C2S 0x00, state=handshaking)
@@ -131,7 +140,8 @@ next_state: VarInt}`. `next_state`: 1 = status, 2 = login.
 6. S2C **Login Plugin Request** → respond with "not understood"
    (message id echoed, no data).
 7. S2C **Login Success** (0x02): `{uuid, username, properties:
-   [{name, value, has_signature, signature?}], strict_error_handling: bool}`.
+   [{name, value, has_signature, signature?}]}` (no trailing fields in
+   1.21.4 — see the corrections note above).
 8. C2S **Login Acknowledged** (0x03) → connection enters **configuration**.
 
 ### Compression framing

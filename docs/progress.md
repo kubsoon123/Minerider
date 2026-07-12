@@ -93,15 +93,15 @@ test files), `Cargo.lock`.
   `self`); correct but slower than a bulk path — revisit in the performance
   phase.
 - Offline mode only (uuid = 0); Mojang session join not implemented.
-- Play-state keep-alive ids (0x26/0x18) are hardcoded until the phase 2
+- Play-state keep-alive ids (0x27/0x1a) are hardcoded until the phase 2
   minecraft-data generator makes all ids data-driven.
 - SelectKnownPacks is echoed verbatim (claims all packs known) — matches
   vanilla clients but should be revisited with real registry handling.
 
 **Next step:** Phase 2 — minecraft-data packet pipeline: generator producing
-`src/protocol/generated/` (packet ids, structs, serializers/deserializers)
-plus encode/decode round-trip tests. Real-server validation of Phase 1
-should happen in parallel with that.
+`crates/minerider-protocol/src/generated/` (packet ids, structs,
+serializers/deserializers) plus encode/decode round-trip tests. Real-server
+validation of Phase 1 should happen in parallel with that.
 
 ---
 
@@ -150,4 +150,44 @@ frame decode 6.8–15.4 GiB/s raw, 210 MiB/s–2.1 GiB/s compressed; AES-CFB8
 - Online-mode auth and login plugin handling intentionally unimplemented.
 
 **Next step:** Phase 2 — minecraft-data packet pipeline
-(`src/protocol/generated/`, encode/decode round-trip tests).
+(`crates/minerider-protocol/src/generated/`, encode/decode round-trip tests).
+
+---
+
+## Milestone: Phase 1 audit fixes (engineering audit, uncommitted)
+
+**Completed:**
+- Corrected two 1.21.1-vintage protocol facts against PrismarineJS
+  `minecraft-data` `data/pc/1.21.4/protocol.json`:
+  - Play-state keep-alive ids: S2C **0x27** / C2S **0x1a** (was 0x26/0x18;
+    every real 1.21.4 server's keep-alives were silently ignored).
+  - Login Success layout is `{uuid, username, properties}` — the phantom
+    trailing `strict_error_handling` bool read (which broke every real login
+    with BufferUnderflow) is gone.
+- Disconnect reasons in configuration (0x02) and play (kick_disconnect
+  0x1d) are network NBT text components, not strings: now read as the raw
+  remaining payload kept as lossy UTF-8 (human-readable; proper NBT decoding
+  lands with the generated protocol in Phase 2). Login disconnect (0x00)
+  stays a JSON string, per the data.
+- DoS hardening in `FrameCodec::try_decode`: a compressed frame's declared
+  `data_length` above the 2 MiB packet cap is rejected before decompression
+  (compression.rs's 64 MiB cap remains as defense in depth).
+- DoS hardening in `PacketReader::read_array`: a count above the remaining
+  bytes is rejected with BufferUnderflow before `Vec::with_capacity`, so a
+  hostile VarInt can no longer trigger a giant preallocation.
+
+**Files changed:** `src/minecraft/{play,login,configuration}.rs`,
+`crates/minerider-protocol/src/{codec,buffer}.rs`,
+`tests/common/mod.rs`, `tests/config_disconnect.rs` (new),
+`docs/{bac_analysis,progress}.md`.
+
+**Tests:** 71 green (was 68): 51 protocol unit (was 49: +oversized
+`data_length` rejected, +`read_array` huge-count rejected without
+allocation), 1 client unit, 19 integration (was 18: +configuration
+disconnect with NBT reason surfaces as `Disconnected`).
+`cargo clippy --workspace --all-targets -- -D warnings` and
+`cargo fmt --all --check` clean.
+
+**Problems:** none
+
+**Next step:** unchanged — Phase 2 minecraft-data packet pipeline.

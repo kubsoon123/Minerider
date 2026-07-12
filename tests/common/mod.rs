@@ -50,6 +50,13 @@ impl MockServer {
         Self::start(Mode::Plain).await
     }
 
+    /// Starts a mock server that logs the client in without encryption,
+    /// then kicks it during configuration with a Disconnect packet whose
+    /// reason is a network NBT text component.
+    pub async fn start_config_disconnect() -> MockServer {
+        Self::start(Mode::ConfigDisconnect).await
+    }
+
     async fn start(mode: Mode) -> MockServer {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -80,6 +87,7 @@ impl MockServer {
 enum Mode {
     Encrypted,
     Plain,
+    ConfigDisconnect,
 }
 
 fn ensure(cond: bool, msg: impl Into<String>) -> Result<()> {
@@ -137,7 +145,7 @@ async fn run_server(
     // compression for the frames that follow.
     let threshold = match mode {
         Mode::Encrypted => 64,
-        Mode::Plain => 16,
+        Mode::Plain | Mode::ConfigDisconnect => 16,
     };
     let mut w = PacketWriter::new();
     w.put_varint(threshold);
@@ -148,13 +156,12 @@ async fn run_server(
     // compressed codec path is exercised.
     let username = match mode {
         Mode::Encrypted => format!("MockPlayer{}", "x".repeat(60)),
-        Mode::Plain => "MockPlayer".to_string(),
+        Mode::Plain | Mode::ConfigDisconnect => "MockPlayer".to_string(),
     };
     let mut w = PacketWriter::new();
     w.put_uuid(0x00112233445566778899AABBCCDDEEFF);
     w.put_string(&username)?;
     w.put_varint(0); // zero properties
-    w.put_bool(false); // strict error handling
     conn.send_packet(0x02, &w.into_inner()).await?;
 
     // Login Acknowledged (C2S 0x03).
@@ -166,6 +173,19 @@ async fn run_server(
     ensure(ack.payload.is_empty(), "login acknowledged must be empty")?;
 
     // Configuration: Finish Configuration (S2C 0x03), expect C2S 0x03.
+    if mode == Mode::ConfigDisconnect {
+        // Configuration Disconnect (S2C 0x02) instead: the reason is a
+        // network NBT text component (anonymousNbt). Minimal compound
+        // `{text:"kicked"}`: TAG_Compound, TAG_String "text" = "kicked",
+        // TAG_End.
+        let reason_nbt: &[u8] = &[
+            0x0A, 0x08, 0x00, 0x04, b't', b'e', b'x', b't', 0x00, 0x06, b'k', b'i', b'c', b'k',
+            b'e', b'd', 0x00,
+        ];
+        conn.send_packet(0x02, reason_nbt).await?;
+        conn.close().await?;
+        return Ok(());
+    }
     conn.send_packet(0x03, &[]).await?;
     let fin = conn.read_packet().await?;
     ensure(
@@ -173,20 +193,21 @@ async fn run_server(
         format!("expected finish configuration 0x03, got 0x{:02x}", fin.id),
     )?;
 
-    // Play state: keep-alives (S2C 0x26, i64 payload), expect C2S 0x18 echoes.
+    // Play state: keep-alives (S2C 0x27, i64 payload), expect C2S 0x1a echoes.
     let keepalive_ids: &[i64] = match mode {
         Mode::Encrypted => &[42, 43, 44],
         Mode::Plain => &[42],
+        Mode::ConfigDisconnect => unreachable!("config-disconnect mock returned earlier"),
     };
     for &id in keepalive_ids {
         let mut w = PacketWriter::new();
         w.put_i64(id);
-        conn.send_packet(0x26, &w.into_inner()).await?;
+        conn.send_packet(0x27, &w.into_inner()).await?;
 
         let echo = conn.read_packet().await?;
         ensure(
-            echo.id == 0x18,
-            format!("expected keep-alive echo 0x18, got 0x{:02x}", echo.id),
+            echo.id == 0x1a,
+            format!("expected keep-alive echo 0x1a, got 0x{:02x}", echo.id),
         )?;
         let mut r = PacketReader::new(&echo.payload);
         let echoed = r.get_i64()?;

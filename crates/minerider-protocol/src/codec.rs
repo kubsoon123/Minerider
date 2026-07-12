@@ -112,6 +112,15 @@ impl FrameCodec {
                 if data_length < 0 {
                     return Err(ProtocolError::NegativeLength(data_length));
                 }
+                // A ≤ 2 MiB frame must not declare an inflated body beyond
+                // the packet cap; compression.rs's own 64 MiB cap stays as
+                // defense in depth.
+                if data_length > MAX_FRAME_SIZE as i32 {
+                    return Err(ProtocolError::FrameTooLarge {
+                        length: data_length as usize,
+                        max: MAX_FRAME_SIZE,
+                    });
+                }
                 if data_length == 0 {
                     Cow::Borrowed(r.rest())
                 } else {
@@ -249,6 +258,20 @@ mod tests {
         assert!(matches!(
             codec.try_decode(&mut buf),
             Err(ProtocolError::NegativeLength(-1))
+        ));
+    }
+
+    #[test]
+    fn oversized_data_length_errors() {
+        let mut codec = FrameCodec::new();
+        codec.set_compression_threshold(64);
+        // Frame within the 2 MiB frame cap, but data_length claims the body
+        // inflates to i32::MAX (0xFF 0xFF 0xFF 0xFF 0x07): must be rejected
+        // before any decompression is attempted.
+        let mut buf = BytesMut::from(&[6, 0xFF, 0xFF, 0xFF, 0xFF, 0x07, 0x00][..]);
+        assert!(matches!(
+            codec.try_decode(&mut buf),
+            Err(ProtocolError::FrameTooLarge { .. })
         ));
     }
 

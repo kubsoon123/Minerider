@@ -338,6 +338,16 @@ impl<'a> PacketReader<'a> {
         if len < 0 {
             return Err(ProtocolError::NegativeLength(len));
         }
+        // Every element costs at least one byte on the wire, so a count
+        // above the remaining bytes is impossible — reject before the
+        // `with_capacity` below turns a hostile count into a huge
+        // preallocation.
+        if len as usize > self.remaining() {
+            return Err(ProtocolError::BufferUnderflow {
+                needed: len as usize,
+                remaining: self.remaining(),
+            });
+        }
         let mut out = Vec::with_capacity(len as usize);
         for _ in 0..len {
             out.push(read(self)?);
@@ -628,6 +638,22 @@ mod tests {
         assert!(matches!(
             r.read_array(|r| r.get_i32()),
             Err(ProtocolError::NegativeLength(-1))
+        ));
+    }
+
+    #[test]
+    fn array_length_above_remaining_errors_without_allocation() {
+        // A count of i32::MAX with only a few payload bytes is impossible on
+        // the wire (every element costs ≥ 1 byte); it must error instantly
+        // instead of preallocating gigabytes.
+        let mut w = PacketWriter::new();
+        w.put_varint(i32::MAX);
+        w.put_bytes(&[0x01, 0x02, 0x03]);
+        let buf = w.into_inner();
+        let mut r = PacketReader::new(&buf);
+        assert!(matches!(
+            r.read_array(|r| r.get_u8()),
+            Err(ProtocolError::BufferUnderflow { .. })
         ));
     }
 

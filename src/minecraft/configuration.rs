@@ -7,7 +7,8 @@ use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
 use crate::network::connection::Connection;
 
-/// Clientbound configuration: Disconnect (0x02).
+/// Clientbound configuration: Disconnect (0x02, payload: NBT text component
+/// reason).
 pub const CLIENTBOUND_DISCONNECT: i32 = 0x02;
 /// Clientbound configuration: Finish Configuration (0x03).
 pub const CLIENTBOUND_FINISH_CONFIGURATION: i32 = 0x03;
@@ -37,9 +38,13 @@ pub async fn run_configuration(conn: &mut Connection) -> Result<()> {
         let packet = conn.read_packet().await?;
         match packet.id {
             CLIENTBOUND_DISCONNECT => {
-                let mut r = PacketReader::new(&packet.payload);
-                let reason = r.read_string()?;
-                return Err(MineRiderError::Disconnected(reason.to_string()));
+                let r = PacketReader::new(&packet.payload);
+                // The reason is a network NBT text component (anonymousNbt).
+                // We keep the raw NBT payload as lossy UTF-8 — the component
+                // text stays readable; proper decoding lands with the
+                // generated protocol in Phase 2.
+                let reason = String::from_utf8_lossy(r.rest()).into_owned();
+                return Err(MineRiderError::Disconnected(reason));
             }
             CLIENTBOUND_FINISH_CONFIGURATION => {
                 conn.send_packet(SERVERBOUND_FINISH_CONFIGURATION, &[])
