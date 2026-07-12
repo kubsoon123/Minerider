@@ -82,6 +82,8 @@ pub struct CoverageEntry {
 
 const EVIDENCE_MOCK: &str =
     "mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending";
+const EVIDENCE_VALIDATED: &str =
+    "mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending";
 const EVIDENCE_NONE: &str = "none";
 
 const NO_RESPONSE: Obligation = Obligation {
@@ -297,12 +299,14 @@ fn configuration_coverage(id: i32) -> CoverageEntry {
 
 fn play_coverage(id: i32) -> CoverageEntry {
     match id {
-        play::CLIENTBOUND_KEEP_ALIVE_ID => handled(partial(
-            Some("keep_alive"),
-            TimingClass::Strict,
-            "none",
-            "join_idle",
-        )),
+        play::CLIENTBOUND_KEEP_ALIVE_ID => handled(Obligation {
+            responds_with: Some("keep_alive"),
+            timing: TimingClass::Strict,
+            state_update: "none",
+            status: ConformanceStatus::Partial,
+            scenario: "join_idle",
+            evidence: EVIDENCE_VALIDATED,
+        }),
         play::CLIENTBOUND_KICK_DISCONNECT_ID => handled(partial(
             None,
             TimingClass::None,
@@ -315,24 +319,28 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "store own entity id, dimension, world info",
             "join_idle",
         )),
-        play::CLIENTBOUND_POSITION_ID => handled(partial(
-            Some("teleport_confirm"),
-            TimingClass::Strict,
-            "update position/rotation (relative flags applied)",
-            "teleport_correction",
-        )),
+        play::CLIENTBOUND_POSITION_ID => handled(Obligation {
+            responds_with: Some("teleport_confirm"),
+            timing: TimingClass::Strict,
+            state_update: "update position/rotation (relative flags applied)",
+            status: ConformanceStatus::Partial,
+            scenario: "teleport_correction",
+            evidence: EVIDENCE_VALIDATED,
+        }),
         play::CLIENTBOUND_CHUNK_BATCH_START_ID => ignored(not_implemented(
             None,
             TimingClass::None,
             "begin chunk batch",
             "initial_chunks",
         )),
-        play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => handled(partial(
-            Some("chunk_batch_received"),
-            TimingClass::Strict,
-            "acknowledge batch with desired chunks-per-tick",
-            "initial_chunks",
-        )),
+        play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => handled(Obligation {
+            responds_with: Some("chunk_batch_received"),
+            timing: TimingClass::Strict,
+            state_update: "acknowledge batch with desired chunks-per-tick",
+            status: ConformanceStatus::Partial,
+            scenario: "initial_chunks",
+            evidence: EVIDENCE_VALIDATED,
+        }),
         play::CLIENTBOUND_MAP_CHUNK_ID => CoverageEntry {
             class: CoverageClass::StoredForLater,
             obligation: not_implemented(

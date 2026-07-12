@@ -60,7 +60,7 @@ or lose an id.
 | 9 | block_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 10 | boss_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 11 | difficulty | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 13 | chunk_batch_start | ignored | — | — | begin chunk batch | NOT IMPLEMENTED | initial_chunks | none |
 | 14 | chunk_biomes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 15 | clear_titles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -87,7 +87,7 @@ or lose an id.
 | 36 | open_horse_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 37 | hurt_animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 38 | initialize_world_border | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 39 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 39 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 40 | map_chunk | stored | — | — | store chunk data | NOT IMPLEMENTED | initial_chunks | none |
 | 41 | world_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 42 | world_particles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -114,7 +114,7 @@ or lose an id.
 | 63 | player_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 64 | player_info | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 65 | face_player | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 66 | position | handled | teleport_confirm | strict | update position/rotation (relative flags applied) | PARTIAL | teleport_correction | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 66 | position | handled | teleport_confirm | strict | update position/rotation (relative flags applied) | PARTIAL | teleport_correction | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 67 | player_rotation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 68 | recipe_book_add | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 69 | recipe_book_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
