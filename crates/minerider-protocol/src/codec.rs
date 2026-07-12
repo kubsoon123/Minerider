@@ -16,13 +16,15 @@
 //! `data_length > 0` (its uncompressed size), or the raw bytes when
 //! `data_length == 0`.
 
+use std::borrow::Cow;
+
 use bytes::{Buf, BytesMut};
 
 use super::buffer::PacketReader;
+use super::compression;
 use super::packet::RawPacket;
 use super::varint;
-use crate::compression::zlib;
-use crate::core::error::{MineRiderError, Result};
+use crate::error::{ProtocolError, Result};
 
 /// Maximum frame size accepted on the wire (2 MiB).
 pub const MAX_FRAME_SIZE: usize = 2 * 1024 * 1024;
@@ -61,7 +63,7 @@ impl FrameCodec {
 
         let framed_body = match self.compression_threshold {
             Some(threshold) if body.len() >= threshold as usize => {
-                let compressed = zlib::compress(&body)?;
+                let compressed = compression::compress(&body)?;
                 let mut out = BytesMut::with_capacity(compressed.len() + varint::MAX_VARINT_BYTES);
                 varint::write_varint(&mut out, body.len() as i32);
                 out.extend_from_slice(&compressed);
@@ -87,7 +89,7 @@ impl FrameCodec {
     /// Returns `Ok(None)` if a complete frame is not yet buffered; in that
     /// case `buf` is left untouched. On success the frame bytes are consumed
     /// from `buf`. Malformed frames (oversized, corrupt VarInt lengths,
-    /// decompression failures) yield a [`MineRiderError::Protocol`].
+    /// decompression failures) yield a [`ProtocolError`].
     pub fn try_decode(&self, buf: &mut BytesMut) -> Result<Option<RawPacket>> {
         // Peek the frame-length VarInt without consuming bytes.
         let Some((frame_len, varint_len)) = peek_frame_length(buf)? else {
@@ -101,23 +103,22 @@ impl FrameCodec {
         buf.advance(varint_len);
         let frame_bytes = buf.split_to(frame_len);
 
-        let body = match self.compression_threshold {
+        // Borrow the frame bytes when no decompression is needed so the
+        // uncompressed path performs a single copy (into the payload).
+        let body: Cow<'_, [u8]> = match self.compression_threshold {
             Some(_) => {
                 let mut r = PacketReader::new(&frame_bytes);
                 let data_length = r.get_varint()?;
                 if data_length < 0 {
-                    return Err(MineRiderError::Protocol(format!(
-                        "negative data length {data_length}"
-                    )));
+                    return Err(ProtocolError::NegativeLength(data_length));
                 }
-                let rest = r.rest();
                 if data_length == 0 {
-                    rest.to_vec()
+                    Cow::Borrowed(r.rest())
                 } else {
-                    zlib::decompress(rest, data_length as usize)?
+                    Cow::Owned(compression::decompress(r.rest(), data_length as usize)?)
                 }
             }
-            None => frame_bytes.to_vec(),
+            None => Cow::Borrowed(&frame_bytes[..]),
         };
 
         // Split the first VarInt of the body as the packet id.
@@ -142,22 +143,21 @@ fn peek_frame_length(buf: &BytesMut) -> Result<Option<(usize, usize)>> {
         if byte & 0x80 == 0 {
             let frame_len = result as usize;
             if frame_len > MAX_FRAME_SIZE {
-                return Err(MineRiderError::Protocol(format!(
-                    "frame length {frame_len} exceeds maximum {MAX_FRAME_SIZE}"
-                )));
+                return Err(ProtocolError::FrameTooLarge {
+                    length: frame_len,
+                    max: MAX_FRAME_SIZE,
+                });
             }
             return Ok(Some((frame_len, i + 1)));
         }
     }
-    Err(MineRiderError::Protocol(
-        "frame length varint is too long (more than 5 bytes)".to_string(),
-    ))
+    Err(ProtocolError::VarIntTooLong)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::buffer::PacketWriter;
+    use crate::buffer::PacketWriter;
 
     fn packet(id: i32, payload: &[u8]) -> RawPacket {
         RawPacket::new(id, BytesMut::from(payload))
@@ -205,6 +205,27 @@ mod tests {
     }
 
     #[test]
+    fn compression_threshold_boundary() {
+        // The threshold compares against body length = id VarInt + payload.
+        // With a one-byte id: body == threshold - 1 stays uncompressed,
+        // body == threshold is compressed.
+        let mut codec = FrameCodec::new();
+        codec.set_compression_threshold(6);
+
+        let under = codec.encode(&packet(0x01, &[0xAA; 4])).unwrap();
+        assert_eq!(under[1], 0x00, "body len 5 = threshold-1 must stay raw");
+        let mut buf = under;
+        let out = codec.try_decode(&mut buf).unwrap().unwrap();
+        assert_eq!(&out.payload[..], &[0xAA; 4]);
+
+        let at = codec.encode(&packet(0x01, &[0xBB; 5])).unwrap();
+        assert_ne!(at[1], 0x00, "body len 6 = threshold must be compressed");
+        let mut buf = at;
+        let out = codec.try_decode(&mut buf).unwrap().unwrap();
+        assert_eq!(&out.payload[..], &[0xBB; 5]);
+    }
+
+    #[test]
     fn corrupted_compressed_length_errors() {
         let mut codec = FrameCodec::new();
         codec.set_compression_threshold(64);
@@ -215,7 +236,30 @@ mod tests {
         let mut buf = frame;
         assert!(matches!(
             codec.try_decode(&mut buf),
-            Err(MineRiderError::Compression(_))
+            Err(ProtocolError::Compression(_))
+        ));
+    }
+
+    #[test]
+    fn negative_data_length_errors() {
+        let mut codec = FrameCodec::new();
+        codec.set_compression_threshold(64);
+        // Frame: len=2, data_length=-1 (0xFF 0xFF 0xFF 0xFF 0x0F).
+        let mut buf = BytesMut::from(&[6, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0x00][..]);
+        assert!(matches!(
+            codec.try_decode(&mut buf),
+            Err(ProtocolError::NegativeLength(-1))
+        ));
+    }
+
+    #[test]
+    fn malformed_packet_id_varint_errors() {
+        let codec = FrameCodec::new();
+        // Frame len 6, body = six continuation bytes: not a valid id VarInt.
+        let mut buf = BytesMut::from(&[6, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80][..]);
+        assert!(matches!(
+            codec.try_decode(&mut buf),
+            Err(ProtocolError::VarIntTooLong)
         ));
     }
 
@@ -247,7 +291,7 @@ mod tests {
         buf.extend_from_slice(&[0u8; 16]);
         assert!(matches!(
             codec.try_decode(&mut buf),
-            Err(MineRiderError::Protocol(_))
+            Err(ProtocolError::FrameTooLarge { .. })
         ));
     }
 
@@ -257,7 +301,7 @@ mod tests {
         let mut buf = BytesMut::from(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x01][..]);
         assert!(matches!(
             codec.try_decode(&mut buf),
-            Err(MineRiderError::Protocol(_))
+            Err(ProtocolError::VarIntTooLong)
         ));
     }
 

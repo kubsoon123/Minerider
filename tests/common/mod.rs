@@ -12,9 +12,9 @@ use std::sync::Arc;
 use ::rsa::pkcs8::EncodePublicKey;
 use ::rsa::Pkcs1v15Encrypt;
 use minerider::core::error::{MineRiderError, Result};
-use minerider::crypto::rsa;
 use minerider::network::connection::Connection;
-use minerider::protocol::buffer::{PacketReader, PacketWriter};
+use minerider_protocol::buffer::{PacketReader, PacketWriter};
+use minerider_protocol::crypto::rsa;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -86,7 +86,10 @@ fn ensure(cond: bool, msg: impl Into<String>) -> Result<()> {
     if cond {
         Ok(())
     } else {
-        Err(MineRiderError::Protocol(format!("mock server: {}", msg.into())))
+        Err(MineRiderError::Protocol(format!(
+            "mock server: {}",
+            msg.into()
+        )))
     }
 }
 
@@ -107,8 +110,14 @@ async fn run_server(
         let _address = r.read_string()?;
         let _port = r.get_u16()?;
         let next_state = r.get_varint()?;
-        ensure(protocol == EXPECTED_PROTOCOL, format!("protocol {protocol}, expected {EXPECTED_PROTOCOL}"))?;
-        ensure(next_state == 2, format!("next state {next_state}, expected 2 (login)"))?;
+        ensure(
+            protocol == EXPECTED_PROTOCOL,
+            format!("protocol {protocol}, expected {EXPECTED_PROTOCOL}"),
+        )?;
+        ensure(
+            next_state == 2,
+            format!("next state {next_state}, expected 2 (login)"),
+        )?;
     }
 
     // Login Start (C2S 0x00).
@@ -150,13 +159,19 @@ async fn run_server(
 
     // Login Acknowledged (C2S 0x03).
     let ack = conn.read_packet().await?;
-    ensure(ack.id == 0x03, format!("expected login acknowledged 0x03, got 0x{:02x}", ack.id))?;
+    ensure(
+        ack.id == 0x03,
+        format!("expected login acknowledged 0x03, got 0x{:02x}", ack.id),
+    )?;
     ensure(ack.payload.is_empty(), "login acknowledged must be empty")?;
 
     // Configuration: Finish Configuration (S2C 0x03), expect C2S 0x03.
     conn.send_packet(0x03, &[]).await?;
     let fin = conn.read_packet().await?;
-    ensure(fin.id == 0x03, format!("expected finish configuration 0x03, got 0x{:02x}", fin.id))?;
+    ensure(
+        fin.id == 0x03,
+        format!("expected finish configuration 0x03, got 0x{:02x}", fin.id),
+    )?;
 
     // Play state: keep-alives (S2C 0x26, i64 payload), expect C2S 0x18 echoes.
     let keepalive_ids: &[i64] = match mode {
@@ -169,7 +184,10 @@ async fn run_server(
         conn.send_packet(0x26, &w.into_inner()).await?;
 
         let echo = conn.read_packet().await?;
-        ensure(echo.id == 0x18, format!("expected keep-alive echo 0x18, got 0x{:02x}", echo.id))?;
+        ensure(
+            echo.id == 0x18,
+            format!("expected keep-alive echo 0x18, got 0x{:02x}", echo.id),
+        )?;
         let mut r = PacketReader::new(&echo.payload);
         let echoed = r.get_i64()?;
         ensure(echoed == id, format!("echoed id {echoed}, expected {id}"))?;
@@ -213,9 +231,9 @@ async fn encryption_exchange(conn: &mut Connection) -> Result<()> {
         .decrypt(Pkcs1v15Encrypt, &encrypted_token)
         .map_err(|e| MineRiderError::Crypto(format!("mock server: token decrypt failed: {e}")))?;
     ensure(token == verify_token, "verify token mismatch")?;
-    let secret: [u8; 16] = shared_secret
-        .try_into()
-        .map_err(|_| MineRiderError::Crypto("mock server: shared secret not 16 bytes".to_string()))?;
+    let secret: [u8; 16] = shared_secret.try_into().map_err(|_| {
+        MineRiderError::Crypto("mock server: shared secret not 16 bytes".to_string())
+    })?;
 
     conn.enable_encryption(&secret);
     Ok(())

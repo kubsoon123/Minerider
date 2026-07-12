@@ -54,7 +54,7 @@ impl Client {
 
         let hs = handshake::Handshake {
             protocol_version: cfg.protocol_version,
-            server_address: cfg.host.clone(),
+            server_address: &cfg.host,
             server_port: cfg.port,
             next_state: 2, // login
         };

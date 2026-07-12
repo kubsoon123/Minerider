@@ -19,10 +19,11 @@
 //! Rust owns everything performance critical: TCP, the async runtime, the
 //! protocol, encryption, compression, world state, physics and the tick
 //! engine. Lua (phase 5) will own bot logic only.
+//!
+//! Wire-protocol primitives (VarInt, framing, compression, crypto) live in
+//! the standalone [`minerider_protocol`] crate; this crate adds the async
+//! network layer and the game-state machines on top of it.
 
-pub mod compression;
 pub mod core;
-pub mod crypto;
 pub mod minecraft;
 pub mod network;
-pub mod protocol;

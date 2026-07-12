@@ -21,9 +21,7 @@ impl TcpTransport {
     pub async fn connect(host: &str, port: u16, timeout: Duration) -> Result<TcpTransport> {
         let stream = tokio::time::timeout(timeout, TcpStream::connect((host, port)))
             .await
-            .map_err(|_| {
-                MineRiderError::Timeout(format!("connecting to {host}:{port}"))
-            })??;
+            .map_err(|_| MineRiderError::Timeout(format!("connecting to {host}:{port}")))??;
         stream.set_nodelay(true)?;
         let (read, write) = stream.into_split();
         Ok(TcpTransport { read, write })

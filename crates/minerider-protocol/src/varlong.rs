@@ -3,7 +3,7 @@
 use bytes::{BufMut, BytesMut};
 
 use super::buffer::PacketReader;
-use crate::core::error::{MineRiderError, Result};
+use crate::error::{ProtocolError, Result};
 
 /// Maximum number of bytes an encoded VarLong may occupy.
 pub const MAX_VARLONG_BYTES: usize = 10;
@@ -29,7 +29,7 @@ pub fn write_varlong(buf: &mut BytesMut, v: i64) {
 
 /// Decodes a VarLong from the reader, advancing it.
 ///
-/// Returns a [`MineRiderError::Protocol`] if the encoding uses more than
+/// Returns [`ProtocolError::VarLongTooLong`] if the encoding uses more than
 /// ten bytes or the underlying data is truncated.
 pub fn read_varlong(r: &mut PacketReader<'_>) -> Result<i64> {
     let mut result: u64 = 0;
@@ -40,9 +40,7 @@ pub fn read_varlong(r: &mut PacketReader<'_>) -> Result<i64> {
             return Ok(result as i64);
         }
     }
-    Err(MineRiderError::Protocol(
-        "varlong is too long (more than 10 bytes)".to_string(),
-    ))
+    Err(ProtocolError::VarLongTooLong)
 }
 
 /// Returns the number of bytes `v` occupies when encoded as a VarLong.
@@ -86,26 +84,32 @@ mod tests {
         }
         let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
         for _ in 0..256 {
-            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
             roundtrip(state as i64);
         }
     }
 
     #[test]
     fn exact_encodings() {
+        // Byte-exact vectors from the vanilla protocol documentation.
         let cases: &[(i64, &[u8])] = &[
             (0, &[0x00]),
             (1, &[0x01]),
+            (2, &[0x02]),
             (127, &[0x7F]),
             (128, &[0x80, 0x01]),
             (255, &[0xFF, 0x01]),
-            (
-                -1,
-                &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01],
-            ),
+            (25565, &[0xDD, 0xC7, 0x01]),
+            (2_147_483_647, &[0xFF, 0xFF, 0xFF, 0xFF, 0x07]),
             (
                 9_223_372_036_854_775_807,
                 &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F],
+            ),
+            (
+                -1,
+                &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01],
             ),
             (
                 -9_223_372_036_854_775_808,
@@ -116,6 +120,13 @@ mod tests {
             let mut buf = BytesMut::new();
             write_varlong(&mut buf, *v);
             assert_eq!(&buf[..], *bytes, "encoding of {v}");
+            let mut r = PacketReader::new(bytes);
+            assert_eq!(
+                read_varlong(&mut r).unwrap(),
+                *v,
+                "decoding of {bytes:02x?}"
+            );
+            assert!(r.is_empty());
         }
     }
 
@@ -125,7 +136,7 @@ mod tests {
         let mut r = PacketReader::new(&data);
         assert!(matches!(
             read_varlong(&mut r),
-            Err(MineRiderError::Protocol(_))
+            Err(ProtocolError::VarLongTooLong)
         ));
     }
 
@@ -135,7 +146,7 @@ mod tests {
         let mut r = PacketReader::new(&data);
         assert!(matches!(
             read_varlong(&mut r),
-            Err(MineRiderError::Protocol(_))
+            Err(ProtocolError::BufferUnderflow { .. })
         ));
     }
 

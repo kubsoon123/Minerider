@@ -4,6 +4,9 @@
 use std::time::Duration;
 
 use bytes::BytesMut;
+use minerider_protocol::codec::FrameCodec;
+use minerider_protocol::crypto::aes::StreamCipher;
+use minerider_protocol::packet::RawPacket;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -11,9 +14,6 @@ use tokio::net::TcpStream;
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
-use crate::crypto::aes::StreamCipher;
-use crate::protocol::codec::FrameCodec;
-use crate::protocol::packet::RawPacket;
 
 use super::tcp::TcpTransport;
 
@@ -102,11 +102,12 @@ impl Connection {
             if n == 0 {
                 return Err(MineRiderError::ConnectionClosed);
             }
-            let mut fresh = chunk[..n].to_vec();
+            // Decrypt the fresh bytes in place in the stack buffer, then
+            // extend the read buffer — no intermediate allocation.
             if let Some(cipher) = &mut self.cipher {
-                cipher.decrypt(&mut fresh);
+                cipher.decrypt(&mut chunk[..n]);
             }
-            self.read_buf.extend_from_slice(&fresh);
+            self.read_buf.extend_from_slice(&chunk[..n]);
         }
     }
 

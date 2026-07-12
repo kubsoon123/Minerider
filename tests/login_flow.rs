@@ -35,7 +35,10 @@ async fn client_reaches_play_and_echoes_keepalives() {
         }
     }
 
-    assert!(server.echo_count.load(Ordering::SeqCst) >= 3, "expected >= 3 keep-alive echoes");
+    assert!(
+        server.echo_count.load(Ordering::SeqCst) >= 3,
+        "expected >= 3 keep-alive echoes"
+    );
     assert_eq!(client.state(), ConnectionState::Play);
     server.finish().await.expect("mock server flow failed");
 }

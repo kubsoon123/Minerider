@@ -1,10 +1,10 @@
 //! Play state entry point: keep-alive handling. Full behavior in phase 3.
 
+use minerider_protocol::buffer::PacketReader;
 use tracing::debug;
 
 use crate::core::error::{MineRiderError, Result};
 use crate::network::connection::Connection;
-use crate::protocol::buffer::PacketReader;
 
 /// Clientbound play: Keep Alive (1.21.4, payload: i64).
 pub const CLIENTBOUND_KEEP_ALIVE: i32 = 0x26;
@@ -24,12 +24,13 @@ pub async fn run_play(conn: &mut Connection) -> Result<()> {
         match packet.id {
             CLIENTBOUND_KEEP_ALIVE => {
                 // Echo the same i64 payload back.
-                conn.send_packet(SERVERBOUND_KEEP_ALIVE, &packet.payload).await?;
+                conn.send_packet(SERVERBOUND_KEEP_ALIVE, &packet.payload)
+                    .await?;
             }
             CLIENTBOUND_DISCONNECT => {
                 let mut r = PacketReader::new(&packet.payload);
                 let reason = r.read_string()?;
-                return Err(MineRiderError::Disconnected(reason));
+                return Err(MineRiderError::Disconnected(reason.to_string()));
             }
             other => {
                 debug!(

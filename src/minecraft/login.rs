@@ -5,15 +5,16 @@
 //! secret and verify token are still exchanged and AES encryption is still
 //! enabled, which offline-mode servers require.
 
-use rand::RngCore;
 use rand::rngs::OsRng;
+use rand::RngCore;
 use tracing::{debug, info};
+
+use minerider_protocol::buffer::{PacketReader, PacketWriter};
+use minerider_protocol::crypto::rsa;
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
-use crate::crypto::rsa;
 use crate::network::connection::Connection;
-use crate::protocol::buffer::{PacketReader, PacketWriter};
 
 /// Clientbound login: Disconnect (0x00).
 pub const CLIENTBOUND_DISCONNECT: i32 = 0x00;
@@ -72,7 +73,8 @@ pub async fn login(conn: &mut Connection, username: &str) -> Result<LoginSuccess
     // Offline mode: UUID is all zeros. Online-mode session join is not
     // implemented yet.
     start.put_uuid(0);
-    conn.send_packet(SERVERBOUND_LOGIN_START, &start.into_inner()).await?;
+    conn.send_packet(SERVERBOUND_LOGIN_START, &start.into_inner())
+        .await?;
     info!(%username, "sent login start");
 
     for _ in 0..MAX_LOGIN_PACKETS {
@@ -81,7 +83,7 @@ pub async fn login(conn: &mut Connection, username: &str) -> Result<LoginSuccess
             CLIENTBOUND_DISCONNECT => {
                 let mut r = PacketReader::new(&packet.payload);
                 let reason = r.read_string()?;
-                return Err(MineRiderError::Disconnected(reason));
+                return Err(MineRiderError::Disconnected(reason.to_string()));
             }
             CLIENTBOUND_ENCRYPTION_REQUEST => {
                 let request = parse_encryption_request(&packet.payload)?;
@@ -89,7 +91,8 @@ pub async fn login(conn: &mut Connection, username: &str) -> Result<LoginSuccess
             }
             CLIENTBOUND_LOGIN_SUCCESS => {
                 let success = parse_login_success(&packet.payload)?;
-                conn.send_packet(SERVERBOUND_LOGIN_ACKNOWLEDGED, &[]).await?;
+                conn.send_packet(SERVERBOUND_LOGIN_ACKNOWLEDGED, &[])
+                    .await?;
                 conn.set_state(ConnectionState::Configuration);
                 info!(uuid = %success.uuid, username = %success.username, "login success");
                 return Ok(success);
@@ -109,7 +112,8 @@ pub async fn login(conn: &mut Connection, username: &str) -> Result<LoginSuccess
                 let mut w = PacketWriter::new();
                 w.put_varint(message_id);
                 w.put_bool(false);
-                conn.send_packet(SERVERBOUND_LOGIN_PLUGIN_RESPONSE, &w.into_inner()).await?;
+                conn.send_packet(SERVERBOUND_LOGIN_PLUGIN_RESPONSE, &w.into_inner())
+                    .await?;
             }
             other => {
                 return Err(MineRiderError::Protocol(format!(
@@ -127,7 +131,7 @@ pub async fn login(conn: &mut Connection, username: &str) -> Result<LoginSuccess
 fn parse_encryption_request(payload: &[u8]) -> Result<EncryptionRequest> {
     let mut r = PacketReader::new(payload);
     let request = EncryptionRequest {
-        server_id: r.read_string()?,
+        server_id: r.read_string()?.to_string(),
         public_key_der: r.read_byte_array()?.to_vec(),
         verify_token: r.read_byte_array()?.to_vec(),
         should_authenticate: r.get_bool()?,
@@ -148,7 +152,8 @@ async fn handle_encryption_request(
     let mut w = PacketWriter::new();
     w.put_byte_array(&encrypted_secret);
     w.put_byte_array(&encrypted_token);
-    conn.send_packet(SERVERBOUND_ENCRYPTION_RESPONSE, &w.into_inner()).await?;
+    conn.send_packet(SERVERBOUND_ENCRYPTION_RESPONSE, &w.into_inner())
+        .await?;
 
     // From this byte on, everything in both directions is AES-CFB8 encrypted.
     conn.enable_encryption(&shared_secret);
@@ -162,7 +167,7 @@ async fn handle_encryption_request(
 fn parse_login_success(payload: &[u8]) -> Result<LoginSuccess> {
     let mut r = PacketReader::new(payload);
     let uuid = r.read_uuid()?;
-    let username = r.read_string()?;
+    let username = r.read_string()?.to_string();
     let property_count = r.get_varint()?;
     if property_count < 0 {
         return Err(MineRiderError::Protocol(format!(

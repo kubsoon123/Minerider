@@ -6,6 +6,13 @@ pub enum MineRiderError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Wire-level protocol failure from `minerider-protocol` (framing,
+    /// encoding, compression, crypto).
+    #[error("protocol error: {0}")]
+    Wire(#[from] minerider_protocol::ProtocolError),
+
+    /// Game-level protocol violation (unexpected packet ids, broken state
+    /// machine sequences).
     #[error("protocol error: {0}")]
     Protocol(String),
 
@@ -17,9 +24,6 @@ pub enum MineRiderError {
 
     #[error("crypto error: {0}")]
     Crypto(String),
-
-    #[error("compression error: {0}")]
-    Compression(String),
 
     #[error("timed out: {0}")]
     Timeout(String),

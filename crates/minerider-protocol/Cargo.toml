@@ -1,0 +1,23 @@
+[package]
+name = "minerider-protocol"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Pure wire-protocol primitives for Minecraft Java Edition (no game logic, no async runtime)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+bytes = { workspace = true }
+thiserror = { workspace = true }
+flate2 = { workspace = true }
+rsa = { workspace = true }
+aes = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+cfb8 = { workspace = true }
+
+[[bench]]
+name = "protocol"
+harness = false

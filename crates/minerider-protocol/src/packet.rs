@@ -38,7 +38,7 @@ impl RawPacket {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::buffer::PacketReader;
+    use crate::buffer::PacketReader;
 
     #[test]
     fn constructors() {

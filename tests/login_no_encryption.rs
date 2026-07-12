@@ -37,7 +37,10 @@ async fn client_handles_server_without_encryption() {
     // The plain mock's keep-alive is 9 bytes on the wire (< threshold 16),
     // exercising the uncompressed path while LoginSuccess (29 bytes) took
     // the compressed path.
-    assert!(server.echo_count.load(Ordering::SeqCst) >= 1, "expected >= 1 keep-alive echo");
+    assert!(
+        server.echo_count.load(Ordering::SeqCst) >= 1,
+        "expected >= 1 keep-alive echo"
+    );
     assert_eq!(client.state(), ConnectionState::Play);
     server.finish().await.expect("mock server flow failed");
 }

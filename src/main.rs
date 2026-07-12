@@ -17,7 +17,10 @@ fn main() -> ExitCode {
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 4 {
-        eprintln!("usage: {} <host> <port> <username>", args.first().map(String::as_str).unwrap_or("minerider"));
+        eprintln!(
+            "usage: {} <host> <port> <username>",
+            args.first().map(String::as_str).unwrap_or("minerider")
+        );
         return ExitCode::FAILURE;
     }
     let host = &args[1];
@@ -31,7 +34,10 @@ fn main() -> ExitCode {
     let username = &args[3];
 
     let cfg = ClientConfig::new(host.clone(), port, username.clone());
-    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("failed to start async runtime: {e}");

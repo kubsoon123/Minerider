@@ -1,11 +1,11 @@
 //! Configuration state: keep-alive/ping echo, known packs, finish.
 
+use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use tracing::debug;
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
 use crate::network::connection::Connection;
-use crate::protocol::buffer::{PacketReader, PacketWriter};
 
 /// Clientbound configuration: Disconnect (0x02).
 pub const CLIENTBOUND_DISCONNECT: i32 = 0x02;
@@ -39,26 +39,26 @@ pub async fn run_configuration(conn: &mut Connection) -> Result<()> {
             CLIENTBOUND_DISCONNECT => {
                 let mut r = PacketReader::new(&packet.payload);
                 let reason = r.read_string()?;
-                return Err(MineRiderError::Disconnected(reason));
+                return Err(MineRiderError::Disconnected(reason.to_string()));
             }
             CLIENTBOUND_FINISH_CONFIGURATION => {
-                conn.send_packet(SERVERBOUND_FINISH_CONFIGURATION, &[]).await?;
+                conn.send_packet(SERVERBOUND_FINISH_CONFIGURATION, &[])
+                    .await?;
                 conn.set_state(ConnectionState::Play);
                 debug!("configuration finished");
                 return Ok(());
             }
-            CLIENTBOUND_KEEP_ALIVE => {
-                // Echo the same i64 payload back.
-                conn.send_packet(SERVERBOUND_KEEP_ALIVE, &packet.payload).await?;
-            }
-            CLIENTBOUND_PING => {
-                // Echo the same i32 payload back as a Pong.
-                conn.send_packet(SERVERBOUND_PONG, &packet.payload).await?;
-            }
-            CLIENTBOUND_SELECT_KNOWN_PACKS => {
-                // Claim to know every pack the server asks about; this is
-                // correct for vanilla clients that ship all vanilla packs.
-                conn.send_packet(SERVERBOUND_SELECT_KNOWN_PACKS, &packet.payload).await?;
+            // Keep Alive, Ping and Select Known Packs are all answered by
+            // echoing the payload back under the matching serverbound id.
+            CLIENTBOUND_KEEP_ALIVE | CLIENTBOUND_PING | CLIENTBOUND_SELECT_KNOWN_PACKS => {
+                let response_id = match packet.id {
+                    CLIENTBOUND_KEEP_ALIVE => SERVERBOUND_KEEP_ALIVE,
+                    CLIENTBOUND_PING => SERVERBOUND_PONG,
+                    // Claim to know every pack the server asks about; this is
+                    // correct for vanilla clients that ship all vanilla packs.
+                    _ => SERVERBOUND_SELECT_KNOWN_PACKS,
+                };
+                conn.send_packet(response_id, &packet.payload).await?;
             }
             other => {
                 debug!(
@@ -78,13 +78,13 @@ pub async fn run_configuration(conn: &mut Connection) -> Result<()> {
 /// Builds the payload of a Select Known Packs packet: a VarInt count
 /// followed by (namespace, id, version) strings. Exposed for tests and the
 /// mock server.
-pub fn build_known_packs_payload(packs: &[(&str, &str, &str)]) -> Vec<u8> {
+pub fn build_known_packs_payload(packs: &[(&str, &str, &str)]) -> Result<Vec<u8>> {
     let mut w = PacketWriter::new();
     w.put_varint(packs.len() as i32);
     for (namespace, id, version) in packs {
-        w.put_string(namespace).expect("valid namespace");
-        w.put_string(id).expect("valid pack id");
-        w.put_string(version).expect("valid version");
+        w.put_string(namespace)?;
+        w.put_string(id)?;
+        w.put_string(version)?;
     }
-    w.into_inner().to_vec()
+    Ok(w.into_inner().to_vec())
 }

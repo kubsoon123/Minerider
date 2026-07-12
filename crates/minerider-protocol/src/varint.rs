@@ -3,7 +3,7 @@
 use bytes::{BufMut, BytesMut};
 
 use super::buffer::PacketReader;
-use crate::core::error::{MineRiderError, Result};
+use crate::error::{ProtocolError, Result};
 
 /// Maximum number of bytes an encoded VarInt may occupy.
 pub const MAX_VARINT_BYTES: usize = 5;
@@ -29,7 +29,7 @@ pub fn write_varint(buf: &mut BytesMut, v: i32) {
 
 /// Decodes a VarInt from the reader, advancing it.
 ///
-/// Returns a [`MineRiderError::Protocol`] if the encoding uses more than
+/// Returns [`ProtocolError::VarIntTooLong`] if the encoding uses more than
 /// five bytes or the underlying data is truncated.
 pub fn read_varint(r: &mut PacketReader<'_>) -> Result<i32> {
     let mut result: u32 = 0;
@@ -40,9 +40,7 @@ pub fn read_varint(r: &mut PacketReader<'_>) -> Result<i32> {
             return Ok(result as i32);
         }
     }
-    Err(MineRiderError::Protocol(
-        "varint is too long (more than 5 bytes)".to_string(),
-    ))
+    Err(ProtocolError::VarIntTooLong)
 }
 
 /// Returns the number of bytes `v` occupies when encoded as a VarInt.
@@ -71,7 +69,17 @@ mod tests {
 
     #[test]
     fn roundtrips() {
-        for v in [0, 1, -1, i32::MAX, i32::MIN, 2_147_483_647, 255, 100_000, -100_000] {
+        for v in [
+            0,
+            1,
+            -1,
+            i32::MAX,
+            i32::MIN,
+            2_147_483_647,
+            255,
+            100_000,
+            -100_000,
+        ] {
             roundtrip(v);
         }
         // Deterministic pseudo-random sweep.
@@ -84,6 +92,7 @@ mod tests {
 
     #[test]
     fn exact_encodings() {
+        // Byte-exact vectors from the vanilla protocol documentation.
         let cases: &[(i32, &[u8])] = &[
             (0, &[0x00]),
             (1, &[0x01]),
@@ -91,14 +100,19 @@ mod tests {
             (127, &[0x7F]),
             (128, &[0x80, 0x01]),
             (255, &[0xFF, 0x01]),
-            (-1, &[0xFF, 0xFF, 0xFF, 0xFF, 0x0F]),
+            (25565, &[0xDD, 0xC7, 0x01]),
             (2_147_483_647, &[0xFF, 0xFF, 0xFF, 0xFF, 0x07]),
+            (-1, &[0xFF, 0xFF, 0xFF, 0xFF, 0x0F]),
             (-2_147_483_648, &[0x80, 0x80, 0x80, 0x80, 0x08]),
         ];
         for (v, bytes) in cases {
             let mut buf = BytesMut::new();
             write_varint(&mut buf, *v);
             assert_eq!(&buf[..], *bytes, "encoding of {v}");
+            // The vectors must decode back to the exact same value.
+            let mut r = PacketReader::new(bytes);
+            assert_eq!(read_varint(&mut r).unwrap(), *v, "decoding of {bytes:02x?}");
+            assert!(r.is_empty());
         }
     }
 
@@ -108,7 +122,7 @@ mod tests {
         let mut r = PacketReader::new(&data);
         assert!(matches!(
             read_varint(&mut r),
-            Err(MineRiderError::Protocol(_))
+            Err(ProtocolError::VarIntTooLong)
         ));
     }
 
@@ -118,7 +132,7 @@ mod tests {
         let mut r = PacketReader::new(&data);
         assert!(matches!(
             read_varint(&mut r),
-            Err(MineRiderError::Protocol(_))
+            Err(ProtocolError::BufferUnderflow { .. })
         ));
     }
 

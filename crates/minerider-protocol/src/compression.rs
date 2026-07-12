@@ -6,7 +6,7 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 
-use crate::core::error::{MineRiderError, Result};
+use crate::error::{ProtocolError, Result};
 
 /// Hard cap on decompressed size (64 MiB) to guard against zip bombs.
 const MAX_DECOMPRESSED: u64 = 64 * 1024 * 1024;
@@ -15,10 +15,10 @@ const MAX_DECOMPRESSED: u64 = 64 * 1024 * 1024;
 pub fn compress(data: &[u8]) -> Result<Vec<u8>> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     std::io::Write::write_all(&mut encoder, data)
-        .map_err(|e| MineRiderError::Compression(format!("zlib deflate failed: {e}")))?;
+        .map_err(|e| ProtocolError::Compression(format!("zlib deflate failed: {e}")))?;
     encoder
         .finish()
-        .map_err(|e| MineRiderError::Compression(format!("zlib deflate finish failed: {e}")))
+        .map_err(|e| ProtocolError::Compression(format!("zlib deflate finish failed: {e}")))
 }
 
 /// Decompresses `data` with zlib, requiring the output to be exactly
@@ -34,9 +34,9 @@ pub fn decompress(data: &[u8], expected_len: usize) -> Result<Vec<u8>> {
     decoder
         .take(cap)
         .read_to_end(&mut out)
-        .map_err(|e| MineRiderError::Compression(format!("zlib inflate failed: {e}")))?;
+        .map_err(|e| ProtocolError::Compression(format!("zlib inflate failed: {e}")))?;
     if out.len() != expected_len {
-        return Err(MineRiderError::Compression(format!(
+        return Err(ProtocolError::Compression(format!(
             "decompressed length mismatch: expected {expected_len} bytes, got {}",
             out.len()
         )));
@@ -54,7 +54,9 @@ mod tests {
             &b""[..],
             b"hello world",
             &vec![0xAB; 4096],
-            &(0u32..10_000).flat_map(u32::to_le_bytes).collect::<Vec<u8>>(),
+            &(0u32..10_000)
+                .flat_map(u32::to_le_bytes)
+                .collect::<Vec<u8>>(),
         ] {
             let compressed = compress(data).unwrap();
             let out = decompress(&compressed, data.len()).unwrap();
@@ -67,12 +69,12 @@ mod tests {
         let compressed = compress(b"hello world").unwrap();
         assert!(matches!(
             decompress(&compressed, 5),
-            Err(MineRiderError::Compression(_))
+            Err(ProtocolError::Compression(_))
         ));
         // Larger than actual also fails (short read).
         assert!(matches!(
             decompress(&compressed, 1000),
-            Err(MineRiderError::Compression(_))
+            Err(ProtocolError::Compression(_))
         ));
     }
 
@@ -80,7 +82,7 @@ mod tests {
     fn corrupt_data_errors() {
         assert!(matches!(
             decompress(&[0x00, 0x01, 0x02], 10),
-            Err(MineRiderError::Compression(_))
+            Err(ProtocolError::Compression(_))
         ));
     }
 }
