@@ -102,3 +102,52 @@ test files), `Cargo.lock`.
 `src/protocol/generated/` (packet ids, structs, serializers/deserializers)
 plus encode/decode round-trip tests. Real-server validation of Phase 1
 should happen in parallel with that.
+
+---
+
+## Milestone: Phase 1 hardening (commits `refactor: …`, `docs: …`)
+
+**Completed:**
+- Workspace split per the design requirement: new standalone
+  `minerider-protocol` crate (wire primitives, codec, zlib, RSA/AES — zero
+  game logic, zero tokio); root `minerider` crate keeps network, minecraft
+  state flow and client. Own `ProtocolError` type; client error wraps it.
+- Allocation cleanup: decrypt-in-place reads (per-read `to_vec()` gone),
+  zero-copy `read_string`/`Cow` decode path, `Handshake<'a>` borrows the
+  address, echo arms de-duplicated in configuration/play.
+- AES-128-CFB8 rewritten as one bulk call over `Aes128Enc` with in-struct IV
+  shift registers (correctness pinned by an openssl known-answer vector).
+  Measured parity with the old per-byte path — CFB8 is AES-latency-bound;
+  the win is API cleanliness, not throughput.
+- New protocol primitives with tests: Identifier (vanilla charset),
+  Option, length-prefixed arrays; byte-exact vanilla vectors for
+  VarInt/VarLong/Position/UUID.
+- 13 new stream-level integration tests: 1-byte dribbles, multi-frame
+  segments, split frame-length VarInt, garbage-input robustness,
+  encryption+compression wire ordering, clean shutdown, reconnect, timeouts.
+- Criterion benches in `crates/minerider-protocol/benches/protocol.rs`.
+- `docs/architecture.md`: crate diagram, module responsibilities, state
+  machine, byte-level pipeline order, benchmark numbers, testing strategy.
+- rustfmt + clippy (`--workspace --all-targets -- -D warnings`) clean;
+  unused `serde` dependency dropped.
+
+**Files changed:** full workspace restructure — `crates/minerider-protocol/**`
+(new), `Cargo.toml`, `src/**` rewired, `tests/**` (rewired + `stream.rs`
+new), `README.md`, `docs/architecture.md`, `docs/progress.md`.
+
+**Tests:** 68 green (was 42): 49 protocol unit + 1 client unit + 18
+integration.
+
+**Benchmarks (i5-11400F, release, medians):** VarInt decode 1.13 GiB/s;
+frame decode 6.8–15.4 GiB/s raw, 210 MiB/s–2.1 GiB/s compressed; AES-CFB8
+~62 MiB/s (AES-latency-bound, documented).
+
+**Problems / remaining issues before Phase 2:**
+- Real Paper 1.21.4 validation still owed (no server in this environment).
+- `ConnectionState` transitions not enforced; Status (server-list ping)
+  path unimplemented.
+- Play-state packet ids hardcoded for 769 — Phase 2 generator replaces them.
+- Online-mode auth and login plugin handling intentionally unimplemented.
+
+**Next step:** Phase 2 — minecraft-data packet pipeline
+(`src/protocol/generated/`, encode/decode round-trip tests).
