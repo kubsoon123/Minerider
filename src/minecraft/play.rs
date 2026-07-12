@@ -82,6 +82,10 @@ impl PlayerPosition {
 /// error/disconnect.
 pub async fn run_play(conn: &mut Connection) -> Result<()> {
     let mut position = PlayerPosition::ORIGIN;
+    // Packet ids already warned about: high-frequency ignored packets
+    // (entity updates…) warn once per id, then stay at debug. Bounded by
+    // the number of clientbound play ids, so memory is fixed.
+    let mut warned_ids = std::collections::HashSet::new();
     loop {
         let packet = conn.read_packet().await?;
         match packet.id {
@@ -142,13 +146,23 @@ pub async fn run_play(conn: &mut Connection) -> Result<()> {
                         len = packet.payload.len(),
                         "ignoring play packet"
                     ),
-                    CoverageClass::IntentionallyIgnored | CoverageClass::StoredForLater => warn!(
-                        id = format_args!("0x{other:02x}"),
-                        len = packet.payload.len(),
-                        coverage = ?entry.class,
-                        status = ?entry.obligation.status,
-                        "play packet decoded but not handled"
-                    ),
+                    CoverageClass::IntentionallyIgnored | CoverageClass::StoredForLater => {
+                        if warned_ids.insert(other) {
+                            warn!(
+                                id = format_args!("0x{other:02x}"),
+                                len = packet.payload.len(),
+                                coverage = ?entry.class,
+                                status = ?entry.obligation.status,
+                                "play packet decoded but not handled (further occurrences at debug)"
+                            );
+                        } else {
+                            debug!(
+                                id = format_args!("0x{other:02x}"),
+                                len = packet.payload.len(),
+                                "play packet decoded but not handled"
+                            );
+                        }
+                    }
                     CoverageClass::Unsupported => warn!(
                         id = format_args!("0x{other:02x}"),
                         len = packet.payload.len(),
