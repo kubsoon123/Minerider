@@ -56,6 +56,50 @@ pub enum ProtocolError {
     /// RSA or AES operation failed.
     #[error("crypto error: {0}")]
     Crypto(String),
+
+    /// A packet id has no known packet in its state/direction.
+    #[error("unknown packet id {id} in {context}")]
+    UnknownPacketId {
+        /// State and direction, e.g. `clientbound login`.
+        context: &'static str,
+        /// The unrecognized id.
+        id: i32,
+    },
+
+    /// A mapper/enum wire value has no known variant.
+    #[error("unknown value {value} for enum {type_name}")]
+    UnknownEnumValue {
+        /// The enum type name.
+        type_name: &'static str,
+        /// The unrecognized wire value.
+        value: i64,
+    },
+
+    /// A switch discriminant matched no branch and has no default.
+    #[error("no switch branch for discriminant {discriminant} in {type_name}")]
+    UnknownSwitchBranch {
+        /// The switch type name.
+        type_name: &'static str,
+        /// The discriminant that matched nothing.
+        discriminant: String,
+    },
+
+    /// Bytes remained after decoding a top-level packet.
+    #[error("{remaining} trailing bytes after {context}")]
+    TrailingBytes {
+        /// What was being decoded.
+        context: &'static str,
+        /// Bytes left unread.
+        remaining: usize,
+    },
+
+    /// Network NBT was malformed or exceeded safety caps.
+    #[error("invalid NBT: {0}")]
+    InvalidNbt(String),
+
+    /// A value violated a protocol invariant (e.g. mismatched array count).
+    #[error("invalid data: {0}")]
+    InvalidData(String),
 }
 
 /// Convenience alias for protocol results.

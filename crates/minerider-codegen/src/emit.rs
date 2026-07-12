@@ -1,0 +1,3150 @@
+//! Deterministic emitter: [`Ir`] → Rust source files for
+//! `minerider-protocol/src/generated/`.
+//!
+//! The output is byte-identical across runs: all maps iterate in sorted
+//! order (the IR uses `BTreeMap`), packets are sorted by id, and name
+//! deduplication appends the first free numeric suffix.
+//!
+//! Generated types implement `minerider-protocol`'s `Encode`/`Decode`
+//! traits; all primitive reads/writes go through `PacketReader`/
+//! `PacketWriter`. Unsupported constructs fail with a precise error naming
+//! the type/field involved — nothing is silently skipped.
+
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write as _;
+
+use crate::ir::{DirectionIr, Ir, State};
+use crate::model::{ArrayCount, Complex, ContainerField, SwitchArgs, TypeDef, TypeRef};
+use crate::parse::{CodegenError, Result};
+
+/// Minecraft version string baked into the generated headers.
+const MC_VERSION: &str = "1.21.4";
+/// Protocol number baked into the generated headers.
+const PROTOCOL: i32 = 769;
+
+/// A generated file: path relative to `minerider-protocol/src/generated/`
+/// plus its full contents.
+pub struct GeneratedFile {
+    /// Relative path, e.g. `v1_21_4/types.rs`.
+    pub path: String,
+    /// Complete file contents.
+    pub contents: String,
+}
+
+/// Emission statistics, for the generator's summary output.
+#[derive(Default)]
+pub struct EmitStats {
+    /// Named types emitted into `types.rs`.
+    pub shared_types: usize,
+    /// Per state module: `(module, named types, clientbound packets, serverbound packets)`.
+    pub states: Vec<(String, usize, usize, usize)>,
+}
+
+/// Emits every generated file for the resolved protocol.
+pub fn generate(ir: &Ir) -> Result<(Vec<GeneratedFile>, EmitStats)> {
+    let mut stats = EmitStats::default();
+    let mut files = Vec::new();
+
+    // types.rs: all shared named types.
+    let mut types_ctx = ModuleCtx::new(ir, None, ModuleKind::Types);
+    for (name, def) in &ir.shared_types {
+        if matches!(def, TypeDef::Complex(_)) {
+            types_ctx.ensure_named(name)?;
+        }
+    }
+    stats.shared_types = types_ctx.top_level_count;
+    let shared_names = types_ctx.emitted_names();
+    files.push(GeneratedFile {
+        path: "v1_21_4/types.rs".into(),
+        contents: format!("{}{}", header(), types_ctx.out),
+    });
+
+    // State modules (play is a stub this milestone).
+    for state in [
+        State::Handshaking,
+        State::Status,
+        State::Login,
+        State::Configuration,
+    ] {
+        let section = ir.state_section(state);
+        let mut ctx = ModuleCtx::new(ir, None, ModuleKind::State);
+        ctx.shared = shared_names.clone();
+        let (body, named, cb, sb) = emit_state_module(&mut ctx, section)?;
+        stats
+            .states
+            .push((state.as_str().to_string(), named, cb, sb));
+        files.push(GeneratedFile {
+            path: format!("v1_21_4/{}.rs", state.as_str()),
+            contents: format!("{}{}", header(), body),
+        });
+    }
+    files.push(GeneratedFile {
+        path: "v1_21_4/play.rs".into(),
+        contents: format!("{}// generated in next milestone\n", header()),
+    });
+
+    // v1_21_4/mod.rs
+    let mut version_mod = header();
+    for m in [
+        "handshaking",
+        "status",
+        "login",
+        "configuration",
+        "play",
+        "types",
+    ] {
+        let _ = writeln!(version_mod, "#[rustfmt::skip]\npub mod {m};");
+    }
+    let _ = writeln!(version_mod);
+    for state in State::ALL {
+        let section = ir.state_section(state);
+        let upper = state.as_str().to_uppercase();
+        let _ = writeln!(
+            version_mod,
+            "pub const {upper}_CLIENTBOUND_PACKET_COUNT: usize = {};",
+            section.clientbound.packets.len()
+        );
+        let _ = writeln!(
+            version_mod,
+            "pub const {upper}_SERVERBOUND_PACKET_COUNT: usize = {};",
+            section.serverbound.packets.len()
+        );
+    }
+    files.push(GeneratedFile {
+        path: "v1_21_4/mod.rs".into(),
+        contents: version_mod,
+    });
+
+    // versions.rs
+    let versions = format!(
+        "{}pub struct ProtocolVersion {{\n    pub protocol: i32,\n    pub minecraft: &'static str,\n}}\n\n\
+         pub const V1_21_4: ProtocolVersion = ProtocolVersion {{\n    protocol: {PROTOCOL},\n    minecraft: \"{MC_VERSION}\",\n}};\n\n\
+         pub const SUPPORTED: &[ProtocolVersion] = &[V1_21_4];\n",
+        header()
+    );
+    files.push(GeneratedFile {
+        path: "versions.rs".into(),
+        contents: versions,
+    });
+
+    // generated/mod.rs — header lines and module order are fixed by spec;
+    // `#[rustfmt::skip]` keeps rustfmt from reordering them.
+    let top = format!(
+        "{}#[rustfmt::skip]\npub mod versions;\n#[rustfmt::skip]\npub mod v1_21_4;\n",
+        header()
+    );
+    files.push(GeneratedFile {
+        path: "mod.rs".into(),
+        contents: top,
+    });
+
+    Ok((files, stats))
+}
+
+/// The five-line header of every generated file.
+fn header() -> String {
+    format!(
+        "// @generated by minerider-codegen\n// Source: minecraft-data\n// Minecraft version: {MC_VERSION}\n// Protocol version: {PROTOCOL}\n// DO NOT EDIT MANUALLY\n\n// Machine-generated code: style lints are waived here; correctness is\n// enforced by the generator's tests and the golden/round-trip suite.\n#![allow(clippy::all, unused_parens, unused_variables)]\n"
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Name conversion
+// ---------------------------------------------------------------------------
+
+/// Splits a minecraft-data name into words: on non-alphanumeric characters,
+/// on lower→upper transitions, and on acronym→word boundaries
+/// (`IDSet` → `["ID", "Set"]`).
+fn words(s: &str) -> Vec<String> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        if !c.is_ascii_alphanumeric() {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+            continue;
+        }
+        let prev = i.checked_sub(1).map(|j| chars[j]);
+        let next = chars.get(i + 1);
+        let boundary = match prev {
+            Some(p) if p.is_ascii_lowercase() && c.is_ascii_uppercase() => true,
+            Some(p)
+                if p.is_ascii_uppercase()
+                    && c.is_ascii_uppercase()
+                    && next.is_some_and(|n| n.is_ascii_lowercase()) =>
+            {
+                true
+            }
+            _ => false,
+        };
+        if boundary && !cur.is_empty() {
+            out.push(std::mem::take(&mut cur));
+        }
+        cur.push(c);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn capitalize(w: &str) -> String {
+    let mut c = w.chars();
+    match c.next() {
+        Some(f) => f.to_ascii_uppercase().to_string() + &c.as_str().to_ascii_lowercase(),
+        None => String::new(),
+    }
+}
+
+/// `custom_data` → `CustomData`, `brigadier:float` → `BrigadierFloat`,
+/// `IDSet` → `IdSet`, `playerUUID` → `PlayerUuid`.
+fn pascal(s: &str) -> String {
+    let mut out: String = words(s).iter().map(|w| capitalize(w)).collect();
+    if out.starts_with(|c: char| c.is_ascii_digit()) {
+        out.insert(0, 'V');
+    }
+    if out.is_empty() {
+        out.push('X');
+    }
+    out
+}
+
+/// `itemCount` → `item_count`, `playerUUID` → `player_uuid`.
+fn snake(s: &str) -> String {
+    words(s)
+        .iter()
+        .map(|w| w.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn upper_snake(s: &str) -> String {
+    snake(s).to_ascii_uppercase()
+}
+
+/// Escapes Rust keywords for use as a field/variant identifier.
+fn ident(name: &str) -> String {
+    const KEYWORDS: &[&str] = &[
+        "as", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false",
+        "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+        "ref", "return", "static", "struct", "trait", "true", "type", "unsafe", "use", "where",
+        "while", "async", "await", "box",
+    ];
+    if KEYWORDS.contains(&name) {
+        format!("r#{name}")
+    } else if matches!(name, "self" | "Self" | "super") {
+        format!("{name}_")
+    } else {
+        name.to_string()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Numeric natives
+// ---------------------------------------------------------------------------
+
+/// A numeric native usable as an array/buffer/string count type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NativeInt {
+    I8,
+    U8,
+    I16,
+    U16,
+    I32,
+    U32,
+    I64,
+    U64,
+    Varint,
+    Varlong,
+}
+
+impl NativeInt {
+    fn from_name(name: &str) -> Option<NativeInt> {
+        Some(match name {
+            "i8" => NativeInt::I8,
+            "u8" => NativeInt::U8,
+            "i16" => NativeInt::I16,
+            "u16" => NativeInt::U16,
+            "i32" => NativeInt::I32,
+            "u32" => NativeInt::U32,
+            "i64" => NativeInt::I64,
+            "u64" => NativeInt::U64,
+            "varint" => NativeInt::Varint,
+            "varlong" => NativeInt::Varlong,
+            _ => return None,
+        })
+    }
+
+    fn rust(self) -> &'static str {
+        match self {
+            NativeInt::I8 => "i8",
+            NativeInt::U8 => "u8",
+            NativeInt::I16 => "i16",
+            NativeInt::U16 => "u16",
+            NativeInt::I32 => "i32",
+            NativeInt::U32 => "u32",
+            NativeInt::I64 => "i64",
+            NativeInt::U64 => "u64",
+            NativeInt::Varint => "i32",
+            NativeInt::Varlong => "i64",
+        }
+    }
+
+    fn get_method(self) -> &'static str {
+        match self {
+            NativeInt::I8 => "get_i8",
+            NativeInt::U8 => "get_u8",
+            NativeInt::I16 => "get_i16",
+            NativeInt::U16 => "get_u16",
+            NativeInt::I32 => "get_i32",
+            NativeInt::U32 => "get_u32",
+            NativeInt::I64 => "get_i64",
+            NativeInt::U64 => "get_u64",
+            NativeInt::Varint => "get_varint",
+            NativeInt::Varlong => "get_varlong",
+        }
+    }
+
+    fn put_method(self) -> &'static str {
+        match self {
+            NativeInt::I8 => "put_i8",
+            NativeInt::U8 => "put_u8",
+            NativeInt::I16 => "put_i16",
+            NativeInt::U16 => "put_u16",
+            NativeInt::I32 => "put_i32",
+            NativeInt::U32 => "put_u32",
+            NativeInt::I64 => "put_i64",
+            NativeInt::U64 => "put_u64",
+            NativeInt::Varint => "put_varint",
+            NativeInt::Varlong => "put_varlong",
+        }
+    }
+
+    fn is_signed(self) -> bool {
+        matches!(
+            self,
+            NativeInt::I8
+                | NativeInt::I16
+                | NativeInt::I32
+                | NativeInt::I64
+                | NativeInt::Varint
+                | NativeInt::Varlong
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Resolved Rust type of a protocol typeref
+// ---------------------------------------------------------------------------
+
+/// How a resolved type is encoded/decoded.
+#[derive(Debug, Clone)]
+enum Kind {
+    /// Implements `Encode`/`Decode`; use UFCS trait calls.
+    Trait,
+    /// `i32` via `put_varint`/`get_varint`.
+    Varint,
+    /// `i64` via `put_varlong`/`get_varlong`.
+    Varlong,
+    /// Fixed `i32`/`i64` (no trait impls by design).
+    I32,
+    I64,
+    /// `Vec<u8>` consuming the rest of the packet.
+    RestBuf,
+    /// `Vec<u8>` with a fixed byte count.
+    BufSized(u32),
+    /// `Vec<u8>` with a non-varint count prefix.
+    BufCounted(NativeInt),
+    /// `Option<i32>` bool-prefixed varint.
+    OptVarint,
+    /// `Option<i64>` bool-prefixed varlong.
+    OptVarlong,
+    /// `Option<T>` of a non-trait native (e.g. `Option<i32>`), bool-prefixed.
+    OptPlain(Box<Ty>),
+    /// `Option<Nbt>` via `nbt::read_optional`/`write_optional`.
+    OptNbt,
+    /// Varint-counted array whose element has no `Encode` impl.
+    ArrVarintNonTrait(Box<Ty>),
+    /// Array with a non-varint count prefix.
+    ArrCounted(NativeInt, Box<Ty>),
+    /// Array with a fixed element count.
+    ArrFixed(u32, Box<Ty>),
+    /// Array whose count is an earlier sibling field.
+    ArrField(FieldRef, Box<Ty>),
+}
+
+/// A context value a type's decode needs from an enclosing scope.
+///
+/// `levels` counts scopes above the type's call site: 0 means the caller
+/// resolves the path among its own fields, `n > 0` means the caller must
+/// itself receive the value as a context parameter.
+#[derive(Debug, Clone)]
+struct Need {
+    levels: usize,
+    /// compareTo path without the leading `..` segments, e.g.
+    /// `flags/has_custom_suggestions`.
+    path: String,
+    /// Rust type of the value, resolved where the path is visible.
+    rust_ty: String,
+}
+
+/// A resolved typeref.
+#[derive(Debug, Clone)]
+struct Ty {
+    /// Rust type expression, e.g. `Vec<Slot>` or `super::types::Slot`.
+    rust: String,
+    kind: Kind,
+    /// Context needs, deduplicated by path.
+    needs: Vec<Need>,
+}
+
+impl Ty {
+    fn simple(rust: impl Into<String>, kind: Kind) -> Ty {
+        Ty {
+            rust: rust.into(),
+            kind,
+            needs: Vec::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scope tracking (for switch compareTo resolution)
+// ---------------------------------------------------------------------------
+
+/// How a decoded field behaves as a switch discriminant.
+#[derive(Debug, Clone)]
+enum Class {
+    /// Plain numeric field.
+    Numeric,
+    /// Boolean field.
+    Bool,
+    /// Mapper enum: rust type name + (orig name, rust variant) pairs.
+    Mapper(String, Vec<(String, String)>),
+    /// Bitfield struct: rust type name + (member orig, rust name, size).
+    Bitfield(Vec<(String, String, u32)>),
+    /// Bitflags newtype: rust type name + (flag orig, rust const) pairs.
+    Bitflags(String, Vec<(String, String)>),
+    /// Not usable as a discriminant.
+    Other,
+}
+
+/// One field of a struct being emitted.
+#[derive(Debug, Clone)]
+struct Entry {
+    /// Emitted Rust field name (snake_case, keyword-escaped, deduplicated).
+    rust: String,
+    /// Rust type of the field.
+    ty_rust: String,
+    class: Class,
+}
+
+/// Fields of a container, in decode order.
+#[derive(Debug, Clone, Default)]
+struct ScopeInfo {
+    fields: Vec<(String, Entry)>,
+}
+
+impl ScopeInfo {
+    /// Finds a field by original name; later duplicates shadow earlier ones
+    /// (mirrors the IR's scope lookup).
+    fn get(&self, orig: &str) -> Option<&Entry> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|(n, _)| n == orig)
+            .map(|(_, e)| e)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Emission context
+// ---------------------------------------------------------------------------
+
+/// Which module is being emitted; controls cross-module paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModuleKind {
+    Types,
+    State,
+}
+
+struct ModuleCtx<'a> {
+    ir: &'a Ir,
+    dir: Option<&'a DirectionIr>,
+    kind: ModuleKind,
+    /// Accumulated module body.
+    out: String,
+    /// Reserved Rust type names in this module.
+    names: std::collections::HashSet<String>,
+    /// Emitted top-level types: orig name → (rust name, needs, class).
+    emitted: HashMap<String, (String, Vec<Need>, Class)>,
+    /// Types currently being emitted (recursion guard).
+    in_progress: std::collections::HashSet<String>,
+    /// Rust names of shared types, for state modules.
+    shared: HashMap<String, String>,
+    /// Ancestor scopes of the struct currently being emitted (immediate
+    /// parent last), for `../` compareTo resolution.
+    ancestors: Vec<ScopeInfo>,
+    /// Number of top-level named types emitted.
+    top_level_count: usize,
+    /// Named types participating in a reference cycle (through edges that
+    /// do not break recursion), mapped to their SCC id.
+    cycles: HashMap<String, u32>,
+    /// SCC id of the type currently being emitted, if it is cyclic.
+    current_cycle: Option<u32>,
+}
+
+/// Computes named-type reference cycles (Tarjan SCC) over edges that do NOT
+/// break recursion: container fields, options, switch branches and holder
+/// inlines. Vec-backed shapes (arrays, top-bit arrays, metadata loops) break
+/// cycles and are excluded. Types in a non-trivial SCC map to their SCC id.
+fn compute_cycles(ir: &Ir, dir: Option<&DirectionIr>) -> HashMap<String, u32> {
+    fn lookup<'a>(ir: &'a Ir, dir: Option<&'a DirectionIr>, name: &str) -> Option<&'a TypeDef> {
+        if let Some(d) = dir {
+            if let Some(def) = d.local_types.get(name) {
+                return Some(def);
+            }
+        }
+        ir.shared_types.get(name)
+    }
+
+    fn resolve_alias(ir: &Ir, dir: Option<&DirectionIr>, name: &str) -> String {
+        let mut cur = name.to_string();
+        for _ in 0..32 {
+            match lookup(ir, dir, &cur) {
+                Some(TypeDef::Alias(t)) => cur = t.clone(),
+                _ => break,
+            }
+        }
+        cur
+    }
+
+    fn walk_ref(ir: &Ir, dir: Option<&DirectionIr>, r: &TypeRef, out: &mut Vec<String>) {
+        match r {
+            TypeRef::Named(n) => out.push(resolve_alias(ir, dir, n)),
+            TypeRef::Complex(c) => walk_complex(ir, dir, c, out),
+        }
+    }
+
+    fn walk_complex(ir: &Ir, dir: Option<&DirectionIr>, c: &Complex, out: &mut Vec<String>) {
+        match c {
+            Complex::Container(fields) => {
+                for f in fields {
+                    walk_ref(ir, dir, &f.ty, out);
+                }
+            }
+            Complex::Option(inner) => walk_ref(ir, dir, inner, out),
+            Complex::Switch(args) => {
+                for ty in args.fields.values() {
+                    walk_ref(ir, dir, ty, out);
+                }
+                if let Some(d) = &args.default {
+                    walk_ref(ir, dir, d, out);
+                }
+            }
+            Complex::RegistryEntryHolder(args) => walk_ref(ir, dir, &args.otherwise.ty, out),
+            // Vec-backed shapes (arrays, top-bit arrays, metadata loops,
+            // holder sets) break recursion; the rest carry no references.
+            _ => {}
+        }
+    }
+
+    // Graph over all visible named types, using integer node ids.
+    let mut names: Vec<String> = ir.shared_types.keys().cloned().collect();
+    if let Some(d) = dir {
+        names.extend(d.local_types.keys().cloned());
+    }
+    let id_of: HashMap<&str, usize> = names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i))
+        .collect();
+    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); names.len()];
+    for name in &names {
+        if let Some(TypeDef::Complex(c)) = lookup(ir, dir, name) {
+            let mut out = Vec::new();
+            walk_complex(ir, dir, c, &mut out);
+            edges[id_of[name.as_str()]] = out
+                .iter()
+                .filter_map(|n| id_of.get(n.as_str()).copied())
+                .collect();
+        }
+    }
+
+    // Iterative Tarjan.
+    let n = names.len();
+    let mut index_of = vec![u32::MAX; n];
+    let mut lowlink = vec![0u32; n];
+    let mut on_stack = vec![false; n];
+    let mut stack: Vec<usize> = Vec::new();
+    let mut index: u32 = 0;
+    let mut scc_of: HashMap<String, u32> = HashMap::new();
+    let mut scc_count: u32 = 0;
+
+    for start in 0..n {
+        if index_of[start] != u32::MAX {
+            continue;
+        }
+        // Work stack: (node, edge index to resume at).
+        let mut work: Vec<(usize, usize)> = vec![(start, 0)];
+        while let Some((v, ei)) = work.last_mut() {
+            let v = *v;
+            if *ei == 0 {
+                index_of[v] = index;
+                lowlink[v] = index;
+                index += 1;
+                stack.push(v);
+                on_stack[v] = true;
+            }
+            if *ei < edges[v].len() {
+                let w = edges[v][*ei];
+                *ei += 1;
+                if index_of[w] == u32::MAX {
+                    work.push((w, 0));
+                } else if on_stack[w] {
+                    lowlink[v] = lowlink[v].min(lowlink[w]);
+                }
+            } else {
+                work.pop();
+                if let Some((u, _)) = work.last() {
+                    lowlink[*u] = lowlink[*u].min(lowlink[v]);
+                }
+                if lowlink[v] == index_of[v] {
+                    // Pop SCC.
+                    let mut members: Vec<usize> = Vec::new();
+                    while let Some(w) = stack.pop() {
+                        on_stack[w] = false;
+                        members.push(w);
+                        if w == v {
+                            break;
+                        }
+                    }
+                    let cyclic = members.len() > 1 || edges[v].contains(&v);
+                    if cyclic {
+                        for m in members {
+                            scc_of.insert(names[m].clone(), scc_count);
+                        }
+                        scc_count += 1;
+                    }
+                }
+            }
+        }
+    }
+    scc_of
+}
+
+impl<'a> ModuleCtx<'a> {
+    fn new(ir: &'a Ir, dir: Option<&'a DirectionIr>, kind: ModuleKind) -> ModuleCtx<'a> {
+        ModuleCtx {
+            ir,
+            dir,
+            kind,
+            out: String::new(),
+            names: std::collections::HashSet::new(),
+            emitted: HashMap::new(),
+            in_progress: std::collections::HashSet::new(),
+            shared: HashMap::new(),
+            ancestors: Vec::new(),
+            top_level_count: 0,
+            cycles: compute_cycles(ir, dir),
+            current_cycle: None,
+        }
+    }
+
+    fn emitted_names(&self) -> HashMap<String, String> {
+        self.emitted
+            .iter()
+            .map(|(k, (r, _, _))| (k.clone(), r.clone()))
+            .collect()
+    }
+
+    /// Reserves a unique Rust type name derived from `base`.
+    fn reserve(&mut self, base: &str) -> String {
+        const RESERVED: &[&str] = &[
+            "Self",
+            "Option",
+            "Result",
+            "Vec",
+            "Box",
+            "Nbt",
+            "NbtList",
+            "Holder",
+            "HolderSet",
+            "PacketReader",
+            "PacketWriter",
+            "ProtocolError",
+        ];
+        let mut candidate = base.to_string();
+        let mut n = 2;
+        while self.names.contains(&candidate) || RESERVED.contains(&candidate.as_str()) {
+            candidate = format!("{base}{n}");
+            n += 1;
+        }
+        self.names.insert(candidate.clone());
+        candidate
+    }
+
+    /// Looks up a named type definition: direction-local first, then shared.
+    fn lookup(&self, name: &str) -> Option<&'a TypeDef> {
+        if let Some(dir) = self.dir {
+            if let Some(def) = dir.local_types.get(name) {
+                return Some(def);
+            }
+        }
+        self.ir.shared_types.get(name)
+    }
+
+    /// Whether `name` lives in the shared top-level types (vs direction-local).
+    fn is_shared(&self, name: &str) -> bool {
+        self.ir.shared_types.contains_key(name)
+            && !self.dir.is_some_and(|d| d.local_types.contains_key(name))
+    }
+
+    /// Emits a named type on demand and returns its Rust path as seen from
+    /// this module, its context needs and its discriminant class.
+    fn ensure_named(&mut self, orig: &str) -> Result<(String, Vec<Need>, Class)> {
+        if let Some((rust, needs, class)) = self.emitted.get(orig) {
+            let path = if self.kind == ModuleKind::State && self.is_shared(orig) {
+                format!("super::types::{rust}")
+            } else {
+                rust.clone()
+            };
+            return Ok((path, needs.clone(), class.clone()));
+        }
+        let def = self
+            .lookup(orig)
+            .ok_or_else(|| CodegenError::Invalid(format!("unresolved type reference `{orig}`")))?;
+        let TypeDef::Complex(complex) = def else {
+            return Err(CodegenError::Invalid(format!(
+                "type `{orig}`: aliases must be resolved before emission"
+            )));
+        };
+        let complex = complex.clone();
+        let rust = self.reserve(&pascal(orig));
+        self.emitted
+            .insert(orig.to_string(), (rust.clone(), Vec::new(), Class::Other));
+        self.in_progress.insert(orig.to_string());
+        self.top_level_count += 1;
+        let (needs, class) = self.emit_named_top(&rust, orig, &complex)?;
+        self.in_progress.remove(orig);
+        self.emitted.insert(
+            orig.to_string(),
+            (rust.clone(), needs.clone(), class.clone()),
+        );
+        let path = if self.kind == ModuleKind::State && self.is_shared(orig) {
+            format!("super::types::{rust}")
+        } else {
+            rust
+        };
+        Ok((path, needs, class))
+    }
+
+    /// Emits a top-level named type definition; returns its needs and class.
+    fn emit_named_top(
+        &mut self,
+        rust: &str,
+        orig: &str,
+        complex: &Complex,
+    ) -> Result<(Vec<Need>, Class)> {
+        // Intra-cycle references to this type (and its SCC siblings) are
+        // boxed while it is being emitted; see `rust_named`.
+        let prev_cycle = self.current_cycle;
+        self.current_cycle = self.cycles.get(orig).copied();
+        let result = self.emit_named_top_inner(rust, orig, complex);
+        self.current_cycle = prev_cycle;
+        result
+    }
+
+    fn emit_named_top_inner(
+        &mut self,
+        rust: &str,
+        orig: &str,
+        complex: &Complex,
+    ) -> Result<(Vec<Need>, Class)> {
+        match complex {
+            Complex::Container(fields) => {
+                let info = self.emit_struct(rust, fields, &format!("type `{orig}`"))?;
+                Ok((info.needs, Class::Other))
+            }
+            Complex::Mapper(args) => {
+                let variants =
+                    self.emit_mapper(rust, &args.ty, &args.mappings, &format!("type `{orig}`"))?;
+                Ok((Vec::new(), Class::Mapper(rust.to_string(), variants)))
+            }
+            Complex::Bitfield(members) => {
+                let names = self.emit_bitfield(rust, members, &format!("type `{orig}`"))?;
+                Ok((Vec::new(), Class::Bitfield(names)))
+            }
+            Complex::Bitflags(args) => {
+                let flags =
+                    self.emit_bitflags(rust, &args.ty, &args.flags, &format!("type `{orig}`"))?;
+                Ok((Vec::new(), Class::Bitflags(rust.to_string(), flags)))
+            }
+            Complex::EntityMetadataLoop(args) => {
+                let needs = self.emit_meta_loop(
+                    rust,
+                    &args.element,
+                    args.end_val,
+                    &format!("type `{orig}`"),
+                )?;
+                Ok((needs, Class::Other))
+            }
+            Complex::TopBitSetTerminatedArray { element } => {
+                let needs = self.emit_topbit_loop(rust, element, &format!("type `{orig}`"))?;
+                Ok((needs, Class::Other))
+            }
+            Complex::Array(a) => {
+                let elem_hint = format!("{rust}Item");
+                let elem = self.rust_type(&a.element, &elem_hint, &format!("type `{orig}`"))?;
+                if a.count.is_some() {
+                    return Err(CodegenError::Invalid(format!(
+                        "type `{orig}`: standalone array with an explicit count cannot be a named type"
+                    )));
+                }
+                let ct = a.count_type.as_deref().ok_or_else(|| {
+                    CodegenError::Invalid(format!("type `{orig}`: array without countType"))
+                })?;
+                if ct != "varint" || !matches!(elem.kind, Kind::Trait) || !elem.needs.is_empty() {
+                    return Err(CodegenError::Invalid(format!(
+                        "type `{orig}`: named array only supports varint-counted trait elements"
+                    )));
+                }
+                let _ = writeln!(self.out, "pub type {rust} = Vec<{}>;\n", elem.rust);
+                Ok((Vec::new(), Class::Other))
+            }
+            Complex::Option(inner) => {
+                let hint = format!("{rust}Value");
+                let inner_ty = self.rust_type(inner, &hint, &format!("type `{orig}`"))?;
+                if !matches!(inner_ty.kind, Kind::Trait) || !inner_ty.needs.is_empty() {
+                    return Err(CodegenError::Invalid(format!(
+                        "type `{orig}`: named option only supports trait elements"
+                    )));
+                }
+                let _ = writeln!(self.out, "pub type {rust} = Option<{}>;\n", inner_ty.rust);
+                Ok((Vec::new(), Class::Other))
+            }
+            Complex::Buffer(b) => {
+                let ct = b.count_type.as_deref().ok_or_else(|| {
+                    CodegenError::Invalid(format!("type `{orig}`: buffer without countType"))
+                })?;
+                if ct != "varint" || b.count.is_some() {
+                    return Err(CodegenError::Invalid(format!(
+                        "type `{orig}`: named buffer only supports a varint count"
+                    )));
+                }
+                let _ = writeln!(self.out, "pub type {rust} = Vec<u8>;\n");
+                Ok((Vec::new(), Class::Other))
+            }
+            Complex::Pstring(p) => {
+                let ct = p.count_type.as_deref().ok_or_else(|| {
+                    CodegenError::Invalid(format!("type `{orig}`: pstring without countType"))
+                })?;
+                if ct != "varint" {
+                    return Err(CodegenError::Invalid(format!(
+                        "type `{orig}`: pstring countType `{ct}` is not supported"
+                    )));
+                }
+                let _ = writeln!(self.out, "pub type {rust} = std::string::String;\n");
+                Ok((Vec::new(), Class::Other))
+            }
+            Complex::RegistryEntryHolder(h) => {
+                let hint = format!("{rust}Value");
+                let inner = self.rust_type(&h.otherwise.ty, &hint, &format!("type `{orig}`"))?;
+                if !matches!(inner.kind, Kind::Trait) || !inner.needs.is_empty() {
+                    return Err(CodegenError::Invalid(format!(
+                        "type `{orig}`: holder inline value must be a trait type"
+                    )));
+                }
+                let _ = writeln!(
+                    self.out,
+                    "pub type {rust} = crate::holder::Holder<{}>;\n",
+                    inner.rust
+                );
+                Ok((Vec::new(), Class::Other))
+            }
+            Complex::RegistryEntryHolderSet(_) => {
+                let _ = writeln!(self.out, "pub type {rust} = crate::holder::HolderSet;\n");
+                Ok((Vec::new(), Class::Other))
+            }
+            Complex::Switch(_) => Err(CodegenError::Invalid(format!(
+                "type `{orig}`: a standalone switch cannot be a named type \
+                 (its discriminant lives in an enclosing container)"
+            ))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Typeref resolution
+// ---------------------------------------------------------------------------
+
+impl<'a> ModuleCtx<'a> {
+    /// Resolves a typeref to its Rust type, emitting any nested named types.
+    /// `hint` names nested types; `ctx` names the site for error messages.
+    fn rust_type(&mut self, ty: &TypeRef, hint: &str, ctx: &str) -> Result<Ty> {
+        match ty {
+            TypeRef::Named(name) => self.rust_named(name, ctx, 0),
+            TypeRef::Complex(c) => self.rust_complex(c, hint, ctx),
+        }
+    }
+
+    fn rust_named(&mut self, name: &str, ctx: &str, depth: u32) -> Result<Ty> {
+        if depth > 32 {
+            return Err(CodegenError::Invalid(format!(
+                "{ctx}: alias cycle involving `{name}`"
+            )));
+        }
+        match name {
+            "bool" | "i8" | "u8" | "i16" | "u16" | "u32" | "u64" | "f32" | "f64" => {
+                return Ok(Ty::simple(name, Kind::Trait))
+            }
+            "varint" => return Ok(Ty::simple("i32", Kind::Varint)),
+            "varlong" => return Ok(Ty::simple("i64", Kind::Varlong)),
+            "i32" => return Ok(Ty::simple("i32", Kind::I32)),
+            "i64" => return Ok(Ty::simple("i64", Kind::I64)),
+            "UUID" => return Ok(Ty::simple("u128", Kind::Trait)),
+            "void" => return Ok(Ty::simple("()", Kind::Trait)),
+            "restBuffer" => return Ok(Ty::simple("Vec<u8>", Kind::RestBuf)),
+            "anonymousNbt" => return Ok(Ty::simple("crate::nbt::Nbt", Kind::Trait)),
+            "anonOptionalNbt" => return Ok(Ty::simple("Option<crate::nbt::Nbt>", Kind::OptNbt)),
+            _ => {}
+        }
+        match self.lookup(name) {
+            Some(TypeDef::Alias(target)) => {
+                let target = target.clone();
+                self.rust_named(&target, ctx, depth + 1)
+            }
+            Some(TypeDef::Complex(_)) => {
+                let (rust, needs, _) = self.ensure_named(name)?;
+                // Break recursive types: references within the same
+                // reference cycle go through `Box` (arrays already break
+                // cycles and never reach here).
+                let rust = if self.current_cycle.is_some()
+                    && self.cycles.get(name).copied() == self.current_cycle
+                {
+                    format!("Box<{rust}>")
+                } else {
+                    rust
+                };
+                Ok(Ty {
+                    rust,
+                    kind: Kind::Trait,
+                    needs,
+                })
+            }
+            Some(TypeDef::Native) | None => Err(CodegenError::Invalid(format!(
+                "{ctx}: unsupported bare native or unresolved type `{name}`"
+            ))),
+        }
+    }
+
+    fn rust_complex(&mut self, c: &Complex, hint: &str, ctx: &str) -> Result<Ty> {
+        match c {
+            Complex::Container(fields) => {
+                let rust = self.reserve(hint);
+                let info = self.emit_struct(&rust, fields, ctx)?;
+                Ok(Ty {
+                    rust,
+                    kind: Kind::Trait,
+                    needs: info.needs,
+                })
+            }
+            Complex::Mapper(args) => {
+                let rust = self.reserve(hint);
+                self.emit_mapper(&rust, &args.ty, &args.mappings, ctx)?;
+                Ok(Ty::simple(rust, Kind::Trait))
+            }
+            Complex::Bitfield(members) => {
+                let rust = self.reserve(hint);
+                self.emit_bitfield(&rust, members, ctx)?;
+                Ok(Ty::simple(rust, Kind::Trait))
+            }
+            Complex::Bitflags(args) => {
+                let rust = self.reserve(hint);
+                self.emit_bitflags(&rust, &args.ty, &args.flags, ctx)?;
+                Ok(Ty::simple(rust, Kind::Trait))
+            }
+            Complex::Option(inner) => {
+                let inner_hint = format!("{hint}Value");
+                let inner_ty = self.rust_type(inner, &inner_hint, ctx)?;
+                match inner_ty.kind {
+                    Kind::Varint => Ok(Ty::simple("Option<i32>", Kind::OptVarint)),
+                    Kind::Varlong => Ok(Ty::simple("Option<i64>", Kind::OptVarlong)),
+                    Kind::Trait if inner_ty.needs.is_empty() => Ok(Ty::simple(
+                        format!("Option<{}>", inner_ty.rust),
+                        Kind::Trait,
+                    )),
+                    _ if inner_ty.needs.is_empty() => Ok(Ty::simple(
+                        format!("Option<{}>", inner_ty.rust),
+                        Kind::OptPlain(Box::new(inner_ty)),
+                    )),
+                    _ => Err(CodegenError::Invalid(format!(
+                        "{ctx}: option of this element type is not supported"
+                    ))),
+                }
+            }
+            Complex::Array(a) => {
+                let elem_hint = format!("{hint}Item");
+                let elem = self.rust_type(&a.element, &elem_hint, ctx)?;
+                let rust = format!("Vec<{}>", elem.rust);
+                let kind = match (&a.count, a.count_type.as_deref()) {
+                    (Some(ArrayCount::Fixed(n)), _) => Kind::ArrFixed(*n, Box::new(elem)),
+                    (Some(ArrayCount::Field(f)), _) => Kind::ArrField(
+                        FieldRef {
+                            orig: f.clone(),
+                            rust: String::new(),
+                            ty_rust: String::new(),
+                        },
+                        Box::new(elem),
+                    ),
+                    (None, Some(ct)) => {
+                        let native = NativeInt::from_name(ct).ok_or_else(|| {
+                            CodegenError::Invalid(format!(
+                                "{ctx}: array countType `{ct}` is not numeric"
+                            ))
+                        })?;
+                        match (native, &elem.kind, elem.needs.is_empty()) {
+                            (NativeInt::Varint, Kind::Trait, true) => Kind::Trait,
+                            (NativeInt::Varint, _, _) => Kind::ArrVarintNonTrait(Box::new(elem)),
+                            _ => Kind::ArrCounted(native, Box::new(elem)),
+                        }
+                    }
+                    (None, None) => {
+                        return Err(CodegenError::Invalid(format!(
+                            "{ctx}: array without countType or count"
+                        )))
+                    }
+                };
+                Ok(Ty {
+                    rust,
+                    kind,
+                    needs: Vec::new(),
+                })
+            }
+            Complex::Buffer(b) => match (b.count, b.count_type.as_deref()) {
+                (Some(n), _) => Ok(Ty::simple("Vec<u8>", Kind::BufSized(n))),
+                (None, Some("varint")) => Ok(Ty::simple("Vec<u8>", Kind::Trait)),
+                (None, Some(ct)) => {
+                    let native = NativeInt::from_name(ct).ok_or_else(|| {
+                        CodegenError::Invalid(format!(
+                            "{ctx}: buffer countType `{ct}` is not numeric"
+                        ))
+                    })?;
+                    Ok(Ty::simple("Vec<u8>", Kind::BufCounted(native)))
+                }
+                (None, None) => Err(CodegenError::Invalid(format!(
+                    "{ctx}: buffer without countType or count"
+                ))),
+            },
+            Complex::Pstring(p) => match p.count_type.as_deref() {
+                Some("varint") => Ok(Ty::simple("std::string::String", Kind::Trait)),
+                Some(ct) => Err(CodegenError::Invalid(format!(
+                    "{ctx}: pstring countType `{ct}` is not supported"
+                ))),
+                None => Err(CodegenError::Invalid(format!(
+                    "{ctx}: pstring without countType"
+                ))),
+            },
+            Complex::RegistryEntryHolder(h) => {
+                let inner_hint = format!("{hint}Value");
+                let inner = self.rust_type(&h.otherwise.ty, &inner_hint, ctx)?;
+                if !matches!(inner.kind, Kind::Trait) || !inner.needs.is_empty() {
+                    return Err(CodegenError::Invalid(format!(
+                        "{ctx}: holder inline value must be a trait type"
+                    )));
+                }
+                Ok(Ty::simple(
+                    format!("crate::holder::Holder<{}>", inner.rust),
+                    Kind::Trait,
+                ))
+            }
+            Complex::RegistryEntryHolderSet(_) => Ok(Ty::simple(
+                "crate::holder::HolderSet".to_string(),
+                Kind::Trait,
+            )),
+            Complex::EntityMetadataLoop(args) => {
+                let rust = self.reserve(hint);
+                let needs = self.emit_meta_loop(&rust, &args.element, args.end_val, ctx)?;
+                Ok(Ty {
+                    rust,
+                    kind: Kind::Trait,
+                    needs,
+                })
+            }
+            Complex::TopBitSetTerminatedArray { element } => {
+                let rust = self.reserve(hint);
+                let needs = self.emit_topbit_loop(&rust, element, ctx)?;
+                Ok(Ty {
+                    rust,
+                    kind: Kind::Trait,
+                    needs,
+                })
+            }
+            Complex::Switch(_) => Err(CodegenError::Invalid(format!(
+                "{ctx}: switch outside of a container field position"
+            ))),
+        }
+    }
+}
+
+/// PascalCase variant name for a mapper value or switch branch key, with
+/// deterministic deduplication handled by the caller.
+fn variant_name(orig: &str) -> String {
+    pascal(orig)
+}
+
+/// Variant name for a numeric switch branch key: `0` → `V0`, `-1` → `VNeg1`.
+fn numeric_variant(key: i64) -> String {
+    if key < 0 {
+        format!("VNeg{}", key.unsigned_abs())
+    } else {
+        format!("V{key}")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// compareTo resolution
+// ---------------------------------------------------------------------------
+
+/// The discriminant of a switch, resolved against the current scope.
+#[derive(Debug, Clone)]
+struct Discriminant {
+    /// Rust type of the discriminant value (`bool`, `i32`, an enum name...).
+    rust_ty: String,
+    /// Expression producing the value from the current scope's locals.
+    expr: String,
+    class: DiscClass,
+}
+
+#[derive(Debug, Clone)]
+enum DiscClass {
+    Numeric,
+    Bool,
+    /// (rust enum name, (orig name, rust variant) pairs)
+    Mapper(String, Vec<(String, String)>),
+}
+
+impl<'a> ModuleCtx<'a> {
+    /// Resolves a `compareTo` path. `scope` is the current container's
+    /// fields so far; `up` leading `..` segments walk the ancestor stack.
+    /// `prefix` is prepended to the field access (`"self."` for encode).
+    fn resolve_compare_to(
+        &self,
+        compare_to: &str,
+        scope: &ScopeInfo,
+        ctx: &str,
+        prefix: &str,
+    ) -> Result<Discriminant> {
+        let mut segments: Vec<&str> = compare_to.split('/').collect();
+        let mut up = 0;
+        while segments.first() == Some(&"..") {
+            up += 1;
+            segments.remove(0);
+        }
+        let target_scope = if up == 0 {
+            scope
+        } else {
+            // `ancestors` ends with the current scope (self-pushed by the
+            // caller before descending into the field's type), so `..`
+            // levels start one below the top: `../x` names a field of the
+            // current container's parent.
+            if up + 1 > self.ancestors.len() {
+                return Err(CodegenError::Invalid(format!(
+                    "{ctx}: compareTo `{compare_to}` walks above the root container"
+                )));
+            }
+            &self.ancestors[self.ancestors.len() - 1 - up]
+        };
+        let field_name = segments.first().copied().unwrap_or("");
+        let entry = target_scope.get(field_name).ok_or_else(|| {
+            CodegenError::Invalid(format!(
+                "{ctx}: compareTo `{compare_to}` does not name a previously decoded field"
+            ))
+        })?;
+        let member = segments.get(1).copied();
+        let base_expr = format!("{prefix}{}", entry.rust);
+        match (&entry.class, member) {
+            (Class::Numeric, None) => Ok(Discriminant {
+                rust_ty: entry.ty_rust.clone(),
+                expr: base_expr,
+                class: DiscClass::Numeric,
+            }),
+            (Class::Bool, None) => Ok(Discriminant {
+                rust_ty: "bool".into(),
+                expr: base_expr,
+                class: DiscClass::Bool,
+            }),
+            (Class::Mapper(rust, variants), None) => Ok(Discriminant {
+                rust_ty: rust.clone(),
+                expr: base_expr,
+                class: DiscClass::Mapper(rust.clone(), variants.clone()),
+            }),
+            (Class::Bitfield(members), Some(m)) => {
+                let (_, member_rust, size) =
+                    members.iter().find(|(n, _, _)| n == m).ok_or_else(|| {
+                        CodegenError::Invalid(format!(
+                            "{ctx}: compareTo `{compare_to}`: `{m}` is not a bitfield member"
+                        ))
+                    })?;
+                let expr = format!("{base_expr}.{member_rust}");
+                if *size == 1 {
+                    Ok(Discriminant {
+                        rust_ty: "bool".into(),
+                        expr,
+                        class: DiscClass::Bool,
+                    })
+                } else {
+                    let ty_rust = match size {
+                        2..=8 => "u8",
+                        9..=16 => "u16",
+                        17..=32 => "u32",
+                        _ => "u64",
+                    };
+                    Ok(Discriminant {
+                        rust_ty: ty_rust.into(),
+                        expr,
+                        class: DiscClass::Numeric,
+                    })
+                }
+            }
+            (Class::Bitflags(rust, flags), Some(m)) => {
+                let (_, flag_const) = flags.iter().find(|(n, _)| n == m).ok_or_else(|| {
+                    CodegenError::Invalid(format!(
+                        "{ctx}: compareTo `{compare_to}`: `{m}` is not a bitflags flag"
+                    ))
+                })?;
+                Ok(Discriminant {
+                    rust_ty: "bool".into(),
+                    expr: format!("{base_expr}.contains({rust}::{flag_const})"),
+                    class: DiscClass::Bool,
+                })
+            }
+            _ => Err(CodegenError::Invalid(format!(
+                "{ctx}: compareTo `{compare_to}` does not resolve to a numeric, \
+                 boolean or mapper discriminant"
+            ))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Value-level encode/decode code generation
+// ---------------------------------------------------------------------------
+
+/// Statements encoding `value` (a resolved type) into `out`.
+fn encode_value(ty: &Ty, value: &str, out: &mut String, ctx: &str) -> Result<()> {
+    match &ty.kind {
+        Kind::Trait => {
+            let _ = writeln!(out, "crate::traits::Encode::encode(&{value}, out)?;");
+        }
+        Kind::Varint => {
+            let _ = writeln!(out, "out.put_varint({value});");
+        }
+        Kind::Varlong => {
+            let _ = writeln!(out, "out.put_varlong({value});");
+        }
+        Kind::I32 => {
+            let _ = writeln!(out, "out.put_i32({value});");
+        }
+        Kind::I64 => {
+            let _ = writeln!(out, "out.put_i64({value});");
+        }
+        Kind::RestBuf => {
+            let _ = writeln!(out, "out.put_bytes(&{value});");
+        }
+        Kind::BufSized(n) => {
+            let _ = writeln!(
+                out,
+                "if ({value}).len() != {n} {{ return Err(crate::error::ProtocolError::InvalidData(format!(\"{ctx}: expected exactly {n} bytes\"))); }}"
+            );
+            let _ = writeln!(out, "out.put_bytes(&{value});");
+        }
+        Kind::BufCounted(native) => {
+            let put = native.put_method();
+            let rust = native.rust();
+            let _ = writeln!(out, "out.{put}(({value}).len() as {rust});");
+            let _ = writeln!(out, "out.put_bytes(&{value});");
+        }
+        Kind::OptVarint => {
+            let _ = writeln!(out, "out.put_bool({value}.is_some());");
+            let _ = writeln!(out, "if let Some(v) = {value} {{ out.put_varint(v); }}");
+        }
+        Kind::OptVarlong => {
+            let _ = writeln!(out, "out.put_bool({value}.is_some());");
+            let _ = writeln!(out, "if let Some(v) = {value} {{ out.put_varlong(v); }}");
+        }
+        Kind::OptPlain(inner) => {
+            let _ = writeln!(out, "out.put_bool({value}.is_some());");
+            let _ = writeln!(out, "if let Some(v) = &{value} {{");
+            encode_value(inner, "(*v)", out, ctx)?;
+            let _ = writeln!(out, "}}");
+        }
+        Kind::OptNbt => {
+            let _ = writeln!(out, "crate::nbt::write_optional(out, ({value}).as_ref())?;");
+        }
+        Kind::ArrVarintNonTrait(elem) => {
+            let _ = writeln!(out, "out.put_varint(({value}).len() as i32);");
+            let _ = writeln!(out, "for item in &{value} {{");
+            encode_value(elem, "*item", out, ctx)?;
+            let _ = writeln!(out, "}}");
+        }
+        Kind::ArrCounted(native, elem) => {
+            let put = native.put_method();
+            let rust = native.rust();
+            let _ = writeln!(out, "out.{put}(({value}).len() as {rust});");
+            let _ = writeln!(out, "for item in &{value} {{");
+            encode_value(elem, "*item", out, ctx)?;
+            let _ = writeln!(out, "}}");
+        }
+        Kind::ArrFixed(n, elem) => {
+            let _ = writeln!(
+                out,
+                "if ({value}).len() != {n} {{ return Err(crate::error::ProtocolError::InvalidData(format!(\"{ctx}: expected exactly {n} elements\"))); }}"
+            );
+            let _ = writeln!(out, "for item in &{value} {{");
+            encode_value(elem, "*item", out, ctx)?;
+            let _ = writeln!(out, "}}");
+        }
+        Kind::ArrField(reference, elem) => {
+            let count = if reference.ty_rust == "i64" {
+                format!("self.{}", reference.rust)
+            } else {
+                format!("self.{} as i64", reference.rust)
+            };
+            let _ = writeln!(
+                out,
+                "if ({value}).len() as i64 != {count} {{ return Err(crate::error::ProtocolError::InvalidData(format!(\"{ctx}: array length does not match `{}`\"))); }}",
+                reference.orig
+            );
+            let _ = writeln!(out, "for item in &{value} {{");
+            encode_value(elem, "*item", out, ctx)?;
+            let _ = writeln!(out, "}}");
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Field type resolution (type + discriminant class together)
+// ---------------------------------------------------------------------------
+
+impl<'a> ModuleCtx<'a> {
+    /// Resolves a container field's type, returning its Rust type and its
+    /// discriminant class (for later `compareTo` use). Inline mappers,
+    /// bitfields and bitflags are emitted once, here.
+    fn resolve_field_type(&mut self, ty: &TypeRef, hint: &str, ctx: &str) -> Result<(Ty, Class)> {
+        match ty {
+            TypeRef::Complex(c) => match c.as_ref() {
+                Complex::Mapper(args) => {
+                    let rust = self.reserve(hint);
+                    let variants = self.emit_mapper(&rust, &args.ty, &args.mappings, ctx)?;
+                    Ok((
+                        Ty::simple(rust.clone(), Kind::Trait),
+                        Class::Mapper(rust, variants),
+                    ))
+                }
+                Complex::Bitfield(members) => {
+                    let rust = self.reserve(hint);
+                    let member_names = self.emit_bitfield(&rust, members, ctx)?;
+                    Ok((
+                        Ty::simple(rust.clone(), Kind::Trait),
+                        Class::Bitfield(member_names),
+                    ))
+                }
+                Complex::Bitflags(args) => {
+                    let rust = self.reserve(hint);
+                    let flags = self.emit_bitflags(&rust, &args.ty, &args.flags, ctx)?;
+                    Ok((
+                        Ty::simple(rust.clone(), Kind::Trait),
+                        Class::Bitflags(rust, flags),
+                    ))
+                }
+                _ => Ok((self.rust_type(ty, hint, ctx)?, Class::Other)),
+            },
+            TypeRef::Named(name) => {
+                let class = self.class_of_named(name, ctx, 0)?;
+                let ty = self.rust_named(name, ctx, 0)?;
+                Ok((ty, class))
+            }
+        }
+    }
+
+    /// Classifies a named type for discriminant use, emitting it if needed.
+    fn class_of_named(&mut self, name: &str, ctx: &str, depth: u32) -> Result<Class> {
+        if depth > 32 {
+            return Err(CodegenError::Invalid(format!(
+                "{ctx}: alias cycle involving `{name}`"
+            )));
+        }
+        match name {
+            "bool" => return Ok(Class::Bool),
+            "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" | "varint" | "varlong" => {
+                return Ok(Class::Numeric)
+            }
+            _ => {}
+        }
+        match self.lookup(name) {
+            Some(TypeDef::Alias(target)) => {
+                let target = target.clone();
+                self.class_of_named(&target, ctx, depth + 1)
+            }
+            Some(TypeDef::Complex(_)) => {
+                let (_, _, class) = self.ensure_named(name)?;
+                Ok(class)
+            }
+            _ => Ok(Class::Other),
+        }
+    }
+}
+
+/// A sibling field referenced as an array count.
+#[derive(Debug, Clone)]
+struct FieldRef {
+    /// Original minecraft-data name (for errors).
+    orig: String,
+    /// Emitted Rust field name.
+    rust: String,
+    /// Rust type of the field (e.g. `i32`).
+    ty_rust: String,
+}
+
+/// Rewrites array-count field references (created with placeholder names)
+/// against the fields decoded so far.
+fn fix_count_names(kind: &mut Kind, scope: &ScopeInfo, ctx: &str) -> Result<()> {
+    match kind {
+        Kind::ArrField(reference, elem) => {
+            let entry = scope.get(&reference.orig).ok_or_else(|| {
+                CodegenError::Invalid(format!(
+                    "{ctx}: array count field `{}` is not a previously decoded field",
+                    reference.orig
+                ))
+            })?;
+            reference.rust = entry.rust.clone();
+            reference.ty_rust = entry.ty_rust.clone();
+            fix_count_names(&mut elem.kind, scope, ctx)
+        }
+        Kind::ArrVarintNonTrait(elem) | Kind::ArrCounted(_, elem) | Kind::ArrFixed(_, elem) => {
+            fix_count_names(&mut elem.kind, scope, ctx)
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Whether a kind (recursively) contains a sibling-counted array, which
+/// cannot decode outside of its declaring container.
+fn has_arr_field(kind: &Kind) -> bool {
+    match kind {
+        Kind::ArrField(..) => true,
+        Kind::ArrVarintNonTrait(elem) | Kind::ArrCounted(_, elem) | Kind::ArrFixed(_, elem) => {
+            has_arr_field(&elem.kind)
+        }
+        _ => false,
+    }
+}
+
+/// Whether a type (recursively) needs context parameters to decode.
+fn collect_needs(ty: &Ty, out: &mut Vec<Need>) {
+    out.extend(ty.needs.iter().cloned());
+    match &ty.kind {
+        Kind::ArrVarintNonTrait(elem)
+        | Kind::ArrCounted(_, elem)
+        | Kind::ArrFixed(_, elem)
+        | Kind::ArrField(_, elem)
+        | Kind::OptPlain(elem) => collect_needs(elem, out),
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Decode expressions
+// ---------------------------------------------------------------------------
+
+/// An expression decoding a value of `ty` from `input`. `args` maps context
+/// paths to the expressions the caller resolved for them.
+fn decode_value(ty: &Ty, args: &[(String, String)], ctx: &str) -> Result<String> {
+    let ctx_args = |needs: &[Need]| -> Result<Vec<String>> {
+        needs
+            .iter()
+            .map(|n| {
+                args.iter()
+                    .find(|(p, _)| p == &n.path)
+                    .map(|(_, e)| e.clone())
+                    .ok_or_else(|| {
+                        CodegenError::Invalid(format!(
+                            "{ctx}: internal error: context path `{}` was not resolved",
+                            n.path
+                        ))
+                    })
+            })
+            .collect()
+    };
+    Ok(match &ty.kind {
+        Kind::Trait => {
+            if ty.needs.is_empty() {
+                format!("<{} as crate::traits::Decode>::decode(input)?", ty.rust)
+            } else {
+                let args = ctx_args(&ty.needs)?;
+                format!("{}::decode_ctx(input, {})?", ty.rust, args.join(", "))
+            }
+        }
+        Kind::Varint => "input.get_varint()?".into(),
+        Kind::Varlong => "input.get_varlong()?".into(),
+        Kind::I32 => "input.get_i32()?".into(),
+        Kind::I64 => "input.get_i64()?".into(),
+        Kind::RestBuf => "{ let bytes = input.rest().to_vec(); input.skip_all(); bytes }".into(),
+        Kind::BufSized(n) => format!("input.read_bytes({n})?.to_vec()"),
+        Kind::BufCounted(native) => {
+            let get = native.get_method();
+            let neg = if native.is_signed() {
+                "if n < 0 {{ return Err(crate::error::ProtocolError::NegativeLength(n as i32)); }}"
+                    .to_string()
+            } else {
+                String::new()
+            };
+            format!(
+                "{{ let n = input.{get}()?; {neg} let n = n as usize; \
+                 if n > input.remaining() {{ return Err(crate::error::ProtocolError::BufferUnderflow {{ needed: n, remaining: input.remaining() }}); }} \
+                 input.read_bytes(n)?.to_vec() }}"
+            )
+        }
+        Kind::OptVarint => {
+            "{ if input.get_bool()? { Some(input.get_varint()?) } else { None } }".into()
+        }
+        Kind::OptVarlong => {
+            "{ if input.get_bool()? { Some(input.get_varlong()?) } else { None } }".into()
+        }
+        Kind::OptPlain(inner) => {
+            let inner_expr = decode_value(inner, args, ctx)?;
+            format!("{{ if input.get_bool()? {{ Some({inner_expr}) }} else {{ None }} }}")
+        }
+        Kind::OptNbt => "crate::nbt::read_optional(input)?".into(),
+        Kind::ArrVarintNonTrait(elem) => {
+            if elem.needs.is_empty() {
+                let elem_expr = decode_value(elem, args, ctx)?;
+                format!("input.read_array(|input| {{ Ok({elem_expr}) }})?")
+            } else {
+                let elem_expr = decode_value(elem, args, ctx)?;
+                format!(
+                    "{{ let n = input.get_varint()?; \
+                     if n < 0 {{ return Err(crate::error::ProtocolError::NegativeLength(n)); }} \
+                     let n = n as usize; \
+                     if n > input.remaining() {{ return Err(crate::error::ProtocolError::BufferUnderflow {{ needed: n, remaining: input.remaining() }}); }} \
+                     let mut items = Vec::with_capacity(n); \
+                     for _ in 0..n {{ items.push({elem_expr}); }} \
+                     items }}"
+                )
+            }
+        }
+        Kind::ArrCounted(native, elem) => {
+            let get = native.get_method();
+            let neg = if native.is_signed() {
+                "if n < 0 { return Err(crate::error::ProtocolError::NegativeLength(n as i32)); }"
+            } else {
+                ""
+            };
+            let elem_expr = decode_value(elem, args, ctx)?;
+            format!(
+                "{{ let n = input.{get}()?; {neg} let n = n as usize; \
+                 if n > input.remaining() {{ return Err(crate::error::ProtocolError::BufferUnderflow {{ needed: n, remaining: input.remaining() }}); }} \
+                 let mut items = Vec::with_capacity(n); \
+                 for _ in 0..n {{ items.push({elem_expr}); }} \
+                 items }}"
+            )
+        }
+        Kind::ArrFixed(n, elem) => {
+            let elem_expr = decode_value(elem, args, ctx)?;
+            format!(
+                "{{ if {n} > input.remaining() {{ return Err(crate::error::ProtocolError::BufferUnderflow {{ needed: {n}, remaining: input.remaining() }}); }} \
+                 let mut items = Vec::with_capacity({n}); \
+                 for _ in 0..{n} {{ items.push({elem_expr}); }} \
+                 items }}"
+            )
+        }
+        Kind::ArrField(reference, elem) => {
+            let count = match reference.ty_rust.as_str() {
+                "i64" => reference.rust.clone(),
+                "u64" => format!("{} as i64", reference.rust),
+                _ => format!("i64::from({})", reference.rust),
+            };
+            let elem_expr = decode_value(elem, args, ctx)?;
+            format!(
+                "{{ let n = {count}; \
+                 if n < 0 {{ return Err(crate::error::ProtocolError::InvalidData(format!(\"{ctx}: negative array count\"))); }} \
+                 let n = n as usize; \
+                 if n > input.remaining() {{ return Err(crate::error::ProtocolError::BufferUnderflow {{ needed: n, remaining: input.remaining() }}); }} \
+                 let mut items = Vec::with_capacity(n); \
+                 for _ in 0..n {{ items.push({elem_expr}); }} \
+                 items }}"
+            )
+        }
+    })
+}
+
+/// Emits the encode-side consistency check for a switch field whose
+/// discriminant is a sibling: every discriminant value must be paired with
+/// the matching enum variant, otherwise encoding fails with `InvalidData`.
+fn emit_switch_encode_check(
+    body: &mut String,
+    struct_rust: &str,
+    field: &FieldOut,
+    sw: &SwitchField,
+) -> Result<()> {
+    let enum_rust = &sw.enum_rust;
+    let msg = format!(
+        "{struct_rust}: field `{}` does not match its discriminant",
+        field.orig
+    );
+    let _ = writeln!(
+        body,
+        "        match ({}, &self.{}) {{",
+        sw.disc_self.expr, field.rust
+    );
+    // Matching (discriminant, variant) pairs encode the payload.
+    for v in &sw.variants {
+        match &v.payload {
+            Some(ty) => {
+                let _ = writeln!(
+                    body,
+                    "            ({}, {enum_rust}::{}(v)) => {{",
+                    v.key_pat, v.variant
+                );
+                let mut stmt = String::new();
+                encode_value(ty, "*v", &mut stmt, &msg)?;
+                for line in stmt.lines() {
+                    let _ = writeln!(body, "                {line}");
+                }
+                let _ = writeln!(body, "            }}");
+            }
+            None => {
+                let _ = writeln!(
+                    body,
+                    "            ({}, {enum_rust}::{}) => {{}},",
+                    v.key_pat, v.variant
+                );
+            }
+        }
+    }
+    // A key pattern paired with any other variant is an error.
+    let mismatch_reachable = sw.variants.len() >= 2 || sw.default.is_some() || sw.none.is_some();
+    if mismatch_reachable {
+        let pats: Vec<&str> = sw.variants.iter().map(|v| v.key_pat.as_str()).collect();
+        let ors: Vec<String> = pats.iter().map(|p| format!("({p}, _)")).collect();
+        let _ = writeln!(
+            body,
+            "            {} => {{ return Err(crate::error::ProtocolError::InvalidData(\"{msg}\".into())); }}",
+            ors.join(" | ")
+        );
+    }
+    // Unmatched discriminant with the `None` variant carries nothing.
+    if let Some(name) = &sw.none {
+        let _ = writeln!(body, "            (_, {enum_rust}::{name}) => {{}},");
+    }
+    // The default payload encodes when the discriminant matched no key.
+    if !sw.full_coverage {
+        if let Some((name, payload)) = &sw.default {
+            match payload {
+                Some(ty) => {
+                    let _ = writeln!(body, "            (_, {enum_rust}::{name}(v)) => {{");
+                    let mut stmt = String::new();
+                    encode_value(ty, "*v", &mut stmt, &msg)?;
+                    for line in stmt.lines() {
+                        let _ = writeln!(body, "                {line}");
+                    }
+                    let _ = writeln!(body, "            }}");
+                }
+                None => {
+                    let _ = writeln!(body, "            (_, {enum_rust}::{name}) => {{}},");
+                }
+            }
+        }
+    }
+    // Remaining combinations (unmatched discriminant with a keyed payload
+    // variant) are invalid. Only reachable — and thus only emitted — when
+    // the key patterns cannot cover every discriminant value.
+    let patterns_cover_all = match &sw.disc.class {
+        DiscClass::Bool => sw.default.is_none() || sw.full_coverage,
+        DiscClass::Mapper(..) => sw.full_coverage,
+        DiscClass::Numeric => false,
+    };
+    if !patterns_cover_all && !sw.variants.is_empty() {
+        let _ = writeln!(
+            body,
+            "            _ => {{ return Err(crate::error::ProtocolError::InvalidData(\"{msg}\".into())); }}"
+        );
+    }
+    let _ = writeln!(body, "        }}");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Struct emission
+// ---------------------------------------------------------------------------
+
+/// Outcome of emitting a struct type.
+struct StructOut {
+    needs: Vec<Need>,
+}
+
+/// One resolved field of a struct.
+struct FieldOut {
+    /// Original name.
+    orig: String,
+    /// Rust field name.
+    rust: String,
+    ty: Ty,
+    class: Class,
+    /// Present when the field is a switch: (enum rust name, discriminant,
+    /// whether the discriminant is a sibling, variants).
+    switch: Option<Box<SwitchField>>,
+}
+
+struct SwitchField {
+    enum_rust: String,
+    /// Enum needs (discriminant when `../`, plus branch needs).
+    needs: Vec<Need>,
+    /// Stripped compareTo path of the discriminant.
+    disc_path: String,
+    /// Discriminant as a local expression (decode) and as `self.` (encode).
+    disc: Discriminant,
+    disc_self: Discriminant,
+    /// compareTo stayed inside the current container.
+    sibling: bool,
+    variants: Vec<VMeta>,
+    none: Option<String>,
+    default: Option<(String, Option<Ty>)>,
+    full_coverage: bool,
+}
+
+impl<'a> ModuleCtx<'a> {
+    /// Emits a struct (and its `Encode`/`Decode` impls, or inherent
+    /// `decode_ctx` when it needs context). When `topbit` is true the struct
+    /// is a topBitSetTerminatedArray element and gets inherent
+    /// `decode_topbit`/`encode_topbit` methods instead of trait impls.
+    fn emit_struct(
+        &mut self,
+        rust: &str,
+        fields: &[ContainerField],
+        ctx: &str,
+    ) -> Result<StructOut> {
+        self.emit_struct_mode(rust, fields, ctx, false)
+    }
+
+    fn emit_struct_mode(
+        &mut self,
+        rust: &str,
+        fields: &[ContainerField],
+        ctx: &str,
+        topbit: bool,
+    ) -> Result<StructOut> {
+        let flat = flatten_fields(fields, ctx)?;
+        let mut scope = ScopeInfo::default();
+        let mut out_fields: Vec<FieldOut> = Vec::new();
+        for (orig, ty) in &flat {
+            let field_ctx = format!("{ctx}.{orig}");
+            let rust_name = dedup_field(&ident(&snake(orig)), &scope);
+            self.ancestors.push(scope.clone());
+            let resolved = (|| {
+                if let TypeRef::Complex(c) = ty {
+                    if let Complex::Switch(args) = c.as_ref() {
+                        let hint = format!("{rust}{}", pascal(orig));
+                        let sw = self.emit_switch_enum(&hint, args, &scope, &field_ctx)?;
+                        let enum_ty = Ty {
+                            rust: sw.enum_rust.clone(),
+                            kind: Kind::Trait,
+                            needs: sw.needs.clone(),
+                        };
+                        return Ok(FieldOut {
+                            orig: orig.clone(),
+                            rust: rust_name.clone(),
+                            ty: enum_ty,
+                            class: Class::Other,
+                            switch: Some(Box::new(SwitchField {
+                                enum_rust: sw.enum_rust,
+                                needs: sw.needs,
+                                disc_path: sw.disc_path,
+                                disc: sw.disc,
+                                disc_self: sw.disc_self,
+                                sibling: sw.sibling,
+                                variants: sw.variants,
+                                none: sw.none,
+                                default: sw.default,
+                                full_coverage: sw.full_coverage,
+                            })),
+                        });
+                    }
+                }
+                let hint = format!("{rust}{}", pascal(orig));
+                let (mut field_ty, class) = self.resolve_field_type(ty, &hint, &field_ctx)?;
+                fix_count_names(&mut field_ty.kind, &scope, &field_ctx)?;
+                if field_ty.rust == "()" {
+                    return Err(CodegenError::Invalid(format!(
+                        "{field_ctx}: void field in a container"
+                    )));
+                }
+                Ok(FieldOut {
+                    orig: orig.clone(),
+                    rust: rust_name.clone(),
+                    ty: field_ty,
+                    class,
+                    switch: None,
+                })
+            })();
+            self.ancestors.pop();
+            let field = resolved?;
+            scope.fields.push((
+                field.orig.clone(),
+                Entry {
+                    rust: field.rust.clone(),
+                    ty_rust: field.ty.rust.clone(),
+                    class: field.class.clone(),
+                },
+            ));
+            out_fields.push(field);
+        }
+
+        // Context needs: child needs with levels >= 1 become our needs with
+        // levels - 1 (we forward them as parameters).
+        let mut needs: Vec<Need> = Vec::new();
+        for field in &out_fields {
+            let mut field_needs = Vec::new();
+            collect_needs(&field.ty, &mut field_needs);
+            for need in field_needs {
+                if need.levels >= 1 && !needs.iter().any(|n| n.path == need.path) {
+                    needs.push(Need {
+                        levels: need.levels - 1,
+                        path: need.path.clone(),
+                        rust_ty: need.rust_ty.clone(),
+                    });
+                }
+            }
+        }
+
+        // Parameter names for our needs (deduped by leaf name).
+        let mut param_names: Vec<(String, String)> = Vec::new();
+        for need in &needs {
+            let leaf = need.path.rsplit('/').next().unwrap_or(&need.path);
+            let base = snake(leaf);
+            let mut name = base.clone();
+            let mut n = 2;
+            while param_names.iter().any(|(_, existing)| existing == &name) {
+                name = format!("{base}{n}");
+                n += 1;
+            }
+            param_names.push((need.path.clone(), name));
+        }
+
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq)]");
+        let _ = writeln!(body, "pub struct {rust} {{");
+        for field in &out_fields {
+            let _ = writeln!(body, "    pub {}: {},", field.rust, field.ty.rust);
+        }
+        let _ = writeln!(body, "}}\n");
+
+        if topbit {
+            self.emit_topbit_element_methods(&mut body, rust, &out_fields, &scope, ctx)?;
+            self.out.push_str(&body);
+            return Ok(StructOut { needs });
+        }
+
+        // Encode impl.
+        let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        for field in &out_fields {
+            let value = format!("self.{}", field.rust);
+            if let Some(sw) = &field.switch {
+                if sw.sibling {
+                    emit_switch_encode_check(&mut body, rust, field, sw)?;
+                } else {
+                    let _ = writeln!(
+                        body,
+                        "        crate::traits::Encode::encode(&{value}, out)?;"
+                    );
+                }
+            } else {
+                let mut stmt = String::new();
+                encode_value(
+                    &field.ty,
+                    &value,
+                    &mut stmt,
+                    &format!("{ctx}.{}", field.orig),
+                )?;
+                for line in stmt.lines() {
+                    let _ = writeln!(body, "        {line}");
+                }
+            }
+        }
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+
+        // Decode: trait impl, or inherent decode_ctx when context is needed.
+        let params: Vec<String> = needs
+            .iter()
+            .map(|need| {
+                let name = param_names
+                    .iter()
+                    .find(|(p, _)| p == &need.path)
+                    .map(|(_, n)| n.clone())
+                    .expect("param name computed for every need");
+                format!("{}: {}", name, need.rust_ty)
+            })
+            .collect();
+        if needs.is_empty() {
+            let _ = writeln!(body, "impl crate::traits::Decode for {rust} {{");
+            let _ = writeln!(
+                body,
+                "    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {{"
+            );
+        } else {
+            let _ = writeln!(body, "impl {rust} {{");
+            let _ = writeln!(
+                body,
+                "    pub fn decode_ctx(\n        input: &mut crate::buffer::PacketReader<'_>,\n        {},\n    ) -> crate::error::Result<Self> {{",
+                params.join(",\n        ")
+            );
+        }
+        // Resolve every field's context args (level 0 → local expression,
+        // level >= 1 → forwarded parameter).
+        for field in &out_fields {
+            let mut field_needs = Vec::new();
+            collect_needs(&field.ty, &mut field_needs);
+            let mut args: Vec<(String, String)> = Vec::new();
+            for need in &field_needs {
+                let expr = if need.levels == 0 {
+                    self.resolve_compare_to(&need.path, &scope, ctx, "")?.expr
+                } else {
+                    param_names
+                        .iter()
+                        .find(|(p, _)| p == &need.path)
+                        .map(|(_, n)| n.clone())
+                        .ok_or_else(|| {
+                            CodegenError::Invalid(format!(
+                                "{ctx}: internal error: unforwarded context `{}`",
+                                need.path
+                            ))
+                        })?
+                };
+                args.push((need.path.clone(), expr));
+            }
+            let expr = if let Some(sw) = &field.switch {
+                let disc_arg = if sw.sibling {
+                    sw.disc.expr.clone()
+                } else {
+                    args.iter()
+                        .find(|(p, _)| p == &sw.disc_path)
+                        .map(|(_, e)| e.clone())
+                        .expect("switch discriminant context arg resolved")
+                };
+                let mut call_args = vec![disc_arg];
+                for need in sw.needs.iter().filter(|n| n.path != sw.disc_path) {
+                    let e = args
+                        .iter()
+                        .find(|(p, _)| p == &need.path)
+                        .map(|(_, e)| e.clone())
+                        .expect("switch context arg resolved");
+                    call_args.push(e);
+                }
+                format!(
+                    "{}::decode_from(input, {})?",
+                    sw.enum_rust,
+                    call_args.join(", ")
+                )
+            } else {
+                decode_value(&field.ty, &args, &format!("{ctx}.{}", field.orig))?
+            };
+            let _ = writeln!(body, "        let {} = {expr};", field.rust);
+        }
+        let names: Vec<&str> = out_fields.iter().map(|f| f.rust.as_str()).collect();
+        let _ = writeln!(body, "        Ok(Self {{ {} }})", names.join(", "));
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+
+        self.out.push_str(&body);
+        Ok(StructOut { needs })
+    }
+
+    /// Emits the inherent decode_topbit/encode_topbit methods for a
+    /// topBitSetTerminatedArray element struct.
+    fn emit_topbit_element_methods(
+        &mut self,
+        body: &mut String,
+        rust: &str,
+        fields: &[FieldOut],
+        _scope: &ScopeInfo,
+        ctx: &str,
+    ) -> Result<()> {
+        let first = fields.first().ok_or_else(|| {
+            CodegenError::Invalid(format!("{ctx}: topBitSetTerminatedArray element is empty"))
+        })?;
+        let first_signed = match first.ty.kind {
+            Kind::Trait if first.ty.rust == "i8" => true,
+            Kind::Trait if first.ty.rust == "u8" => false,
+            _ => {
+                return Err(CodegenError::Invalid(format!(
+                    "{ctx}: topBitSetTerminatedArray element's first field is not i8/u8"
+                )))
+            }
+        };
+        let _ = writeln!(body, "impl {rust} {{");
+        // decode_topbit
+        let _ = writeln!(
+            body,
+            "    fn decode_topbit(\n        input: &mut crate::buffer::PacketReader<'_>,\n    ) -> crate::error::Result<(Self, bool)> {{"
+        );
+        let _ = writeln!(body, "        let first_raw = input.get_u8()?;");
+        let _ = writeln!(body, "        let more = first_raw & 0x80 != 0;");
+        let strip = if first_signed {
+            "(first_raw & 0x7f) as i8"
+        } else {
+            "first_raw & 0x7f"
+        };
+        let _ = writeln!(body, "        let {} = {strip};", first.rust);
+        for field in &fields[1..] {
+            let expr = decode_value(&field.ty, &[], &format!("{ctx}.{}", field.orig))?;
+            let _ = writeln!(body, "        let {} = {expr};", field.rust);
+        }
+        let names: Vec<&str> = fields.iter().map(|f| f.rust.as_str()).collect();
+        let _ = writeln!(body, "        Ok((Self {{ {} }}, more))", names.join(", "));
+        let _ = writeln!(body, "    }}");
+        // encode_topbit
+        let _ = writeln!(
+            body,
+            "    fn encode_topbit(\n        &self,\n        out: &mut crate::buffer::PacketWriter,\n        more: bool,\n    ) -> crate::error::Result<()> {{"
+        );
+        let range_check = if first_signed {
+            format!(
+                "if !(0..=0x7f).contains(&self.{}) {{ return Err(crate::error::ProtocolError::InvalidData(format!(\"{ctx}: first field out of 7-bit range\"))); }}",
+                first.rust
+            )
+        } else {
+            format!(
+                "if self.{} > 0x7f {{ return Err(crate::error::ProtocolError::InvalidData(format!(\"{ctx}: first field out of 7-bit range\"))); }}",
+                first.rust
+            )
+        };
+        let _ = writeln!(body, "        {range_check}");
+        let _ = writeln!(
+            body,
+            "        out.put_u8((self.{} as u8 & 0x7f) | if more {{ 0x80 }} else {{ 0 }});",
+            first.rust
+        );
+        for field in &fields[1..] {
+            let value = format!("self.{}", field.rust);
+            let mut stmt = String::new();
+            encode_value(
+                &field.ty,
+                &value,
+                &mut stmt,
+                &format!("{ctx}.{}", field.orig),
+            )?;
+            for line in stmt.lines() {
+                let _ = writeln!(body, "        {line}");
+            }
+        }
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        Ok(())
+    }
+}
+
+/// Flattens a container's fields: anonymous containers merge their fields
+/// into the parent; anonymous switches keep a generated `value` name.
+fn flatten_fields<'f>(
+    fields: &'f [ContainerField],
+    ctx: &str,
+) -> Result<Vec<(String, &'f TypeRef)>> {
+    fn rec<'f>(
+        fields: &'f [ContainerField],
+        out: &mut Vec<(String, &'f TypeRef)>,
+        ctx: &str,
+    ) -> Result<()> {
+        for field in fields {
+            if field.anon {
+                if let TypeRef::Complex(c) = &field.ty {
+                    if let Complex::Container(inner) = c.as_ref() {
+                        rec(inner, out, ctx)?;
+                        continue;
+                    }
+                }
+                out.push(("value".to_string(), &field.ty));
+            } else {
+                let name = field
+                    .name
+                    .clone()
+                    .ok_or_else(|| CodegenError::Invalid(format!("{ctx}: field without a name")))?;
+                out.push((name, &field.ty));
+            }
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    rec(fields, &mut out, ctx)?;
+    Ok(out)
+}
+
+/// Deduplicates a field name against the fields decoded so far.
+fn dedup_field(base: &str, scope: &ScopeInfo) -> String {
+    let mut name = base.to_string();
+    let mut n = 2;
+    while scope.fields.iter().any(|(_, e)| e.rust == name) {
+        name = format!("{base}{n}");
+        n += 1;
+    }
+    name
+}
+
+// ---------------------------------------------------------------------------
+// Switch enum emission
+// ---------------------------------------------------------------------------
+
+/// One keyed variant of a switch enum.
+#[derive(Clone)]
+struct VMeta {
+    /// Match pattern for the discriminant (e.g. `SlotComponentType::CustomData`,
+    /// `0`, `true`).
+    key_pat: String,
+    variant: String,
+    payload: Option<Ty>,
+}
+
+/// Outcome of emitting a switch enum.
+struct SwitchEmit {
+    enum_rust: String,
+    /// Context needs: the discriminant (when `../`) plus branch needs.
+    needs: Vec<Need>,
+    /// Stripped compareTo path of the discriminant.
+    disc_path: String,
+    disc: Discriminant,
+    /// The discriminant with `self.` prefix (for encode-side checks).
+    disc_self: Discriminant,
+    /// The discriminant lives in the same container.
+    sibling: bool,
+    variants: Vec<VMeta>,
+    /// Name of the `None` variant, when the switch can match nothing.
+    none: Option<String>,
+    default: Option<(String, Option<Ty>)>,
+    /// Every discriminant value has an explicit branch.
+    full_coverage: bool,
+}
+
+impl<'a> ModuleCtx<'a> {
+    fn emit_switch_enum(
+        &mut self,
+        hint: &str,
+        args: &SwitchArgs,
+        scope: &ScopeInfo,
+        ctx: &str,
+    ) -> Result<SwitchEmit> {
+        let enum_rust = self.reserve(hint);
+        let up = args
+            .compare_to
+            .split('/')
+            .take_while(|s| *s == "..")
+            .count();
+        let disc_path = args
+            .compare_to
+            .split('/')
+            .skip(up)
+            .collect::<Vec<_>>()
+            .join("/");
+        let disc = self.resolve_compare_to(&args.compare_to, scope, ctx, "")?;
+        let disc_self = self.resolve_compare_to(&args.compare_to, scope, ctx, "self.")?;
+        let sibling = up == 0;
+
+        let mut needs: Vec<Need> = Vec::new();
+        if up >= 1 {
+            needs.push(Need {
+                levels: up,
+                path: disc_path.clone(),
+                rust_ty: disc.rust_ty.clone(),
+            });
+        }
+
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut dedup = |base: &str| {
+            let mut name = base.to_string();
+            let mut n = 2;
+            while seen.contains(&name) {
+                name = format!("{base}{n}");
+                n += 1;
+            }
+            seen.insert(name.clone());
+            name
+        };
+
+        // Normalize branch keys against the discriminant class.
+        let mut variants: Vec<VMeta> = Vec::new();
+        let mut covered: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut bool_sides: std::collections::HashSet<bool> = std::collections::HashSet::new();
+        for (key, branch) in &args.fields {
+            let (key_pat, vname) = match &disc.class {
+                DiscClass::Mapper(rust, map) => {
+                    let (_, variant) =
+                        map.iter().find(|(orig, _)| orig == key).ok_or_else(|| {
+                            CodegenError::Invalid(format!(
+                            "{ctx}: switch branch key `{key}` is not a variant of the discriminant"
+                        ))
+                        })?;
+                    covered.insert(key.clone());
+                    (format!("{rust}::{variant}"), variant.clone())
+                }
+                DiscClass::Bool => {
+                    let side = match key.as_str() {
+                        "0" | "false" => false,
+                        "1" | "true" => true,
+                        _ => {
+                            return Err(CodegenError::Invalid(format!(
+                                "{ctx}: switch branch key `{key}` is not boolean"
+                            )))
+                        }
+                    };
+                    bool_sides.insert(side);
+                    (
+                        side.to_string(),
+                        if side { "True".into() } else { "False".into() },
+                    )
+                }
+                DiscClass::Numeric => {
+                    let value: i64 = key.parse().map_err(|_| {
+                        CodegenError::Invalid(format!(
+                            "{ctx}: switch branch key `{key}` is not an integer"
+                        ))
+                    })?;
+                    (value.to_string(), numeric_variant(value))
+                }
+            };
+            let vname = dedup(&vname);
+            let payload = match branch {
+                TypeRef::Named(n) if n == "void" => None,
+                other => {
+                    let branch_hint = format!("{enum_rust}{vname}");
+                    let ty = self.rust_type(other, &branch_hint, ctx)?;
+                    if has_arr_field(&ty.kind) {
+                        return Err(CodegenError::Invalid(format!(
+                            "{ctx}: switch branch with a sibling-counted array \
+                             (count field is out of scope inside the branch)"
+                        )));
+                    }
+                    for need in &ty.needs {
+                        if !needs.iter().any(|n| n.path == need.path) {
+                            needs.push(need.clone());
+                        }
+                    }
+                    Some(ty)
+                }
+            };
+            variants.push(VMeta {
+                key_pat,
+                variant: vname,
+                payload,
+            });
+        }
+
+        // Default branch.
+        let default = match &args.default {
+            Some(TypeRef::Named(n)) if n == "void" => Some((dedup("Default"), None)),
+            Some(other) => {
+                let name = dedup("Default");
+                let ty = self.rust_type(other, &format!("{enum_rust}{name}"), ctx)?;
+                if has_arr_field(&ty.kind) {
+                    return Err(CodegenError::Invalid(format!(
+                        "{ctx}: switch default with a sibling-counted array"
+                    )));
+                }
+                for need in &ty.needs {
+                    if !needs.iter().any(|n| n.path == need.path) {
+                        needs.push(need.clone());
+                    }
+                }
+                Some((name, Some(ty)))
+            }
+            None => None,
+        };
+
+        // Coverage and the `None` variant.
+        let mut none: Option<String> = None;
+        let full_coverage;
+        match &disc.class {
+            DiscClass::Mapper(_, map) => {
+                full_coverage = map.iter().all(|(orig, _)| covered.contains(orig));
+                if !full_coverage && default.is_none() {
+                    none = Some(dedup("None"));
+                }
+            }
+            DiscClass::Bool => {
+                let missing: Vec<bool> = [true, false]
+                    .into_iter()
+                    .filter(|s| !bool_sides.contains(s))
+                    .collect();
+                full_coverage = missing.is_empty();
+                if default.is_none() {
+                    for side in missing {
+                        let vname = dedup(if side { "True" } else { "False" });
+                        variants.push(VMeta {
+                            key_pat: side.to_string(),
+                            variant: vname,
+                            payload: None,
+                        });
+                    }
+                }
+            }
+            DiscClass::Numeric => {
+                full_coverage = false;
+                if default.is_none() {
+                    none = Some(dedup("None"));
+                }
+            }
+        }
+
+        // ---- emit the enum ----
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq)]");
+        let _ = writeln!(body, "pub enum {enum_rust} {{");
+        for v in &variants {
+            match &v.payload {
+                Some(ty) => {
+                    let _ = writeln!(body, "    {}({}),", v.variant, ty.rust);
+                }
+                None => {
+                    let _ = writeln!(body, "    {},", v.variant);
+                }
+            }
+        }
+        if let Some((name, payload)) = &default {
+            match payload {
+                Some(ty) => {
+                    let _ = writeln!(body, "    {name}({}),", ty.rust);
+                }
+                None => {
+                    let _ = writeln!(body, "    {name},");
+                }
+            }
+        }
+        if let Some(name) = &none {
+            let _ = writeln!(body, "    {name},");
+        }
+        let _ = writeln!(body, "}}\n");
+
+        // Encode: payload only (the discriminant is encoded by the parent).
+        let _ = writeln!(body, "impl crate::traits::Encode for {enum_rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        let _ = writeln!(body, "        match self {{");
+        for v in &variants {
+            if let Some(ty) = &v.payload {
+                let mut stmt = String::new();
+                encode_value(ty, "*v", &mut stmt, ctx)?;
+                let _ = writeln!(body, "            Self::{}(v) => {{", v.variant);
+                for line in stmt.lines() {
+                    let _ = writeln!(body, "                {line}");
+                }
+                let _ = writeln!(body, "            }}");
+            } else {
+                let _ = writeln!(body, "            Self::{} => {{}}", v.variant);
+            }
+        }
+        if let Some((name, payload)) = &default {
+            if let Some(ty) = payload {
+                let mut stmt = String::new();
+                encode_value(ty, "*v", &mut stmt, ctx)?;
+                let _ = writeln!(body, "            Self::{name}(v) => {{");
+                for line in stmt.lines() {
+                    let _ = writeln!(body, "                {line}");
+                }
+                let _ = writeln!(body, "            }}");
+            } else {
+                let _ = writeln!(body, "            Self::{name} => {{}}");
+            }
+        }
+        if let Some(name) = &none {
+            let _ = writeln!(body, "            Self::{name} => {{}}");
+        }
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+
+        // decode_from
+        let ctx_needs: Vec<&Need> = needs.iter().filter(|n| n.path != disc_path).collect();
+        let mut param_names: Vec<(String, String)> = Vec::new();
+        for need in &ctx_needs {
+            let leaf = need.path.rsplit('/').next().unwrap_or(&need.path);
+            let base = snake(leaf);
+            let mut name = base.clone();
+            let mut n = 2;
+            while param_names.iter().any(|(_, e)| e == &name) {
+                name = format!("{base}{n}");
+                n += 1;
+            }
+            param_names.push((need.path.clone(), name));
+        }
+        let mut params = vec![format!("discriminant: {}", disc.rust_ty)];
+        for (need, (_, pname)) in ctx_needs.iter().zip(&param_names) {
+            params.push(format!("{pname}: {}", need.rust_ty));
+        }
+        let args_exprs: Vec<(String, String)> = param_names.clone();
+        let _ = writeln!(body, "impl {enum_rust} {{");
+        let _ = writeln!(
+            body,
+            "    pub fn decode_from(\n        input: &mut crate::buffer::PacketReader<'_>,\n        {},\n    ) -> crate::error::Result<Self> {{",
+            params.join(",\n        ")
+        );
+        if variants.is_empty() && default.is_none() {
+            let _ = writeln!(body, "        let _ = discriminant;");
+            let name = none.as_ref().expect("empty switch has a None variant");
+            let _ = writeln!(body, "        Ok(Self::{name})");
+        } else {
+            let _ = writeln!(body, "        match discriminant {{");
+            for v in &variants {
+                let arm = match &v.payload {
+                    Some(ty) => {
+                        let expr = decode_value(ty, &args_exprs, ctx)?;
+                        format!("Ok(Self::{}({expr}))", v.variant)
+                    }
+                    None => format!("Ok(Self::{})", v.variant),
+                };
+                let _ = writeln!(body, "            {} => {arm},", v.key_pat);
+            }
+            // Trailing arm: default, None, or nothing. For a bool
+            // discriminant with a default, the default covers the missing
+            // side explicitly; for numeric/partial-mapper it is `_`.
+            let trailing_pat: Option<String> = match &disc.class {
+                DiscClass::Bool => {
+                    let missing: Vec<bool> = [true, false]
+                        .into_iter()
+                        .filter(|s| !bool_sides.contains(s))
+                        .collect();
+                    if missing.is_empty() || default.is_none() {
+                        None
+                    } else {
+                        Some(
+                            missing
+                                .iter()
+                                .map(bool::to_string)
+                                .collect::<Vec<_>>()
+                                .join(" | "),
+                        )
+                    }
+                }
+                _ if full_coverage => None,
+                _ => Some("_".to_string()),
+            };
+            if let Some(pat) = trailing_pat {
+                let arm = match &default {
+                    Some((name, payload)) => match payload {
+                        Some(ty) => {
+                            let expr = decode_value(ty, &args_exprs, ctx)?;
+                            format!("Ok(Self::{name}({expr}))")
+                        }
+                        None => format!("Ok(Self::{name})"),
+                    },
+                    None => {
+                        let name = none.as_ref().expect("partial switch has None");
+                        format!("Ok(Self::{name})")
+                    }
+                };
+                let _ = writeln!(body, "            {pat} => {arm},");
+            }
+            let _ = writeln!(body, "        }}");
+        }
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+
+        self.out.push_str(&body);
+        Ok(SwitchEmit {
+            enum_rust,
+            needs,
+            disc_path,
+            disc,
+            disc_self,
+            sibling,
+            variants,
+            none,
+            default,
+            full_coverage,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mapper / bitfield / bitflags / loop emission
+// ---------------------------------------------------------------------------
+
+impl<'a> ModuleCtx<'a> {
+    /// Emits a mapper enum; returns (orig name, rust variant) pairs.
+    fn emit_mapper(
+        &mut self,
+        rust: &str,
+        native: &str,
+        mappings: &BTreeMap<String, String>,
+        ctx: &str,
+    ) -> Result<Vec<(String, String)>> {
+        let native_int = NativeInt::from_name(native).ok_or_else(|| {
+            CodegenError::Invalid(format!("{ctx}: mapper type `{native}` is not numeric"))
+        })?;
+        let get = native_int.get_method();
+        let put = native_int.put_method();
+        let mut variants: Vec<(String, String)> = Vec::new();
+        let mut seen_values: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]");
+        let _ = writeln!(body, "pub enum {rust} {{");
+        for (key, name) in mappings {
+            let value = crate::ir::parse_mapper_key(key).ok_or_else(|| {
+                CodegenError::Invalid(format!("{ctx}: unparseable mapper key `{key}`"))
+            })?;
+            if !seen_values.insert(value) {
+                return Err(CodegenError::Invalid(format!(
+                    "{ctx}: duplicate mapper value `{key}`"
+                )));
+            }
+            let variant = {
+                let base = variant_name(name);
+                let mut candidate = base.clone();
+                let mut n = 2;
+                while variants.iter().any(|(_, v)| v == &candidate) {
+                    candidate = format!("{base}{n}");
+                    n += 1;
+                }
+                candidate
+            };
+            variants.push((name.clone(), variant.clone()));
+            let _ = writeln!(body, "    {variant},");
+        }
+        let _ = writeln!(body, "}}\n");
+        let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        let _ = writeln!(body, "        match self {{");
+        for ((key, _), (_, variant)) in mappings.iter().zip(&variants) {
+            let value = crate::ir::parse_mapper_key(key).expect("validated above");
+            let _ = writeln!(body, "            Self::{variant} => out.{put}({value}),");
+        }
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        let _ = writeln!(body, "impl crate::traits::Decode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {{"
+        );
+        let _ = writeln!(body, "        let value = input.{get}()?;");
+        let _ = writeln!(body, "        match value {{");
+        for ((key, _), (_, variant)) in mappings.iter().zip(&variants) {
+            let v = crate::ir::parse_mapper_key(key).expect("validated above");
+            let _ = writeln!(body, "            {v} => Ok(Self::{variant}),");
+        }
+        let _ = writeln!(
+            body,
+            "            _ => Err(crate::error::ProtocolError::UnknownEnumValue {{ type_name: \"{rust}\", value: i64::from(value) }}),"
+        );
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        self.out.push_str(&body);
+        Ok(variants)
+    }
+
+    /// Emits a bitfield struct; returns (orig, rust, size) member triples.
+    fn emit_bitfield(
+        &mut self,
+        rust: &str,
+        members: &[crate::model::BitfieldMember],
+        _ctx: &str,
+    ) -> Result<Vec<(String, String, u32)>> {
+        let total: u32 = members.iter().map(|m| m.size).sum();
+        let backing = match total {
+            1..=8 => NativeInt::U8,
+            9..=16 => NativeInt::U16,
+            17..=32 => NativeInt::U32,
+            _ => NativeInt::U64,
+        };
+        let get = backing.get_method();
+        let put = backing.put_method();
+        let mut member_names: Vec<(String, String, u32)> = Vec::new();
+        for m in members {
+            let base = ident(&snake(&m.name));
+            let mut name = base.clone();
+            let mut n = 2;
+            while member_names.iter().any(|(_, r, _)| r == &name) {
+                name = format!("{base}{n}");
+                n += 1;
+            }
+            member_names.push((m.name.clone(), name, m.size));
+        }
+        let member_ty = |size: u32, signed: bool| -> &'static str {
+            if size == 1 {
+                "bool"
+            } else if signed {
+                match size {
+                    2..=8 => "i8",
+                    9..=16 => "i16",
+                    17..=32 => "i32",
+                    _ => "i64",
+                }
+            } else {
+                match size {
+                    2..=8 => "u8",
+                    9..=16 => "u16",
+                    17..=32 => "u32",
+                    _ => "u64",
+                }
+            }
+        };
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]");
+        let _ = writeln!(body, "pub struct {rust} {{");
+        for (m, (_, name, _)) in members.iter().zip(&member_names) {
+            let _ = writeln!(body, "    pub {name}: {},", member_ty(m.size, m.signed));
+        }
+        let _ = writeln!(body, "}}\n");
+        // Encode
+        let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        let mut parts: Vec<String> = Vec::new();
+        let mut shift = total;
+        for (m, (_, name, _)) in members.iter().zip(&member_names) {
+            shift -= m.size;
+            let mask: u64 = if m.size >= 64 {
+                u64::MAX
+            } else {
+                (1u64 << m.size) - 1
+            };
+            let base = if m.size == 1 {
+                format!("self.{name} as u64")
+            } else if m.signed {
+                format!("(self.{name} as i64 & {mask:#x}) as u64")
+            } else if m.size >= 64 {
+                format!("self.{name}")
+            } else {
+                format!("self.{name} as u64 & {mask:#x}")
+            };
+            let part = if shift == 0 {
+                format!("({base})")
+            } else {
+                format!("(({base}) << {shift})")
+            };
+            parts.push(part);
+        }
+        let raw = parts.join(" | ");
+        let brust = backing.rust();
+        if backing == NativeInt::U64 {
+            let _ = writeln!(body, "        let raw = {raw};");
+            let _ = writeln!(body, "        out.{put}(raw);");
+        } else {
+            let _ = writeln!(body, "        let raw = {raw};");
+            let _ = writeln!(body, "        out.{put}(raw as {brust});");
+        }
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        // Decode
+        let _ = writeln!(body, "impl crate::traits::Decode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {{"
+        );
+        if backing == NativeInt::U64 {
+            let _ = writeln!(body, "        let raw = input.{get}()?;");
+        } else {
+            let _ = writeln!(body, "        let raw = u64::from(input.{get}()?);");
+        }
+        let mut shift = total;
+        let mut exprs: Vec<String> = Vec::new();
+        for (m, (_, name, _)) in members.iter().zip(&member_names) {
+            shift -= m.size;
+            let mask: u64 = if m.size >= 64 {
+                u64::MAX
+            } else {
+                (1u64 << m.size) - 1
+            };
+            let shifted = if shift == 0 {
+                "raw".to_string()
+            } else {
+                format!("(raw >> {shift})")
+            };
+            let masked = if m.size >= 64 {
+                shifted
+            } else {
+                format!("({shifted} & {mask:#x})")
+            };
+            let expr = if m.size == 1 {
+                format!("{masked} != 0")
+            } else if m.signed {
+                let k = 64 - m.size;
+                if k == 0 {
+                    format!("{masked} as i64")
+                } else {
+                    format!(
+                        "((({masked}) as i64) << {k} >> {k}) as {}",
+                        member_ty(m.size, true)
+                    )
+                }
+            } else if m.size >= 64 {
+                masked
+            } else {
+                format!("{masked} as {}", member_ty(m.size, false))
+            };
+            exprs.push(format!("{name}: {expr}"));
+        }
+        let _ = writeln!(body, "        Ok(Self {{ {} }})", exprs.join(", "));
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        self.out.push_str(&body);
+        Ok(member_names)
+    }
+
+    /// Emits a bitflags newtype; returns (orig, rust const) flag pairs.
+    fn emit_bitflags(
+        &mut self,
+        rust: &str,
+        native: &str,
+        flags: &[String],
+        ctx: &str,
+    ) -> Result<Vec<(String, String)>> {
+        let backing = match native {
+            "u8" => NativeInt::U8,
+            "u32" => NativeInt::U32,
+            _ => {
+                return Err(CodegenError::Invalid(format!(
+                    "{ctx}: bitflags backing type `{native}` is not u8/u32"
+                )))
+            }
+        };
+        let get = backing.get_method();
+        let put = backing.put_method();
+        let brust = backing.rust();
+        let mut flag_names: Vec<(String, String)> = Vec::new();
+        for f in flags {
+            let base = upper_snake(f);
+            let mut name = base.clone();
+            let mut n = 2;
+            while flag_names.iter().any(|(_, r)| r == &name) {
+                name = format!("{base}{n}");
+                n += 1;
+            }
+            flag_names.push((f.clone(), name));
+        }
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]");
+        let _ = writeln!(body, "pub struct {rust}(pub {brust});\n");
+        let _ = writeln!(body, "impl {rust} {{");
+        for (i, (_, name)) in flag_names.iter().enumerate() {
+            let _ = writeln!(body, "    pub const {name}: {brust} = {:#x};", 1u64 << i);
+        }
+        let _ = writeln!(
+            body,
+            "    pub fn contains(&self, flag: {brust}) -> bool {{ self.0 & flag != 0 }}"
+        );
+        let _ = writeln!(body, "}}\n");
+        let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        let _ = writeln!(body, "        out.{put}(self.0);");
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        let _ = writeln!(body, "impl crate::traits::Decode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {{"
+        );
+        let _ = writeln!(body, "        Ok(Self(input.{get}()?))");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        self.out.push_str(&body);
+        Ok(flag_names)
+    }
+
+    /// Emits an entityMetadataLoop newtype.
+    fn emit_meta_loop(
+        &mut self,
+        rust: &str,
+        element: &TypeRef,
+        end_val: u8,
+        ctx: &str,
+    ) -> Result<Vec<Need>> {
+        let elem = self.rust_type(element, &format!("{rust}Item"), ctx)?;
+        if !matches!(elem.kind, Kind::Trait) || !elem.needs.is_empty() {
+            return Err(CodegenError::Invalid(format!(
+                "{ctx}: entityMetadataLoop element must be a plain trait type"
+            )));
+        }
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, Default, PartialEq)]");
+        let _ = writeln!(body, "pub struct {rust}(pub Vec<{}>);\n", elem.rust);
+        let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        let _ = writeln!(body, "        for item in &self.0 {{");
+        let _ = writeln!(
+            body,
+            "            crate::traits::Encode::encode(item, out)?;"
+        );
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        out.put_u8({end_val});");
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        let _ = writeln!(body, "impl crate::traits::Decode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {{"
+        );
+        let _ = writeln!(body, "        let mut items = Vec::new();");
+        let _ = writeln!(body, "        loop {{");
+        let _ = writeln!(
+            body,
+            "            if input.rest().first() == Some(&{end_val}) {{"
+        );
+        let _ = writeln!(body, "                let _ = input.get_u8()?;");
+        let _ = writeln!(body, "                break;");
+        let _ = writeln!(body, "            }}");
+        let _ = writeln!(
+            body,
+            "            items.push(<{} as crate::traits::Decode>::decode(input)?);",
+            elem.rust
+        );
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        Ok(Self(items))");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        self.out.push_str(&body);
+        Ok(Vec::new())
+    }
+
+    /// Emits a topBitSetTerminatedArray newtype plus its element struct with
+    /// inherent `decode_topbit`/`encode_topbit` methods.
+    fn emit_topbit_loop(&mut self, rust: &str, element: &TypeRef, ctx: &str) -> Result<Vec<Need>> {
+        let fields = match element {
+            TypeRef::Complex(c) => match c.as_ref() {
+                Complex::Container(fields) => fields.clone(),
+                _ => {
+                    return Err(CodegenError::Invalid(format!(
+                        "{ctx}: topBitSetTerminatedArray element is not an inline container"
+                    )))
+                }
+            },
+            TypeRef::Named(n) => {
+                return Err(CodegenError::Invalid(format!(
+                    "{ctx}: topBitSetTerminatedArray element `{n}` is not an inline container"
+                )))
+            }
+        };
+        let elem_rust = self.reserve(&format!("{rust}Item"));
+        let info = self.emit_struct_mode(&elem_rust, &fields, ctx, true)?;
+        if !info.needs.is_empty() {
+            return Err(CodegenError::Invalid(format!(
+                "{ctx}: topBitSetTerminatedArray element cannot need context"
+            )));
+        }
+        let mut body = String::new();
+        let _ = writeln!(body, "#[derive(Debug, Clone, Default, PartialEq)]");
+        let _ = writeln!(body, "pub struct {rust}(pub Vec<{elem_rust}>);\n");
+        let _ = writeln!(body, "impl crate::traits::Encode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+        );
+        let _ = writeln!(body, "        let len = self.0.len();");
+        let _ = writeln!(
+            body,
+            "        for (index, item) in self.0.iter().enumerate() {{"
+        );
+        let _ = writeln!(
+            body,
+            "            item.encode_topbit(out, index + 1 < len)?;"
+        );
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        Ok(())");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        let _ = writeln!(body, "impl crate::traits::Decode for {rust} {{");
+        let _ = writeln!(
+            body,
+            "    fn decode(input: &mut crate::buffer::PacketReader<'_>) -> crate::error::Result<Self> {{"
+        );
+        let _ = writeln!(body, "        let mut items = Vec::new();");
+        let _ = writeln!(body, "        loop {{");
+        let _ = writeln!(
+            body,
+            "            let (item, more) = {elem_rust}::decode_topbit(input)?;"
+        );
+        let _ = writeln!(body, "            items.push(item);");
+        let _ = writeln!(body, "            if !more {{");
+        let _ = writeln!(body, "                break;");
+        let _ = writeln!(body, "            }}");
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        Ok(Self(items))");
+        let _ = writeln!(body, "    }}");
+        let _ = writeln!(body, "}}\n");
+        self.out.push_str(&body);
+        Ok(Vec::new())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// State modules (packet registries)
+// ---------------------------------------------------------------------------
+
+/// Emits one state module (both directions); returns
+/// (body, named type count, clientbound packets, serverbound packets).
+fn emit_state_module<'a>(
+    ctx: &mut ModuleCtx<'a>,
+    section: &'a crate::ir::StateIr,
+) -> Result<(String, usize, usize, usize)> {
+    let cb = emit_direction(
+        ctx,
+        section,
+        &section.clientbound,
+        "Clientbound",
+        "clientbound",
+    )?;
+    let sb = emit_direction(
+        ctx,
+        section,
+        &section.serverbound,
+        "Serverbound",
+        "serverbound",
+    )?;
+    let mut body = std::mem::take(&mut ctx.out);
+    body.push_str(&cb);
+    body.push_str(&sb);
+    let _ = writeln!(
+        body,
+        "pub fn clientbound_packet_name(id: i32) -> Option<&'static str> {{"
+    );
+    body.push_str(&packet_name_arms(&section.clientbound, "CLIENTBOUND"));
+    let _ = writeln!(body, "}}\n");
+    let _ = writeln!(
+        body,
+        "pub fn serverbound_packet_name(id: i32) -> Option<&'static str> {{"
+    );
+    body.push_str(&packet_name_arms(&section.serverbound, "SERVERBOUND"));
+    let _ = writeln!(body, "}}\n");
+    Ok((
+        body,
+        ctx.top_level_count,
+        section.clientbound.packets.len(),
+        section.serverbound.packets.len(),
+    ))
+}
+
+fn packet_name_arms(dir: &DirectionIr, prefix: &str) -> String {
+    let mut out = String::new();
+    if dir.packets.is_empty() {
+        let _ = writeln!(out, "    let _ = id;");
+        let _ = writeln!(out, "    None");
+        return out;
+    }
+    let _ = writeln!(out, "    match id {{");
+    for p in &dir.packets {
+        let cname = format!("{prefix}_{}_ID", upper_snake(&p.name));
+        let _ = writeln!(out, "        {cname} => Some(\"{}\"),", p.name);
+    }
+    let _ = writeln!(out, "        _ => None,");
+    let _ = writeln!(out, "    }}");
+    out
+}
+
+/// Emits the payload structs, id consts and packet enum of one direction.
+/// Payload emission goes through `ctx`; the enum text is returned.
+fn emit_direction<'a>(
+    ctx: &mut ModuleCtx<'a>,
+    section: &'a crate::ir::StateIr,
+    dir: &'a DirectionIr,
+    side: &str,
+    side_lower: &str,
+) -> Result<String> {
+    ctx.dir = Some(dir);
+    let state = section.state;
+    let enum_rust = format!("{side}{}Packet", pascal(state.as_str()));
+    let prefix = side_lower.to_uppercase();
+    let context = format!("{side_lower} {state}", state = state.as_str());
+
+    // Payload structs (empty containers become unit variants).
+    let mut variants: Vec<(String, Option<String>, i32)> = Vec::new(); // (variant, payload rust, id)
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for p in &dir.packets {
+        let def = ctx.lookup(&p.payload).ok_or_else(|| {
+            CodegenError::Invalid(format!(
+                "{context}: packet `{}` payload `{}` does not resolve",
+                p.name, p.payload
+            ))
+        })?;
+        let payload = match def {
+            TypeDef::Complex(Complex::Container(fields)) if fields.is_empty() => None,
+            _ => Some(ctx.ensure_named(&p.payload)?.0),
+        };
+        let base = pascal(&p.name);
+        let mut variant = base.clone();
+        let mut n = 2;
+        while seen.contains(&variant) {
+            variant = format!("{base}{n}");
+            n += 1;
+        }
+        seen.insert(variant.clone());
+        variants.push((variant, payload, p.id));
+    }
+
+    let mut body = String::new();
+    // Id constants.
+    for p in &dir.packets {
+        let _ = writeln!(
+            body,
+            "pub const {prefix}_{}_ID: i32 = {};",
+            upper_snake(&p.name),
+            p.id
+        );
+    }
+    let _ = writeln!(body);
+
+    // Enum.
+    let _ = writeln!(body, "#[derive(Debug, Clone, PartialEq)]");
+    let _ = writeln!(body, "pub enum {enum_rust} {{");
+    for (variant, payload, _) in &variants {
+        match payload {
+            Some(ty) => {
+                let _ = writeln!(body, "    {variant}({ty}),");
+            }
+            None => {
+                let _ = writeln!(body, "    {variant},");
+            }
+        }
+    }
+    let _ = writeln!(body, "}}\n");
+
+    // Inherent impl: id, name, decode.
+    let _ = writeln!(body, "impl {enum_rust} {{");
+    let _ = writeln!(body, "    pub fn id(&self) -> i32 {{");
+    if variants.is_empty() {
+        let _ = writeln!(body, "        match *self {{}}");
+    } else {
+        let _ = writeln!(body, "        match self {{");
+        for ((variant, payload, _), p) in variants.iter().zip(&dir.packets) {
+            let pat = if payload.is_some() {
+                format!("Self::{variant}(..)")
+            } else {
+                format!("Self::{variant}")
+            };
+            let cname = format!("{prefix}_{}_ID", upper_snake(&p.name));
+            let _ = writeln!(body, "            {pat} => {cname},");
+        }
+        let _ = writeln!(body, "        }}");
+    }
+    let _ = writeln!(body, "    }}\n");
+    let _ = writeln!(body, "    pub fn name(&self) -> &'static str {{");
+    if variants.is_empty() {
+        let _ = writeln!(body, "        match *self {{}}");
+    } else {
+        let _ = writeln!(body, "        match self {{");
+        for ((variant, payload, _), p) in variants.iter().zip(&dir.packets) {
+            let pat = if payload.is_some() {
+                format!("Self::{variant}(..)")
+            } else {
+                format!("Self::{variant}")
+            };
+            let _ = writeln!(body, "            {pat} => \"{}\",", p.name);
+        }
+        let _ = writeln!(body, "        }}");
+    }
+    let _ = writeln!(body, "    }}\n");
+    let _ = writeln!(
+        body,
+        "    pub fn decode(\n        id: i32,\n        input: &mut crate::buffer::PacketReader<'_>,\n    ) -> crate::error::Result<Self> {{"
+    );
+    if variants.is_empty() {
+        let _ = writeln!(body, "        let _ = input;");
+        let _ = writeln!(
+            body,
+            "        Err(crate::error::ProtocolError::UnknownPacketId {{ context: \"{context}\", id }})"
+        );
+    } else {
+        let _ = writeln!(body, "        match id {{");
+        for ((variant, payload, _), p) in variants.iter().zip(&dir.packets) {
+            let cname = format!("{prefix}_{}_ID", upper_snake(&p.name));
+            let trailing = format!("{context} {}", p.name);
+            match payload {
+                Some(ty) => {
+                    let _ = writeln!(body, "            {cname} => {{");
+                    let _ = writeln!(
+                        body,
+                        "                let payload = <{ty} as crate::traits::Decode>::decode(input)?;"
+                    );
+                    let _ = writeln!(
+                        body,
+                        "                crate::traits::ensure_consumed(input, \"{trailing}\")?;"
+                    );
+                    let _ = writeln!(body, "                Ok(Self::{variant}(payload))");
+                    let _ = writeln!(body, "            }}");
+                }
+                None => {
+                    let _ = writeln!(body, "            {cname} => {{");
+                    let _ = writeln!(
+                        body,
+                        "                crate::traits::ensure_consumed(input, \"{trailing}\")?;"
+                    );
+                    let _ = writeln!(body, "                Ok(Self::{variant})");
+                    let _ = writeln!(body, "            }}");
+                }
+            }
+        }
+        let _ = writeln!(
+            body,
+            "            _ => Err(crate::error::ProtocolError::UnknownPacketId {{ context: \"{context}\", id }}),"
+        );
+        let _ = writeln!(body, "        }}");
+    }
+    let _ = writeln!(body, "    }}");
+    let _ = writeln!(body, "}}\n");
+
+    // Encode impl.
+    let _ = writeln!(body, "impl crate::traits::Encode for {enum_rust} {{");
+    let _ = writeln!(
+        body,
+        "    fn encode(&self, out: &mut crate::buffer::PacketWriter) -> crate::error::Result<()> {{"
+    );
+    if variants.is_empty() {
+        let _ = writeln!(body, "        match *self {{}}");
+    } else {
+        let _ = writeln!(body, "        out.put_varint(self.id());");
+        let _ = writeln!(body, "        match self {{");
+        for (variant, payload, _) in &variants {
+            match payload {
+                Some(_) => {
+                    let _ = writeln!(
+                        body,
+                        "            Self::{variant}(payload) => crate::traits::Encode::encode(payload, out)?,"
+                    );
+                }
+                None => {
+                    let _ = writeln!(body, "            Self::{variant} => {{}},");
+                }
+            }
+        }
+        let _ = writeln!(body, "        }}");
+        let _ = writeln!(body, "        Ok(())");
+    }
+    let _ = writeln!(body, "    }}");
+    let _ = writeln!(body, "}}\n");
+    Ok(body)
+}

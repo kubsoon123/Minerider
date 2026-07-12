@@ -23,6 +23,11 @@ impl PacketWriter {
         Self::default()
     }
 
+    /// Appends a single signed byte.
+    pub fn put_i8(&mut self, v: i8) {
+        self.buf.put_i8(v);
+    }
+
     /// Appends a single unsigned byte.
     pub fn put_u8(&mut self, v: u8) {
         self.buf.put_u8(v);
@@ -46,6 +51,11 @@ impl PacketWriter {
     /// Appends a big-endian signed 32-bit integer.
     pub fn put_i32(&mut self, v: i32) {
         self.buf.put_i32(v);
+    }
+
+    /// Appends a big-endian unsigned 32-bit integer.
+    pub fn put_u32(&mut self, v: u32) {
+        self.buf.put_u32(v);
     }
 
     /// Appends a big-endian signed 64-bit integer.
@@ -213,6 +223,11 @@ impl<'a> PacketReader<'a> {
         Ok(self.take::<1>()?[0])
     }
 
+    /// Reads a single signed byte.
+    pub fn get_i8(&mut self) -> Result<i8> {
+        Ok(self.take::<1>()?[0] as i8)
+    }
+
     /// Reads a boolean (`0x00` false, anything else true).
     pub fn get_bool(&mut self) -> Result<bool> {
         Ok(self.get_u8()? != 0)
@@ -231,6 +246,11 @@ impl<'a> PacketReader<'a> {
     /// Reads a big-endian signed 32-bit integer.
     pub fn get_i32(&mut self) -> Result<i32> {
         Ok(i32::from_be_bytes(self.take()?))
+    }
+
+    /// Reads a big-endian unsigned 32-bit integer.
+    pub fn get_u32(&mut self) -> Result<u32> {
+        Ok(u32::from_be_bytes(self.take()?))
     }
 
     /// Reads a big-endian signed 64-bit integer.

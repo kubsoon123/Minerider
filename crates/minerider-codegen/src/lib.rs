@@ -5,10 +5,11 @@
 //! Rust packet definitions into `minerider-protocol/src/generated/`.
 //!
 //! Pipeline: vendored data → [`model`] (serde) → [`parse`] (load) →
-//! [`ir`] (resolve + validate) → emit (added in a later milestone).
+//! [`ir`] (resolve + validate) → [`emit`] (Rust source).
 
 #![forbid(unsafe_code)]
 
+pub mod emit;
 pub mod ir;
 pub mod model;
 pub mod parse;
