@@ -475,6 +475,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "minerider-codegen"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "minerider-protocol"
 version = "0.1.0"
 dependencies = [
