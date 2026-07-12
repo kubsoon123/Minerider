@@ -327,7 +327,7 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "begin chunk batch",
             "initial_chunks",
         )),
-        play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => ignored(not_implemented(
+        play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => handled(partial(
             Some("chunk_batch_received"),
             TimingClass::Strict,
             "acknowledge batch with desired chunks-per-tick",

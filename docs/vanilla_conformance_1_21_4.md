@@ -60,7 +60,7 @@ or lose an id.
 | 9 | block_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 10 | boss_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 11 | difficulty | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 12 | chunk_batch_finished | ignored | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | NOT IMPLEMENTED | initial_chunks | none |
+| 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 13 | chunk_batch_start | ignored | — | — | begin chunk batch | NOT IMPLEMENTED | initial_chunks | none |
 | 14 | chunk_biomes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 15 | clear_titles | ignored | — | — | none | NOT IMPLEMENTED |  | none |

@@ -13,12 +13,11 @@ use common::MockServer;
 use minerider::core::client::{Client, ClientConfig};
 use minerider::core::state::ConnectionState;
 use minerider::trace::decode::packet_name;
-use minerider::trace::diff::{diff, DivergenceKind};
+use minerider::trace::diff::diff;
 use minerider::trace::format::TraceEvent;
 use minerider::trace::normalize::normalize;
 use minerider::trace::recorder::{read_trace, TraceRecorder};
 use minerider::trace::Direction;
-use serde_json::json;
 
 const FIXTURES: &str = "tests/conformance/fixtures";
 
@@ -106,48 +105,6 @@ fn find_field<'a>(event: &'a TraceEvent, key: &str) -> Option<&'a serde_json::Va
     walk(event.fields.as_ref()?, key)
 }
 
-/// Builds the vanilla-expected trace for a blocked scenario: the captured
-/// clientbound prefix plus the serverbound response vanilla owes, inserted
-/// right after its triggering clientbound packet.
-fn with_expected_response(
-    captured: &[TraceEvent],
-    trigger: (ConnectionState, i32),
-    response: (ConnectionState, i32),
-    response_fields: serde_json::Value,
-) -> Vec<TraceEvent> {
-    let mut expected = captured.to_vec();
-    let pos = expected
-        .iter()
-        .rposition(|e| {
-            e.dir == Direction::Clientbound
-                && e.id == trigger.1
-                && e.state == format!("{:?}", trigger.0).to_lowercase()
-        })
-        .expect("trigger packet in capture");
-    let name = packet_name(response.0, Direction::Serverbound, response.1).expect("known packet");
-    expected.insert(
-        pos + 1,
-        TraceEvent {
-            ts_mono_ms: 0.0,
-            ts_rel_ms: expected[pos].ts_rel_ms + 1.0,
-            tick: 0,
-            dir: Direction::Serverbound,
-            state: format!("{:?}", response.0).to_lowercase(),
-            id: response.1,
-            name: name.to_string(),
-            fields: Some(response_fields),
-            payload_hex: String::new(),
-            encrypted: false,
-            compressed: true,
-            size: 0,
-            session: "SESSION_1".to_string(),
-            scenario: expected[pos].scenario.clone(),
-            step: 0,
-        },
-    );
-    expected
-}
-
 // ---------------------------------------------------------------------------
 // Scenario 1: configuration completion
 // ---------------------------------------------------------------------------
@@ -214,14 +171,16 @@ async fn scenario_2_join_and_idle() {
 }
 
 // ---------------------------------------------------------------------------
-// Scenario 3: initial chunk streaming (BLOCKED: client does not yet send
-// chunk_batch_received — Phase 3 behavior)
+// Scenario 3: initial chunk streaming
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn scenario_3_initial_chunks_blocked() {
+async fn scenario_3_initial_chunks() {
     let server = MockServer::start_chunk_streaming().await;
     let captured = capture(&server, "initial_chunks").await;
+    // The mock asserts chunk_batch_received arrived with a valid
+    // chunks-per-tick value; a failure here means the client did not
+    // acknowledge the batch.
     server.finish().await.expect("mock server flow failed");
 
     // The chunk batch arrived and was decoded.
@@ -238,23 +197,21 @@ async fn scenario_3_initial_chunks_blocked() {
         12
     )); // batch finished
 
-    // Vanilla answers chunk_batch_finished with chunk_batch_received.
-    // MineRider does not yet: the diff must report exactly that as the
-    // first divergence.
-    let expected = with_expected_response(
-        &captured,
-        (ConnectionState::Play, 12),
-        (ConnectionState::Play, 9),
-        json!({"chunks_per_tick": 9}),
+    // The acknowledgement was sent immediately after batch finished.
+    let finished_pos = captured
+        .iter()
+        .position(|e| e.dir == Direction::Clientbound && e.state == "play" && e.id == 12)
+        .expect("chunk_batch_finished in capture");
+    let ack = captured
+        .get(finished_pos + 1)
+        .expect("event after chunk_batch_finished");
+    assert_eq!(ack.dir, Direction::Serverbound);
+    assert_eq!(
+        ack.id, 9,
+        "expected chunk_batch_received right after batch finished"
     );
-    let report = diff(&expected, &captured);
-    let divergence = report.divergence.expect("blocked scenario must diverge");
-    assert_eq!(divergence.kind, DivergenceKind::MissingPacket);
-    assert!(
-        divergence.detail.contains("chunk_batch_received"),
-        "unexpected divergence: {}",
-        divergence.detail
-    );
+    assert_eq!(ack.name, "chunk_batch_received");
+    check_fixture("initial_chunks", &captured);
 }
 
 // ---------------------------------------------------------------------------

@@ -240,9 +240,24 @@ async fn run_server(
         Mode::ChunkStreaming => {
             send_chunk_batch(&mut conn).await?;
             // Vanilla clients answer chunk_batch_finished with
-            // chunk_batch_received; tolerate its absence (client under test).
-            let _ = tokio::time::timeout(std::time::Duration::from_millis(300), conn.read_packet())
-                .await;
+            // chunk_batch_received carrying the desired chunks-per-tick.
+            let ack = tokio::time::timeout(std::time::Duration::from_secs(3), conn.read_packet())
+                .await
+                .map_err(|_| {
+                    MineRiderError::Protocol(
+                        "mock server: no chunk_batch_received within 3s".to_string(),
+                    )
+                })??;
+            ensure(
+                ack.id == play::SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+                format!("expected chunk_batch_received 0x09, got 0x{:02x}", ack.id),
+            )?;
+            let mut r = PacketReader::new(&ack.payload);
+            let chunks_per_tick = r.get_f32()?;
+            ensure(
+                chunks_per_tick == 1.0,
+                format!("chunks_per_tick {chunks_per_tick}, expected 1.0 (batch size)"),
+            )?;
             conn.close().await?;
             return Ok(());
         }

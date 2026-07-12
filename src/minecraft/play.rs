@@ -6,9 +6,11 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
-    PacketKeepAlive, PacketKickDisconnect, PacketPosition, PacketTeleportConfirm,
-    PositionUpdateRelatives, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
-    CLIENTBOUND_POSITION_ID, SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_TELEPORT_CONFIRM_ID,
+    PacketChunkBatchFinished, PacketChunkBatchReceived, PacketKeepAlive, PacketKickDisconnect,
+    PacketPosition, PacketTeleportConfirm, PositionUpdateRelatives,
+    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
+    CLIENTBOUND_POSITION_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_KEEP_ALIVE_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID,
 };
 use minerider_protocol::traits::{Decode, Encode};
 use tracing::{debug, warn};
@@ -109,6 +111,21 @@ pub async fn run_play(conn: &mut Connection) -> Result<()> {
                     teleport_id = sync.teleport_id,
                     "confirmed teleport"
                 );
+            }
+            CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => {
+                let mut r = PacketReader::new(&packet.payload);
+                let finished = PacketChunkBatchFinished::decode(&mut r)?;
+                // Vanilla reports the desired chunks-per-tick rate; with no
+                // chunk processing of our own yet, the batch size is the
+                // correct initial value (we acknowledged it immediately).
+                let ack = PacketChunkBatchReceived {
+                    chunks_per_tick: finished.batch_size as f32,
+                };
+                let mut w = PacketWriter::new();
+                ack.encode(&mut w)?;
+                conn.send_packet(SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, &w.freeze())
+                    .await?;
+                debug!(batch_size = finished.batch_size, "acknowledged chunk batch");
             }
             CLIENTBOUND_KICK_DISCONNECT_ID => {
                 let mut r = PacketReader::new(&packet.payload);
