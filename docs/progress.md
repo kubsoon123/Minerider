@@ -334,3 +334,59 @@ PARTIAL. The credential-safe procedure is in
 `docs/real_server_validation.md`.
 
 **Next step:** end this validation phase. Phase 3 is outside this milestone.
+
+---
+
+## Phase 3a — tick engine + player/entity state (complete)
+
+**Completed:**
+- Tick engine (`src/core/tick.rs`): a fixed 20 TPS `TickClock` — a plain
+  monotonic counter with no embedded time source, plus `TICK_DURATION`
+  (50 ms) and a `ticks_in(Duration)` helper. The play loop owns the real
+  `tokio` interval; the clock stays pure and unit-testable.
+- Local player state (`src/minecraft/player.rs`): `LocalPlayer` with own
+  entity id (from play `login`), server-confirmed position (relative-flag
+  application moved here from `play.rs` as `PlayerPosition`), health/food/
+  saturation (`update_health`), and experience (`experience`). Vitals
+  default to the vanilla spawn values.
+- Entity state (`src/minecraft/entity.rs`): `EntityStore`, a table of
+  tracked non-local entities. Applies the full movement family —
+  `spawn_entity`, `entity_destroy`, `rel_entity_move` (1/4096-block
+  fixed-point deltas), `entity_move_look`, `entity_look`, `entity_teleport`,
+  `sync_entity_position`, `entity_velocity` (1/8000-block/tick), and
+  `entity_head_rotation` (protocol angle bytes → degrees). Relative moves for
+  an un-spawned entity are ignored (no absolute base to apply against).
+- Play loop rewrite (`src/minecraft/play.rs`): a `tokio::select!` between the
+  packet stream (`biased`, so packets drain before ticks) and the tick
+  interval, advancing the clock each tick. `read_packet` is cancellation-safe
+  (its only await is `TcpStream::read`, and incomplete frames stay buffered),
+  so dropping the read future on a tick loses no bytes. A new `PlayState`
+  (player + entities + clock) is threaded through; state-only packets are
+  decoded and folded in by `apply_state_packet` and carry no wire response.
+  No new serverbound traffic — the validated idle/keep-alive/teleport/chunk
+  wire behavior is unchanged, so the conformance fixtures still match.
+- Coverage table (`src/minecraft/coverage.rs`): `login`, `update_health`,
+  `experience` and the nine entity packets reclassified from ignored/default
+  to `Handled` with an honest `PARTIAL` status and a new `EVIDENCE_UNIT`
+  string ("unit-tested state projection; mock/vanilla capture pending").
+  Conformance matrix regenerated.
+
+**Files changed:** `src/core/tick.rs`, `src/minecraft/{player,entity}.rs`
+(new), `src/minecraft/{mod,play,coverage}.rs`,
+`docs/vanilla_conformance_1_21_4.md`, `docs/progress.md`.
+
+**Tests:** 161 passed, 0 failed (was 146): +15 unit tests (4 tick, 5 player,
+6 entity). Rustfmt, clippy `--workspace --all-targets -D warnings`, protocol
+codegen drift, and conformance-matrix drift gates pass.
+
+**Problems / limitations:**
+- The new state projections are unit-tested but have not been re-run against a
+  live server with the phase-3 handling active; status is `PARTIAL`, evidence
+  `EVIDENCE_UNIT`. A soak + entity-heavy capture would raise them.
+- The tick loop advances the clock but has no per-tick side effects yet
+  (idle movement, physics). Serverbound movement is the next sub-step.
+- `sync_entity_position` is treated as absolute position + velocity deltas;
+  no relative-flag handling (the generated struct exposes none for 1.21.4).
+
+**Next step:** per-tick behavior — serverbound player movement each tick and
+the physics/gravity step — then world/chunk block storage.

@@ -84,6 +84,7 @@ const EVIDENCE_MOCK: &str =
     "mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending";
 const EVIDENCE_VALIDATED: &str =
     "mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending";
+const EVIDENCE_UNIT: &str = "unit-tested state projection; mock/vanilla capture pending";
 const EVIDENCE_NONE: &str = "none";
 
 const NO_RESPONSE: Obligation = Obligation {
@@ -160,6 +161,19 @@ fn not_implemented(
         status: ConformanceStatus::NotImplemented,
         scenario,
         evidence: EVIDENCE_NONE,
+    }
+}
+
+/// A state-only packet: decoded and folded into `PlayState`, no wire
+/// response. Covered by unit tests; server-trace confirmation still pending.
+fn state_only(state_update: &'static str) -> Obligation {
+    Obligation {
+        responds_with: None,
+        timing: TimingClass::None,
+        state_update,
+        status: ConformanceStatus::Partial,
+        scenario: "",
+        evidence: EVIDENCE_UNIT,
     }
 }
 
@@ -313,12 +327,24 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "close connection",
             "join_idle",
         )),
-        play::CLIENTBOUND_LOGIN_ID => ignored(not_implemented(
+        play::CLIENTBOUND_LOGIN_ID => handled(partial(
             None,
             TimingClass::None,
             "store own entity id, dimension, world info",
             "join_idle",
         )),
+        play::CLIENTBOUND_SPAWN_ENTITY_ID => handled(state_only("track new entity")),
+        play::CLIENTBOUND_ENTITY_DESTROY_ID => handled(state_only("remove entities from tracker")),
+        play::CLIENTBOUND_REL_ENTITY_MOVE_ID
+        | play::CLIENTBOUND_ENTITY_MOVE_LOOK_ID
+        | play::CLIENTBOUND_ENTITY_LOOK_ID
+        | play::CLIENTBOUND_ENTITY_TELEPORT_ID
+        | play::CLIENTBOUND_SYNC_ENTITY_POSITION_ID => {
+            handled(state_only("update entity position/rotation"))
+        }
+        play::CLIENTBOUND_ENTITY_VELOCITY_ID => handled(state_only("update entity velocity")),
+        play::CLIENTBOUND_ENTITY_HEAD_ROTATION_ID => handled(state_only("update entity head yaw")),
+        play::CLIENTBOUND_EXPERIENCE_ID => handled(state_only("update experience bar/level/total")),
         play::CLIENTBOUND_POSITION_ID => handled(Obligation {
             responds_with: Some("teleport_confirm"),
             timing: TimingClass::Strict,
@@ -372,12 +398,9 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "mark player dead; vanilla shows respawn screen",
             "",
         )),
-        play::CLIENTBOUND_UPDATE_HEALTH_ID => ignored(not_implemented(
-            None,
-            TimingClass::None,
-            "update health/hunger/saturation",
-            "",
-        )),
+        play::CLIENTBOUND_UPDATE_HEALTH_ID => {
+            handled(state_only("update health/hunger/saturation"))
+        }
         play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
             Some("configuration_acknowledged"),
             TimingClass::Strict,

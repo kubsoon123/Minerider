@@ -4,9 +4,11 @@ use minerider_protocol::nbt::Nbt;
 
 pub mod configuration;
 pub mod coverage;
+pub mod entity;
 pub mod handshake;
 pub mod login;
 pub mod play;
+pub mod player;
 
 /// Renders an NBT text component (a disconnect reason) as readable text.
 ///

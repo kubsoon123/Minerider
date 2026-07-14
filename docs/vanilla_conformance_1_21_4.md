@@ -49,7 +49,7 @@ or lose an id.
 | id | packet | class | responds with | timing | state update | status | scenario | evidence |
 |---:|---|---|---|---|---|---|---|---|
 | 0 | bundle_delimiter | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 1 | spawn_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 1 | spawn_entity | handled | — | — | track new entity | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 2 | spawn_entity_experience_orb | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 3 | animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 4 | statistics | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -80,7 +80,7 @@ or lose an id.
 | 29 | kick_disconnect | handled | — | — | close connection | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 30 | profileless_chat | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 31 | entity_status | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 32 | sync_entity_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 32 | sync_entity_position | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 33 | explosion | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 34 | unload_chunk | ignored | — | — | drop chunk from cache | NOT IMPLEMENTED |  | none |
 | 35 | game_state_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -92,13 +92,13 @@ or lose an id.
 | 41 | world_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 42 | world_particles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 43 | update_light | stored | — | — | store light data | NOT IMPLEMENTED |  | none |
-| 44 | login | ignored | — | — | store own entity id, dimension, world info | NOT IMPLEMENTED | join_idle | none |
+| 44 | login | handled | — | — | store own entity id, dimension, world info | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 45 | map | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 46 | trade_list | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 47 | rel_entity_move | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 48 | entity_move_look | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 47 | rel_entity_move | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 48 | entity_move_look | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 49 | move_minecart | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 50 | entity_look | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 50 | entity_look | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 51 | vehicle_move | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 52 | open_book | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 53 | open_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -119,13 +119,13 @@ or lose an id.
 | 68 | recipe_book_add | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 69 | recipe_book_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 70 | recipe_book_settings | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 71 | entity_destroy | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 71 | entity_destroy | handled | — | — | remove entities from tracker | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 72 | remove_entity_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 73 | reset_score | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 74 | remove_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
 | 75 | add_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
 | 76 | respawn | ignored | — | — | switch dimension; drop world cache | NOT IMPLEMENTED |  | none |
-| 77 | entity_head_rotation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 77 | entity_head_rotation | handled | — | — | update entity head yaw | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 78 | multi_block_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 79 | select_advancement_tab | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 80 | server_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -143,10 +143,10 @@ or lose an id.
 | 92 | scoreboard_display_objective | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 93 | entity_metadata | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 94 | attach_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 95 | entity_velocity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 95 | entity_velocity | handled | — | — | update entity velocity | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 96 | entity_equipment | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 97 | experience | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 98 | update_health | ignored | — | — | update health/hunger/saturation | NOT IMPLEMENTED |  | none |
+| 97 | experience | handled | — | — | update experience bar/level/total | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 98 | update_health | handled | — | — | update health/hunger/saturation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 99 | held_item_slot | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 100 | scoreboard_objective | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 101 | set_passengers | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -167,7 +167,7 @@ or lose an id.
 | 116 | playerlist_header | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 117 | nbt_query_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 118 | collect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 119 | entity_teleport | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 119 | entity_teleport | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 120 | set_ticking_state | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 121 | step_tick | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 122 | transfer | ignored | — | strict | reconnect to another server | NOT IMPLEMENTED |  | none |
