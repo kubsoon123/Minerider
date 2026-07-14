@@ -390,3 +390,61 @@ codegen drift, and conformance-matrix drift gates pass.
 
 **Next step:** per-tick behavior — serverbound player movement each tick and
 the physics/gravity step — then world/chunk block storage.
+
+---
+
+## Phase 3b — vanilla configuration parity: client_information + brand
+
+Goal for this and following phases: MineRider's serverbound packet stream
+should match a real vanilla 1.21.4 client 1:1. First gap closed: a vanilla
+client sends `client_information` (settings) and a `minecraft:brand` plugin
+message on entering configuration; MineRider sent neither.
+
+**Completed:**
+- `minecraft/mod.rs`: `vanilla_client_information()` (the settings a fresh
+  vanilla install sends — `en_us`, render distance 12, chat enabled+colored,
+  all skin layers `0x7f`, right hand, no text filter, server listing on, all
+  particles) and `brand_payload()` (the brand written as a length-prefixed
+  Minecraft string; the custom-payload `data` field is a raw rest-buffer, so
+  the bytes are exactly `07 "vanilla"`). Unit-tested for exact bytes/values.
+- `configuration.rs`: `run_configuration` now sends `settings` then the
+  brand `custom_payload` on entry, before processing the server's packets,
+  matching the documented vanilla join order.
+- Mock server (`tests/common`): after Login Acknowledged it now reads and
+  asserts the client's `settings` (0x00) and `minecraft:brand`
+  `custom_payload` (0x02), locking the behavior in for every
+  configuration-reaching scenario.
+- Conformance fixtures (scenarios 1-4) regenerated: the normalized captures
+  now include the two new serverbound configuration packets (payloads
+  redacted as before; settings fields decoded, brand data `[7, "vanilla"]`).
+
+**Files changed:** `src/minecraft/{mod,configuration}.rs`,
+`tests/common/mod.rs`, `tests/conformance/fixtures/*.jsonl`,
+`docs/progress.md`.
+
+**Tests:** 161 passed, 0 failed (+2 unit tests for brand bytes and settings
+values; the four conformance scenarios re-pass against regenerated fixtures).
+Clippy `-D warnings`, rustfmt, codegen drift and conformance-matrix drift
+gates all clean.
+
+**Problems / limitations:**
+- This matches *documented* vanilla serverbound behavior and is verified by
+  golden bytes + mock assertions + self-consistency fixtures, but **byte-1:1
+  parity with a real vanilla client is still gated on the manual reference
+  capture** (see `docs/real_server_validation.md`, "Manual vanilla-client
+  reference capture" — not performed, needs an authorized account). The
+  intra-configuration ordering (client settings vs. brand vs. the server's
+  packets) and the render-distance/locale values are the fields most likely
+  to need alignment once that capture exists; they are isolated in
+  `vanilla_client_information()`.
+
+**Remaining vanilla serverbound gaps (next steps):**
+- Play: per-tick movement via the vanilla `sendPosition` logic (position
+  reminder forces a `set_player_position` at least once per second even when
+  idle; `move_player_status_only` on ground-state change).
+- Play: `player_loaded` after the world finishes loading (1.21.x).
+- Play: whether vanilla re-sends `client_information` on play entry.
+- `select_known_packs`: currently echoes the server's list; vanilla sends its
+  own known-packs list (`minecraft:core` + version).
+
+**Next step:** play-state per-tick movement (`sendPosition`) + `player_loaded`.
