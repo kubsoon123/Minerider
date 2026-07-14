@@ -11,8 +11,11 @@ designed so future versions are generated, not hand-maintained.
 
 Early development. Phase 1 (connection core) and phase 2 (minecraft-data
 packet pipeline) are complete — see [docs/progress.md](docs/progress.md)
-and [docs/codegen.md](docs/codegen.md). Real Paper 1.21.4 validation is
-still pending (no public test server).
+and [docs/codegen.md](docs/codegen.md). Local Paper and official vanilla
+1.21.4 server validation passes login, play entry, keep-alives, teleport
+confirmation, chunk-batch acknowledgement, and a 55-minute idle soak.
+Full vanilla-client reference parity remains pending; see the
+[validation report](docs/paper_1_21_4_validation_report.md).
 
 ## Architecture
 

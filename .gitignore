@@ -1,6 +1,9 @@
 /target
 **/*.rs.bk
 
+# Exported agent-session archives (personal, never commit)
+session_*.zip
+
 # Local test servers and everything they produce (never commit)
 /.test-servers/
 *.log

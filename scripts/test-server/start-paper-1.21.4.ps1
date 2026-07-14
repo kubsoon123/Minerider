@@ -32,6 +32,7 @@ $stderr = Join-Path $LogDir "server-stderr.log"
 $stdinFile = Join-Path $LogDir "stdin.empty"
 if (-not (Test-Path $stdinFile)) { New-Item -ItemType File -Path $stdinFile | Out-Null }
 
+$launchTimeUtc = (Get-Date).ToUniversalTime()
 $proc = Start-Process -FilePath $JavaExe `
     -ArgumentList "-Xms512M","-Xmx1G","-jar","paper.jar","--nogui" `
     -WorkingDirectory $ServerDir `
@@ -48,7 +49,12 @@ while ((Get-Date) -lt $deadline) {
         throw "Server exited during startup (code $($proc.ExitCode)). See $stdout and $stderr"
     }
     if (Test-Path $latestLog) {
-        $content = Get-Content $latestLog -Raw -ErrorAction SilentlyContinue
+        $logFile = Get-Item $latestLog
+        if ($logFile.LastWriteTimeUtc -lt $launchTimeUtc) {
+            Start-Sleep -Seconds 1
+            continue
+        }
+        $content = Get-Content $logFile.FullName -Raw -ErrorAction SilentlyContinue
         if ($content -match 'Done \([0-9.]+s\)!') {
             Write-Host "Server is ready (log reports Done)."
             exit 0

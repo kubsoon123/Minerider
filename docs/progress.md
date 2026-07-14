@@ -274,10 +274,12 @@ the generated packet layer.
   1. configuration completion — PASS vs mock, fixture committed
   2. join and idle (play login + 3 keep-alives) — PASS vs mock, fixture
      committed; keep-alive echo correlation verified
-  3. initial chunk streaming — BLOCKED as expected: diff reports
-     `MissingPacket: chunk_batch_received` (Phase 3 behavior)
-  4. teleport correction — BLOCKED as expected: diff reports
-     `MissingPacket: teleport_confirm` (Phase 3 behavior)
+  3. initial chunk streaming — initially BLOCKED with
+     `MissingPacket: chunk_batch_received`; resolved in the real-server
+     validation milestone below
+  4. teleport correction — initially BLOCKED with
+     `MissingPacket: teleport_confirm`; resolved in the real-server
+     validation milestone below
 
 **Files changed:** `src/trace/**` (new: format, decode, recorder,
 normalize, diff), `src/minecraft/coverage.rs` (new),
@@ -292,12 +294,43 @@ normalize, diff), `src/minecraft/coverage.rs` (new),
 `-D warnings` and rustfmt clean; codegen drift and matrix drift gates OK.
 
 **Problems:**
-- Zero PASS statuses that require vanilla: no vanilla/Paper 1.21.4 server
-  available, so all mock-backed entries remain PARTIAL. When a server is
-  available: capture vanilla traces with the same recorder and diff
-  against `tests/conformance/fixtures/`.
-- Scenarios 3-4 intentionally blocked until Phase 3 implements
-  `chunk_batch_received` and `teleport_confirm` responses.
+- At this milestone, no vanilla/Paper 1.21.4 server was available and
+  scenarios 3-4 were blocked. Both items were exercised and resolved in
+  the real-server validation milestone below.
 
-**Next step:** Phase 3 — tick engine, player state, then implement the
-two blocked responses to unblock scenarios 3-4.
+**Historical next step:** validate against a real 1.21.4 server before
+starting Phase 3.
+
+---
+
+## Local Paper / vanilla 1.21.4 validation (complete)
+
+**Completed:**
+- Added reproducible localhost-only Paper 1.21.4 build 232 management under
+  `.test-servers/`, using a repository-local Temurin 21 runtime. Downloads
+  are checksum-verified and all generated server state is git-ignored.
+- Reached play against Paper and the official Mojang vanilla 1.21.4 server
+  (protocol 769), with compression, configuration, and keep-alive handling.
+- Confirmed the two trace-derived protocol gaps and fixed them separately:
+  `teleport_confirm` for synchronized positions and
+  `chunk_batch_received` for completed vanilla chunk batches.
+- Revalidated deterministic teleport corrections against Paper and vanilla.
+  Vanilla produced 21 chunk batches and MineRider acknowledged all 21.
+- Completed a 55-minute Paper soak: 219/219 keep-alives, 959,801 packet
+  events, zero unknown packets, 7.8 MB to 7.89 MB RSS, and no unplanned
+  disconnect. The client then handled a controlled RCON kick normally.
+- Reduced ignored-packet warnings to one per packet ID; the 55-minute client
+  log stayed at 8.4 KiB despite a 343.4 MiB streamed trace.
+
+**Files changed:** local server scripts, `src/minecraft/play.rs`, coverage
+fixtures/tests, conformance evidence, and the real-server validation docs.
+
+**Tests:** 146 passed, 0 failed. Rustfmt, clippy `-D warnings`, protocol
+codegen drift, and conformance-matrix drift gates pass.
+
+**Remaining limitation:** a manually authorized official vanilla-client
+reference capture has not been performed, so vanilla-client parity remains
+PARTIAL. The credential-safe procedure is in
+`docs/real_server_validation.md`.
+
+**Next step:** end this validation phase. Phase 3 is outside this milestone.

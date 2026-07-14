@@ -1,6 +1,7 @@
 # Paper / vanilla 1.21.4 real-server validation report
 
-Date: 2026-07-12. MineRider commit range: `b8ba1e5` → HEAD (validation session).
+Date: 2026-07-12. MineRider code under test: `9b9581e` (validation commits
+start at `9b1c7da`; report commits are documentation-only).
 Verdict: **MineRider connects, logs in, enters play, answers all mandatory
 obligations observed on both servers, and idles without kicks. Two P0
 protocol obligations were found via traces, fixed, and re-validated.**
@@ -102,7 +103,10 @@ either server. **PASS vs both servers.**
 - 5 min (Paper): PASS — RSS 7.8 MB at join and 7.8 MB at 5 min, ~2 s
   total CPU, 102k traced packets, no disconnect. (Run truncated at ~6.4 min
   by the harness output limit, which motivated the log fix.)
-- 30 min (Paper): running at report time; results appended below.
+- 55 min (Paper): PASS — 959,801 packets traced, 219/219 keep-alives
+  echoed, zero unknown packets, and no server disconnect. The run ended
+  intentionally after 55:00.9 with a localhost RCON kick; MineRider decoded
+  the disconnect reason and exited normally.
 
 ## 7. Resource baseline (single bot, debug-logging off)
 
@@ -110,10 +114,12 @@ either server. **PASS vs both servers.**
 |---|---|
 | RSS at play entry | 7.8 MB |
 | RSS after 5 min idle | 7.8 MB (no growth) |
-| CPU (idle, cumulative) | ~2 s over 6 min (<1%) |
-| Packets observed | ~280/s burst at join, ~170/s steady (entity/world spam from the existing test world) |
+| RSS after 55 min idle | 7.89 MB (no meaningful growth) |
+| CPU (idle, cumulative) | 17.22 s over 3,301 s (~0.52% of one core) |
+| Packets observed | 959,801 total: 959,576 clientbound, 225 serverbound; 17,446/min (290.8/s average) |
+| Keep-alives | 219 received, 219 echoed |
 | Unknown packets | 0 |
-| Trace buffering | unbounded-memory risk: none (per-event file flush; RSS flat) |
+| Trace/log growth | 343.4 MiB streamed trace; rate-limited client log stayed 8.4 KiB; RSS flat |
 
 Caveat: one process, includes tokio runtime overhead — not a per-bot
 production number.
@@ -122,8 +128,8 @@ production number.
 
 Before full vanilla-client reference parity:
 - **Vanilla-client reference capture** (procedure in
-  `docs/real_server_validation.md` §13): needs a manual vanilla client run
-  against the local servers; no credentials are intercepted.
+  `docs/real_server_validation.md`): needs a manual vanilla client run
+  against the local servers. No credentials are captured or intercepted.
 - Vanilla-default client behavior not yet sent: `client information`
   (settings), brand `custom_payload`, play `pong` reply — never demanded
   by either server; candidates for the fidelity pass, not blockers.
@@ -143,7 +149,13 @@ scripts\test-server\validate-server-ready.ps1
 scripts\test-server\run-minerider-validation.ps1 -DurationSeconds 60
 scripts\test-server\rcon.ps1 -Command "tp MineRiderTest 10 100 10"
 scripts\test-server\stop-paper-1.21.4.ps1
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p minerider-codegen -- --check
+cargo run --bin conformance_matrix
 ```
 
-Vanilla server setup is documented in `docs/real_server_validation.md`
-(official Mojang jar, sha1-verified, port 25566).
+The [environment guide](real_server_validation.md) documents the official
+Mojang vanilla server setup (SHA-1 verified, port 25566) and the safe manual
+vanilla-client reference procedure.

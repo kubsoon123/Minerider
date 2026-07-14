@@ -1,7 +1,7 @@
 //! Conformance scenarios 1-4: run the client against scenario mock servers
 //! with a trace recorder, normalize the capture and compare it against
-//! committed fixtures (scenarios 1-2) or the vanilla obligation
-//! (scenarios 3-4, currently blocked: client responses not implemented).
+//! committed fixtures (scenarios 1-2) or assert the required vanilla
+//! obligation response (scenarios 3-4).
 //!
 //! Fixtures regenerate with `MINERIDER_WRITE_FIXTURES=1 cargo test --test conformance`.
 

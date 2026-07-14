@@ -14,7 +14,7 @@ if (Test-Path $PidFile) {
     $serverPid = [int](Get-Content $PidFile)
     $proc = Get-Process -Id $serverPid -ErrorAction SilentlyContinue
     if ($proc) {
-        Write-Host "OK  process alive (PID $pid)"
+        Write-Host "OK  process alive (PID $serverPid)"
     } else {
         Write-Host "FAIL process $serverPid not running"; $ok = $false
     }
