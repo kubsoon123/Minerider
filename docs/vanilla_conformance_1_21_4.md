@@ -33,7 +33,7 @@ or lose an id.
 | 4 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 5 | ping | handled | pong | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 6 | reset_chat | ignored | — | — | none | NOT APPLICABLE |  | none |
-| 7 | registry_data | ignored | — | — | registry contents required for play decode | NOT IMPLEMENTED |  | none |
+| 7 | registry_data | handled | — | — | store dimension types for chunk decode and world physics | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 8 | remove_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
 | 9 | add_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
 | 10 | store_cookie | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -57,7 +57,7 @@ or lose an id.
 | 6 | block_break_animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 7 | tile_entity_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 8 | block_action | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 9 | block_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 9 | block_change | handled | — | — | update one cached block state | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 10 | boss_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 11 | difficulty | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
@@ -82,13 +82,13 @@ or lose an id.
 | 31 | entity_status | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 32 | sync_entity_position | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 33 | explosion | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 34 | unload_chunk | ignored | — | — | drop chunk from cache | NOT IMPLEMENTED |  | none |
+| 34 | unload_chunk | handled | — | — | drop chunk from world cache | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 35 | game_state_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 36 | open_horse_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 37 | hurt_animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 38 | initialize_world_border | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 39 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
-| 40 | map_chunk | stored | — | — | store chunk data | NOT IMPLEMENTED | initial_chunks | none |
+| 40 | map_chunk | handled | — | — | decode and store all block-state/biome chunk sections | PARTIAL | join_idle, initial_chunks | unit-tested state projection; mock/vanilla capture pending |
 | 41 | world_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 42 | world_particles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 43 | update_light | stored | — | — | store light data | NOT IMPLEMENTED |  | none |
@@ -126,7 +126,7 @@ or lose an id.
 | 75 | add_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
 | 76 | respawn | ignored | — | — | switch dimension; drop world cache | NOT IMPLEMENTED |  | none |
 | 77 | entity_head_rotation | handled | — | — | update entity head yaw | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 78 | multi_block_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 78 | multi_block_change | handled | — | — | update cached block states in one section | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 79 | select_advancement_tab | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 80 | server_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 81 | action_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |

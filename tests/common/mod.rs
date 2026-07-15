@@ -126,6 +126,19 @@ fn ensure(cond: bool, msg: impl Into<String>) -> Result<()> {
     }
 }
 
+fn ensure_vanilla_movement(packet: &minerider_protocol::packet::RawPacket) -> Result<()> {
+    ensure(
+        matches!(
+            packet.id,
+            play::SERVERBOUND_POSITION_ID
+                | play::SERVERBOUND_POSITION_LOOK_ID
+                | play::SERVERBOUND_LOOK_ID
+                | play::SERVERBOUND_FLYING_ID
+        ),
+        format!("expected vanilla movement packet, got 0x{:02x}", packet.id),
+    )
+}
+
 async fn run_server(
     stream: TcpStream,
     mode: Mode,
@@ -247,6 +260,7 @@ async fn run_server(
         conn.close().await?;
         return Ok(());
     }
+    send_dimension_registry(&mut conn).await?;
     conn.send_packet(configuration::CLIENTBOUND_FINISH_CONFIGURATION_ID, &[])
         .await?;
     let fin = conn.read_packet().await?;
@@ -255,12 +269,45 @@ async fn run_server(
         format!("expected finish configuration 0x03, got 0x{:02x}", fin.id),
     )?;
 
-    // Scenario modes start the play state with a Login packet, like vanilla.
+    // Scenario modes start the play state with Login. The join-idle scenario
+    // then supplies the same readiness ingredients vanilla waits for: an
+    // authoritative position and an initial chunk batch.
     if matches!(
         mode,
         Mode::JoinIdle | Mode::ChunkStreaming | Mode::TeleportCorrection
     ) {
         send_play_login(&mut conn).await?;
+    }
+    if mode == Mode::JoinIdle {
+        send_position(&mut conn).await?;
+        send_chunk_batch(&mut conn).await?;
+        let mut saw_teleport_confirm = false;
+        let mut saw_batch_ack = false;
+        let mut saw_player_loaded = false;
+        while !(saw_teleport_confirm && saw_batch_ack && saw_player_loaded) {
+            let packet =
+                tokio::time::timeout(std::time::Duration::from_secs(3), conn.read_packet())
+                    .await
+                    .map_err(|_| {
+                        MineRiderError::Protocol(
+                            "mock server: play readiness packets did not arrive within 3s"
+                                .to_string(),
+                        )
+                    })??;
+            match packet.id {
+                play::SERVERBOUND_TELEPORT_CONFIRM_ID => saw_teleport_confirm = true,
+                play::SERVERBOUND_CHUNK_BATCH_RECEIVED_ID => saw_batch_ack = true,
+                play::SERVERBOUND_PLAYER_LOADED_ID => {
+                    ensure(packet.payload.is_empty(), "player_loaded must be empty")?;
+                    saw_player_loaded = true;
+                }
+                other => {
+                    return Err(MineRiderError::Protocol(format!(
+                        "mock server: unexpected readiness packet 0x{other:02x}"
+                    )));
+                }
+            }
+        }
     }
 
     match mode {
@@ -323,17 +370,45 @@ async fn run_server(
             unreachable!("non-keepalive mock modes returned earlier")
         }
     };
+    if mode == Mode::JoinIdle {
+        let movement = tokio::time::timeout(std::time::Duration::from_millis(1200), async {
+            loop {
+                let packet = conn.read_packet().await?;
+                if packet.id == play::SERVERBOUND_POSITION_ID {
+                    return Ok::<_, MineRiderError>(packet);
+                }
+                ensure_vanilla_movement(&packet)?;
+            }
+        })
+        .await
+        .map_err(|_| {
+            MineRiderError::Protocol(
+                "mock server: no idle position reminder within 1200ms".to_string(),
+            )
+        })??;
+        let mut r = PacketReader::new(&movement.payload);
+        ensure(r.get_f64()? == 0.5, "idle movement x must match teleport")?;
+        ensure(r.get_f64()? == 64.0, "idle movement y must match teleport")?;
+        ensure(r.get_f64()? == 0.5, "idle movement z must match teleport")?;
+        ensure(
+            r.get_u8()? == 1,
+            "idle movement flags must be on-ground/no collision",
+        )?;
+    }
+
     for &id in keepalive_ids {
         let mut w = PacketWriter::new();
         w.put_i64(id);
         conn.send_packet(play::CLIENTBOUND_KEEP_ALIVE_ID, &w.into_inner())
             .await?;
 
-        let echo = conn.read_packet().await?;
-        ensure(
-            echo.id == play::SERVERBOUND_KEEP_ALIVE_ID,
-            format!("expected keep-alive echo 0x1a, got 0x{:02x}", echo.id),
-        )?;
+        let echo = loop {
+            let packet = conn.read_packet().await?;
+            if packet.id == play::SERVERBOUND_KEEP_ALIVE_ID {
+                break packet;
+            }
+            ensure_vanilla_movement(&packet)?;
+        };
         let mut r = PacketReader::new(&echo.payload);
         let echoed = r.get_i64()?;
         ensure(echoed == id, format!("echoed id {echoed}, expected {id}"))?;
@@ -343,6 +418,35 @@ async fn run_server(
 
     conn.close().await?;
     Ok(())
+}
+
+async fn send_dimension_registry(conn: &mut Connection) -> Result<()> {
+    use minerider_protocol::generated::v1_21_4::configuration::{
+        PacketRegistryData, PacketRegistryDataEntriesItem,
+    };
+    use minerider_protocol::nbt::Nbt;
+    use minerider_protocol::traits::Encode;
+
+    let packet = PacketRegistryData {
+        id: "minecraft:dimension_type".to_string(),
+        entries: vec![PacketRegistryDataEntriesItem {
+            key: "minecraft:overworld".to_string(),
+            value: Some(Nbt::Compound(vec![
+                ("min_y".to_string(), Nbt::Int(-64)),
+                ("height".to_string(), Nbt::Int(384)),
+                ("logical_height".to_string(), Nbt::Int(384)),
+                ("coordinate_scale".to_string(), Nbt::Double(1.0)),
+                ("ultrawarm".to_string(), Nbt::Byte(0)),
+                ("has_ceiling".to_string(), Nbt::Byte(0)),
+            ])),
+        }],
+    };
+    let mut w = PacketWriter::new();
+    packet
+        .encode(&mut w)
+        .map_err(|e| MineRiderError::Protocol(format!("mock server: encode registry: {e}")))?;
+    conn.send_packet(configuration::CLIENTBOUND_REGISTRY_DATA_ID, &w.into_inner())
+        .await
 }
 
 /// Sends a play-state Login packet with fixed overworld values.
@@ -381,19 +485,53 @@ async fn send_play_login(conn: &mut Connection) -> Result<()> {
     Ok(())
 }
 
-/// Sends one chunk batch: start, a minimal (empty-data) chunk, finished.
+/// Sends one valid 24-section Overworld chunk batch.
 async fn send_chunk_batch(conn: &mut Connection) -> Result<()> {
+    use minerider_protocol::nbt::Nbt;
+    use minerider_protocol::traits::Encode;
+
     conn.send_packet(play::CLIENTBOUND_CHUNK_BATCH_START_ID, &[])
         .await?;
-    // Minimal level_chunk_with_light: chunk (0,0), empty data, no block
-    // entities, empty light masks and arrays.
+    let mut chunk_data = PacketWriter::new();
+    for section in 0..24 {
+        if section == 7 {
+            // Stone floor at world Y=63 (local Y=15 in section 7), with air
+            // above it. Four-bit indirect palette: air=0, stone=1.
+            chunk_data.put_i16(256);
+            chunk_data.put_u8(4);
+            chunk_data.put_varint(2);
+            chunk_data.put_varint(0);
+            chunk_data.put_varint(1);
+            chunk_data.put_varint(256);
+            for packed in 0..256 {
+                chunk_data.put_u64(if packed >= 240 {
+                    0x1111_1111_1111_1111
+                } else {
+                    0
+                });
+            }
+        } else {
+            chunk_data.put_i16(0);
+            chunk_data.put_u8(0);
+            chunk_data.put_varint(0);
+            chunk_data.put_varint(0);
+        }
+        chunk_data.put_u8(0); // single biome value
+        chunk_data.put_varint(0);
+        chunk_data.put_varint(0); // no packed biome longs
+    }
+    let chunk_data = chunk_data.into_inner();
+
     let mut w = PacketWriter::new();
     w.put_i32(0);
     w.put_i32(0);
-    w.put_varint(0); // chunk data length
+    Nbt::Compound(vec![]).encode(&mut w)?;
+    w.put_byte_array(&chunk_data);
     w.put_varint(0); // block entities
     w.put_varint(0); // sky light mask (empty bitset)
     w.put_varint(0); // block light mask
+    w.put_varint(0); // empty sky light mask
+    w.put_varint(0); // empty block light mask
     w.put_varint(0); // sky light arrays
     w.put_varint(0); // block light arrays
     conn.send_packet(play::CLIENTBOUND_MAP_CHUNK_ID, &w.into_inner())

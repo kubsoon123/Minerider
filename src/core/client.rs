@@ -7,6 +7,7 @@ use minerider_protocol::generated::versions::{ProtocolVersion, V1_21_4};
 
 use crate::core::error::Result;
 use crate::core::state::ConnectionState;
+use crate::minecraft::configuration::ConfigurationData;
 use crate::minecraft::{configuration, handshake, login, play};
 use crate::network::connection::Connection;
 use crate::trace::TraceRecorder;
@@ -43,6 +44,7 @@ pub struct Client {
     pub uuid: u128,
     /// Username confirmed by the server during login.
     pub username: String,
+    configuration: ConfigurationData,
 }
 
 impl Client {
@@ -71,20 +73,21 @@ impl Client {
 
         let success = login::login(&mut conn, &cfg.username).await?;
         info!("entering configuration state");
-        configuration::run_configuration(&mut conn).await?;
+        let configuration = configuration::run_configuration(&mut conn).await?;
         info!("entering play state");
 
         Ok(Client {
             conn,
             uuid: success.uuid,
             username: success.username,
+            configuration,
         })
     }
 
     /// Runs the play-state loop until the connection errors or the server
     /// disconnects us.
     pub async fn run(&mut self) -> Result<()> {
-        play::run_play(&mut self.conn).await
+        play::run_play(&mut self.conn, &self.configuration).await
     }
 
     /// Current protocol state of the underlying connection.

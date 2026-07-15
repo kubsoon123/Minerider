@@ -266,11 +266,8 @@ fn configuration_coverage(id: i32) -> CoverageEntry {
             ..NO_RESPONSE
         }),
         configuration::CLIENTBOUND_RESET_CHAT_ID => ignored(NO_RESPONSE),
-        configuration::CLIENTBOUND_REGISTRY_DATA_ID => ignored(not_implemented(
-            None,
-            TimingClass::None,
-            "registry contents required for play decode",
-            "",
+        configuration::CLIENTBOUND_REGISTRY_DATA_ID => handled(state_only(
+            "store dimension types for chunk decode and world physics",
         )),
         configuration::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID
         | configuration::CLIENTBOUND_ADD_RESOURCE_PACK_ID => ignored(not_implemented(
@@ -367,21 +364,19 @@ fn play_coverage(id: i32) -> CoverageEntry {
             scenario: "initial_chunks",
             evidence: EVIDENCE_VALIDATED,
         }),
-        play::CLIENTBOUND_MAP_CHUNK_ID => CoverageEntry {
-            class: CoverageClass::StoredForLater,
-            obligation: not_implemented(
-                None,
-                TimingClass::None,
-                "store chunk data",
-                "initial_chunks",
-            ),
-        },
-        play::CLIENTBOUND_UNLOAD_CHUNK_ID => ignored(not_implemented(
-            None,
-            TimingClass::None,
-            "drop chunk from cache",
-            "",
-        )),
+        play::CLIENTBOUND_MAP_CHUNK_ID => handled(Obligation {
+            responds_with: None,
+            timing: TimingClass::None,
+            state_update: "decode and store all block-state/biome chunk sections",
+            status: ConformanceStatus::Partial,
+            scenario: "join_idle, initial_chunks",
+            evidence: EVIDENCE_UNIT,
+        }),
+        play::CLIENTBOUND_UNLOAD_CHUNK_ID => handled(state_only("drop chunk from world cache")),
+        play::CLIENTBOUND_BLOCK_CHANGE_ID => handled(state_only("update one cached block state")),
+        play::CLIENTBOUND_MULTI_BLOCK_CHANGE_ID => {
+            handled(state_only("update cached block states in one section"))
+        }
         play::CLIENTBOUND_UPDATE_LIGHT_ID => CoverageEntry {
             class: CoverageClass::StoredForLater,
             obligation: not_implemented(None, TimingClass::None, "store light data", ""),

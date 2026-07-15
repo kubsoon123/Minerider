@@ -245,6 +245,12 @@ fn check_timing(
         .rev()
         .find(|event| event.dir == Direction::Clientbound)?;
     let state = state_of(trigger)?;
+    // Voluntary client packets (movement, player_loaded, settings) have no
+    // clientbound trigger and must be compared by their own periodic cadence,
+    // not by the obligation of whichever server packet happened most recently.
+    if state == ConnectionState::Play && matches!(expected[i].id, 28 | 29 | 30 | 31 | 42) {
+        return None;
+    }
     let class = clientbound_coverage(state, trigger.id).obligation.timing;
     if class == TimingClass::None || class == TimingClass::BestEffort {
         return None;

@@ -142,13 +142,35 @@ async fn scenario_2_join_and_idle() {
     let captured = capture(&server, "join_idle").await;
     server.finish().await.expect("mock server flow failed");
 
-    // Play login packet arrived; three keep-alives echoed.
+    // Play login, initial world readiness and vanilla idle movement occurred;
+    // three keep-alives were then echoed.
     assert!(has_event(
         &captured,
         Direction::Clientbound,
         ConnectionState::Play,
         44
     ));
+    let loaded_pos = captured
+        .iter()
+        .position(|e| e.dir == Direction::Serverbound && e.state == "play" && e.id == 42)
+        .expect("player_loaded in capture");
+    let movement_pos = captured
+        .iter()
+        .position(|e| e.dir == Direction::Serverbound && e.state == "play" && e.id == 28)
+        .expect("idle position reminder in capture");
+    assert!(
+        loaded_pos < movement_pos,
+        "movement must follow player_loaded readiness"
+    );
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|e| e.dir == Direction::Serverbound && e.state == "play" && e.id == 42)
+            .count(),
+        1,
+        "player_loaded is sent once"
+    );
+
     let echoes: Vec<_> = captured
         .iter()
         .filter(|e| e.dir == Direction::Serverbound && e.state == "play" && e.name == "keep_alive")

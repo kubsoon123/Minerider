@@ -8,13 +8,16 @@ use minerider_protocol::nbt::Nbt;
 
 use crate::core::error::Result;
 
+mod collision_data;
 pub mod configuration;
 pub mod coverage;
 pub mod entity;
 pub mod handshake;
 pub mod login;
+pub mod physics;
 pub mod play;
 pub mod player;
+pub mod world;
 
 /// The client brand a vanilla client reports on the `minecraft:brand`
 /// plugin channel.

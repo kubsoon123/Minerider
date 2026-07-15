@@ -448,3 +448,92 @@ gates all clean.
   own known-packs list (`minecraft:core` + version).
 
 **Next step:** play-state per-tick movement (`sendPosition`) + `player_loaded`.
+
+---
+
+## Phase 3c — vanilla play readiness + movement cadence (complete)
+
+**Completed:**
+- Reproduced the mapped vanilla 1.21.4 `LocalPlayer.sendPosition()` decision
+  state in `minecraft/player.rs`: movement threshold `(2.0e-4)^2`, forced
+  position reminder every 20 eligible ticks, packet choice order
+  `position_look` → `position` → `look` → `flying` (status-only), and the
+  packed `on_ground` / `horizontal_collision` bits.
+- Added a delayed 20 TPS play ticker (first tick after 50 ms, not Tokio's
+  immediate interval tick) and exact generated-packet encoding in `play.rs`.
+- Added minimal honest load readiness: a server position, at least one decoded
+  chunk coordinate, and completion of the initial chunk batch are required
+  before the empty `player_loaded` packet is sent once. Movement starts only
+  after that transition.
+- Strengthened `join_idle`: the mock sends login + synchronize-position + an
+  initial chunk batch, requires teleport confirmation, chunk-batch ack and
+  `player_loaded`, then waits for the unchanged position reminder and verifies
+  exact coordinates and flags before exchanging keep-alives. The trace fixture
+  records the whole order and conformance asserts one `player_loaded` before
+  movement.
+- The trace comparator no longer assigns an unrelated clientbound response
+  deadline to voluntary play packets (`player_loaded` and movement).
+- Conformance coverage/matrix now records that chunk coordinates participate in
+  readiness while full palette/block storage remains pending.
+
+**Evidence:** official Mojang 1.21.4 client artifact/mappings (published SHA-1),
+Yarn mapped names, generated protocol 769 layouts, unit tests and the local mock
+wire trace. A real vanilla-client loopback packet capture remains the final
+byte/timing parity authority.
+
+**Tests:** 166 passed, 0 failed (workspace total; +5 movement decision tests).
+All four conformance scenarios pass; clippy `--workspace --all-targets -D
+warnings`, rustfmt, protocol-codegen drift and conformance-matrix drift pass.
+
+**Limitations / next step:**
+- The readiness model stores chunk coordinates rather than full chunk sections;
+  implement palette/block world storage and compare the exact vanilla
+  `LevelLoadStatusManager` player-chunk visibility condition.
+- Physics still does not alter position/on-ground/collision. The movement
+  transmitter is exact for its state inputs; gravity/collision must supply
+  vanilla-equivalent state next.
+- `select_known_packs` remains an echo rather than vanilla's own known-pack
+  selection. This is the next configuration parity gap.
+
+---
+
+## Phase 3d — dimension-aware world + collision/gravity foundation (complete)
+
+**Completed:**
+- Configuration `registry_data` now retains `minecraft:dimension_type` values
+  (`min_y`, height, logical height, coordinate scale, ultrawarm/ceiling) and
+  threads them through `Client` into play. Login's dimension index selects the
+  active type; section count is no longer hardcoded to the Overworld.
+- New `minecraft/world.rs`: bounded 1.21.4 section decoder for all paletted
+  container modes (single, indirect and direct), non-spanning packed longs,
+  X-fastest indexing, biome palettes, negative chunk coordinates, unload,
+  single-block and section multi-block updates.
+- Vendored pinned 1.21.4 `blocks.json` and `blockCollisionShapes.json`. A
+  reproducible generator emits deduplicated AABB mappings for all 27,866 global
+  block-state ids and 4,989 collision shapes; unknown ids fail rather than
+  silently becoming full blocks.
+- New `minecraft/physics.rs`: player/world AABBs, voxel-shape collection and
+  vanilla axis clipping order (Y, then the longer horizontal component), with
+  vertical/horizontal collision and `on_ground` results.
+- Local player now applies synchronize-position velocity relative flags and an
+  explicit normal-air idle-survival branch: gravity `0.08`, collision clipping,
+  velocity zeroing on clipped axes and drag (`0.98` vertical, `0.91`
+  horizontal) before Phase 3c packet selection.
+- The mock now sends a real dimension registry and valid 24-section chunk with
+  a paletted stone floor. Join-idle verifies grounded movement flags instead of
+  relying on an empty synthetic chunk.
+
+**Verification:** 170 workspace tests pass, 0 fail. Four conformance scenarios,
+strict clippy, rustfmt, protocol codegen drift and conformance-matrix drift pass.
+
+**Honest limits / next:**
+- This completes the no-input/no-effect/no-fluid survival foundation, not every
+  `LivingEntity.travel` branch. Walking acceleration, jumping, sprinting,
+  crouching, step-up choice, fluids, ladders, effects and attribute modifiers
+  remain explicit follow-ups.
+- Collision data is pinned from minecraft-data's 1.21.4 generated dataset; a
+  drift check for the new generated Rust table should be added to CI.
+- A local Paper 1.21.4 physics-enabled soak completed on 2026-07-15: the client
+  remained connected, decoded the live dimension/chunk stream and sent
+  `player_loaded` on tick 5. Official-vanilla/client-reference comparison is
+  still required before raising byte/timing evidence beyond `PARTIAL`.
