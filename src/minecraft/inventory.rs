@@ -52,6 +52,111 @@ pub enum DragPhase {
     End,
 }
 
+/// Caller-friendly click kinds for
+/// [`crate::core::supervisor::SupervisorHandle::click_open_gui_slot`]/
+/// [`crate::core::supervisor::SupervisorHandle::click_inventory_slot`] — the
+/// same vocabulary a player thinks in, mapped onto the existing typed
+/// [`InventoryClick`] modes below rather than duplicating any protocol
+/// mode-number logic. `DragStart`/`DragAddSlot`/`DragEnd` and
+/// `OutsideLeft`/`OutsideRight` ignore the slot index passed alongside them
+/// (drag start/end and an outside click address the special outside slot,
+/// not a real one; `DragAddSlot` is the one drag phase that does use it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuiClick {
+    Left,
+    Right,
+    ShiftLeft,
+    ShiftRight,
+    /// Swaps the clicked slot with hotbar slot `0..=8` (the vanilla number
+    /// keys).
+    HotbarSwap(u8),
+    /// Swaps the clicked slot with the offhand slot (vanilla `F`).
+    OffhandSwap,
+    /// Drops a single item from the clicked slot (vanilla `Q`).
+    ThrowOne,
+    /// Drops the clicked slot's whole stack (vanilla `Ctrl+Q`).
+    ThrowStack,
+    /// Vanilla double-click: collects every matching stack into one.
+    DoubleClick,
+    /// Left-click outside any slot (drops the held cursor stack).
+    OutsideLeft,
+    /// Right-click outside any slot (drops one item from the cursor stack).
+    OutsideRight,
+    DragStart(DragButton),
+    DragAddSlot(DragButton),
+    DragEnd(DragButton),
+    /// Middle-click clone (creative mode only; the server rejects this
+    /// otherwise — see [`InventoryError::CreativeOnly`]).
+    CreativeClone,
+}
+
+impl GuiClick {
+    /// Maps this convenience click onto the exact [`InventoryClick`] the
+    /// existing, already-tested `prepare_click`/`validate_click` pipeline
+    /// expects — no protocol mode/button logic is duplicated here.
+    pub(crate) fn into_inventory_click(self, slot: i16) -> InventoryClick {
+        match self {
+            GuiClick::Left => InventoryClick::Pickup {
+                slot: Some(slot),
+                button: MouseButton::Left,
+            },
+            GuiClick::Right => InventoryClick::Pickup {
+                slot: Some(slot),
+                button: MouseButton::Right,
+            },
+            GuiClick::ShiftLeft => InventoryClick::QuickMove {
+                slot,
+                button: MouseButton::Left,
+            },
+            GuiClick::ShiftRight => InventoryClick::QuickMove {
+                slot,
+                button: MouseButton::Right,
+            },
+            GuiClick::HotbarSwap(hotbar_slot) => InventoryClick::HotbarSwap {
+                slot,
+                destination: HotbarDestination::Slot(hotbar_slot),
+            },
+            GuiClick::OffhandSwap => InventoryClick::HotbarSwap {
+                slot,
+                destination: HotbarDestination::Offhand,
+            },
+            GuiClick::ThrowOne => InventoryClick::Throw {
+                slot,
+                whole_stack: false,
+            },
+            GuiClick::ThrowStack => InventoryClick::Throw {
+                slot,
+                whole_stack: true,
+            },
+            GuiClick::DoubleClick => InventoryClick::PickupAll { slot },
+            GuiClick::OutsideLeft => InventoryClick::Pickup {
+                slot: None,
+                button: MouseButton::Left,
+            },
+            GuiClick::OutsideRight => InventoryClick::Pickup {
+                slot: None,
+                button: MouseButton::Right,
+            },
+            GuiClick::DragStart(button) => InventoryClick::QuickCraft {
+                phase: DragPhase::Start,
+                button,
+                slot: None,
+            },
+            GuiClick::DragAddSlot(button) => InventoryClick::QuickCraft {
+                phase: DragPhase::AddSlot,
+                button,
+                slot: Some(slot),
+            },
+            GuiClick::DragEnd(button) => InventoryClick::QuickCraft {
+                phase: DragPhase::End,
+                button,
+                slot: None,
+            },
+            GuiClick::CreativeClone => InventoryClick::Clone { slot },
+        }
+    }
+}
+
 /// Typed protocol-769 container click modes. Slot-bearing variants use the
 /// current window's zero-based slot index; only `Pickup::outside` addresses
 /// the special outside slot.
@@ -63,6 +168,12 @@ pub enum InventoryClick {
     },
     QuickMove {
         slot: i16,
+        /// Which mouse button was held for the shift-click. The wire's
+        /// `mode=1` accepts both `0` (left) and `1` (right) exactly like
+        /// `mode=0`'s ordinary click, so this is sent through rather than
+        /// hardcoded, even though vanilla's *server-side* quick-move result
+        /// does not otherwise depend on it.
+        button: MouseButton,
     },
     HotbarSwap {
         slot: i16,
@@ -543,9 +654,9 @@ impl InventoryState {
                 mouse_button(button),
                 0,
             )),
-            InventoryClick::QuickMove { slot } => {
+            InventoryClick::QuickMove { slot, button } => {
                 validate_slot(slot, slot_count)?;
-                Ok((slot, 0, 1))
+                Ok((slot, mouse_button(button), 1))
             }
             InventoryClick::HotbarSwap { slot, destination } => {
                 validate_slot(slot, slot_count)?;
@@ -987,7 +1098,14 @@ mod tests {
                 (0, 1, 0),
                 false,
             ),
-            (InventoryClick::QuickMove { slot: 1 }, (1, 0, 1), false),
+            (
+                InventoryClick::QuickMove {
+                    slot: 1,
+                    button: MouseButton::Left,
+                },
+                (1, 0, 1),
+                false,
+            ),
             (
                 InventoryClick::HotbarSwap {
                     slot: 2,
@@ -1037,13 +1155,25 @@ mod tests {
         let mut inventory = synchronized_inventory();
         assert!(matches!(
             inventory.prepare_click(
-                transaction(1, InventoryClick::QuickMove { slot: -1 }),
+                transaction(
+                    1,
+                    InventoryClick::QuickMove {
+                        slot: -1,
+                        button: MouseButton::Left
+                    }
+                ),
                 0,
                 false
             ),
             Err(InventoryError::InvalidSlot { .. })
         ));
-        let mut stale = transaction(2, InventoryClick::QuickMove { slot: 0 });
+        let mut stale = transaction(
+            2,
+            InventoryClick::QuickMove {
+                slot: 0,
+                button: MouseButton::Left,
+            },
+        );
         stale.state_id = 6;
         assert!(matches!(
             inventory.prepare_click(stale, 0, false),
@@ -1136,7 +1266,13 @@ mod tests {
         let mut inventory = synchronized_inventory();
         inventory
             .prepare_click(
-                transaction(1, InventoryClick::QuickMove { slot: 0 }),
+                transaction(
+                    1,
+                    InventoryClick::QuickMove {
+                        slot: 0,
+                        button: MouseButton::Left,
+                    },
+                ),
                 0,
                 false,
             )
@@ -1233,7 +1369,10 @@ mod tests {
             generation: 1,
             window_id: 5,
             state_id: 1,
-            click: InventoryClick::QuickMove { slot: 0 },
+            click: InventoryClick::QuickMove {
+                slot: 0,
+                button: MouseButton::Left,
+            },
         };
         inventory.prepare_click(request, 0, false).unwrap();
         inventory.mark_sent(9);
@@ -1245,5 +1384,178 @@ mod tests {
                 outcome: InventoryOutcome::WindowClosed,
             }
         )));
+    }
+
+    // ------------------------------------------------------------------
+    // Mission C: GuiClick -> InventoryClick mapping.
+    // ------------------------------------------------------------------
+
+    /// Every `GuiClick` variant maps onto the exact `InventoryClick` (and
+    /// therefore exact wire mode/button) a hand-written call to the
+    /// lower-level API would produce — proving no protocol logic was
+    /// duplicated or drifted between the two.
+    #[test]
+    fn every_gui_click_maps_to_the_expected_inventory_click() {
+        let cases: &[(GuiClick, InventoryClick)] = &[
+            (
+                GuiClick::Left,
+                InventoryClick::Pickup {
+                    slot: Some(13),
+                    button: MouseButton::Left,
+                },
+            ),
+            (
+                GuiClick::Right,
+                InventoryClick::Pickup {
+                    slot: Some(13),
+                    button: MouseButton::Right,
+                },
+            ),
+            (
+                GuiClick::ShiftLeft,
+                InventoryClick::QuickMove {
+                    slot: 13,
+                    button: MouseButton::Left,
+                },
+            ),
+            (
+                GuiClick::ShiftRight,
+                InventoryClick::QuickMove {
+                    slot: 13,
+                    button: MouseButton::Right,
+                },
+            ),
+            (
+                GuiClick::HotbarSwap(3),
+                InventoryClick::HotbarSwap {
+                    slot: 13,
+                    destination: HotbarDestination::Slot(3),
+                },
+            ),
+            (
+                GuiClick::OffhandSwap,
+                InventoryClick::HotbarSwap {
+                    slot: 13,
+                    destination: HotbarDestination::Offhand,
+                },
+            ),
+            (
+                GuiClick::ThrowOne,
+                InventoryClick::Throw {
+                    slot: 13,
+                    whole_stack: false,
+                },
+            ),
+            (
+                GuiClick::ThrowStack,
+                InventoryClick::Throw {
+                    slot: 13,
+                    whole_stack: true,
+                },
+            ),
+            (
+                GuiClick::DoubleClick,
+                InventoryClick::PickupAll { slot: 13 },
+            ),
+            (
+                GuiClick::OutsideLeft,
+                InventoryClick::Pickup {
+                    slot: None,
+                    button: MouseButton::Left,
+                },
+            ),
+            (
+                GuiClick::OutsideRight,
+                InventoryClick::Pickup {
+                    slot: None,
+                    button: MouseButton::Right,
+                },
+            ),
+            (
+                GuiClick::DragStart(DragButton::Left),
+                InventoryClick::QuickCraft {
+                    phase: DragPhase::Start,
+                    button: DragButton::Left,
+                    slot: None,
+                },
+            ),
+            (
+                GuiClick::DragAddSlot(DragButton::Left),
+                InventoryClick::QuickCraft {
+                    phase: DragPhase::AddSlot,
+                    button: DragButton::Left,
+                    slot: Some(13),
+                },
+            ),
+            (
+                GuiClick::DragEnd(DragButton::Left),
+                InventoryClick::QuickCraft {
+                    phase: DragPhase::End,
+                    button: DragButton::Left,
+                    slot: None,
+                },
+            ),
+            (GuiClick::CreativeClone, InventoryClick::Clone { slot: 13 }),
+        ];
+        for (gui_click, expected) in cases {
+            assert_eq!(
+                gui_click.into_inventory_click(13),
+                *expected,
+                "{gui_click:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn raw_slot_zero_is_preserved_not_remapped() {
+        assert_eq!(
+            GuiClick::Left.into_inventory_click(0),
+            InventoryClick::Pickup {
+                slot: Some(0),
+                button: MouseButton::Left,
+            }
+        );
+    }
+
+    #[test]
+    fn raw_slot_thirteen_is_preserved_not_remapped() {
+        assert_eq!(
+            GuiClick::Left.into_inventory_click(13),
+            InventoryClick::Pickup {
+                slot: Some(13),
+                button: MouseButton::Left,
+            }
+        );
+    }
+
+    #[test]
+    fn gui_click_reuses_existing_validation_invalid_slot_rejected() {
+        let mut inventory = synchronized_inventory();
+        let click = GuiClick::Left.into_inventory_click(999);
+        assert!(matches!(
+            inventory.prepare_click(transaction(1, click), 0, false),
+            Err(InventoryError::InvalidSlot { slot: 999, .. })
+        ));
+    }
+
+    #[test]
+    fn gui_click_reuses_existing_validation_stale_state_rejected() {
+        let mut inventory = synchronized_inventory();
+        let mut request = transaction(1, GuiClick::Left.into_inventory_click(0));
+        request.state_id = 6; // synchronized_inventory() is at state_id 7
+        assert!(matches!(
+            inventory.prepare_click(request, 0, false),
+            Err(InventoryError::StaleState { .. })
+        ));
+    }
+
+    #[test]
+    fn gui_click_reuses_existing_validation_creative_only_rejected() {
+        let mut inventory = synchronized_inventory();
+        let click = GuiClick::CreativeClone.into_inventory_click(0);
+        assert_eq!(
+            inventory.prepare_click(transaction(1, click), 0, false),
+            Err(InventoryError::CreativeOnly)
+        );
     }
 }

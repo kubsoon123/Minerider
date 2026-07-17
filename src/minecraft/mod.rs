@@ -14,6 +14,7 @@ pub mod control;
 pub mod coverage;
 pub mod entity;
 pub mod event;
+pub mod gui;
 pub mod handshake;
 pub mod hud;
 pub mod inventory;

@@ -44,6 +44,19 @@ pub enum BotEvent {
     PlayerJoined { uuid: u128, name: String },
     /// A player left the tab list.
     PlayerLeft { uuid: u128 },
+    /// A new entity became tracked (`spawn_entity`). Per-tick position/
+    /// rotation/velocity updates are intentionally not individually
+    /// event-emitted — with many tracked entities they would flood the
+    /// event channel at network rate; poll [`crate::minecraft::play::StateSnapshot::entities`]
+    /// for continuous movement, the same way local-player position isn't
+    /// event-emitted either.
+    EntitySpawned {
+        entity_id: i32,
+        uuid: u128,
+        kind: i32,
+    },
+    /// A tracked entity was removed (`entity_destroy`).
+    EntityRemoved { entity_id: i32 },
     /// The world time advanced/changed (`time_of_day` in ticks, 0..24000).
     Time { time_of_day: i64 },
     /// Rain started or stopped.

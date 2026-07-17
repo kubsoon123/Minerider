@@ -13,16 +13,16 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
-    PacketBlockChange, PacketChatCommand, PacketChatMessage, PacketChunkBatchFinished,
-    PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow, PacketCraftProgressBar,
-    PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook, PacketEntityMoveLook,
-    PacketEntityTeleport, PacketEntityVelocity, PacketExperience, PacketGameStateChange,
-    PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk, PacketMultiBlockChange,
-    PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition, PacketRelEntityMove,
-    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
-    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
-    PacketUnloadChunk, PacketUpdateHealth, PacketUpdateTime, PacketWindowItems,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
+    PacketArmAnimation, PacketBlockChange, PacketChatCommand, PacketChatMessage,
+    PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow,
+    PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
+    PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
+    PacketGameStateChange, PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk,
+    PacketMultiBlockChange, PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition,
+    PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem,
+    PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition,
+    PacketTeleportConfirm, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateTime, PacketUseItem,
+    PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
     CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
@@ -35,13 +35,14 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
     CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
     CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID,
-    CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID,
-    SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
-    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
-    SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
-    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_WINDOW_CLICK_ID,
+    CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_ARM_ANIMATION_ID, SERVERBOUND_CHAT_COMMAND_ID,
+    SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
+    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_POSITION_ID,
+    SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
-use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
+use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Vec2f};
 use minerider_protocol::packet::RawPacket;
 use minerider_protocol::traits::{Decode, Encode};
 use tracing::{debug, warn};
@@ -54,7 +55,7 @@ use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
 use crate::core::tick::{TickClock, TICK_DURATION};
 use crate::minecraft::configuration::{ConfigurationData, DimensionType};
-use crate::minecraft::control::{BotCommand, Controller};
+use crate::minecraft::control::{BotCommand, Controller, Hand};
 use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::entity::EntityStore;
 use crate::minecraft::event::BotEvent;
@@ -116,6 +117,12 @@ pub struct PlayState {
     /// Whether the bot was alive on the previous vitals update, so a death
     /// edge fires the `Death` event exactly once.
     was_alive: bool,
+    /// Monotonic per-session counter for `use_item`'s `sequence` field.
+    /// Starts fresh (`0`) every time a new [`PlayState`] is built — i.e.
+    /// every new connection/reconnect — since a sequence number only needs
+    /// to be unique *within* one session's acknowledgement stream, never
+    /// across sessions.
+    next_action_sequence: i32,
 }
 
 /// Vanilla `ClientCommandPacket.Action.PERFORM_RESPAWN`: click the death
@@ -146,7 +153,15 @@ impl PlayState {
             world: None,
             respawn_pending: false,
             was_alive: true,
+            next_action_sequence: 0,
         }
+    }
+
+    /// The next `use_item` sequence number for this session, never repeated
+    /// within it.
+    fn next_action_sequence(&mut self) -> i32 {
+        self.next_action_sequence = self.next_action_sequence.wrapping_add(1);
+        self.next_action_sequence
     }
 
     /// Broadcasts an event to all subscribers; a full/closed channel is
@@ -231,6 +246,7 @@ impl PlayState {
             hud: self.hud.clone(),
             world_time: self.world_time,
             raining: self.raining,
+            dimension: self.dimension.clone(),
         }
     }
 }
@@ -254,6 +270,12 @@ pub struct StateSnapshot {
     pub hud: HudState,
     pub world_time: i64,
     pub raining: bool,
+    /// Retained dimension properties (min/max Y, coordinate scale, ...) for
+    /// whichever dimension the player is currently in — cheap to clone every
+    /// tick (a handful of scalar fields), unlike the full `World`/chunk data
+    /// this snapshot deliberately still excludes (see [`PlayState::snapshot`]).
+    /// `None` before the first `login`/`respawn` packet.
+    pub dimension: Option<DimensionType>,
 }
 
 /// Runs the play-state loop: a `select!` between the packet stream and a
@@ -312,6 +334,8 @@ pub async fn run_play(
                     Some(BotCommand::InventoryClick(request)) => {
                         send_inventory_click(conn, &mut state, request).await?
                     }
+                    Some(BotCommand::UseItem(hand)) => send_use_item(conn, &mut state, hand).await?,
+                    Some(BotCommand::Swing(hand)) => send_swing(conn, hand).await?,
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
@@ -428,6 +452,43 @@ async fn send_inventory_click(
     Ok(())
 }
 
+/// Sends protocol-769 `use_item` (right-click activation of the held item).
+/// `sequence` is this session's next value (see [`PlayState::next_action_sequence`]
+/// — never repeated within one session, and implicitly reset on every new
+/// session since [`PlayState`] itself is rebuilt on connect/reconnect); the
+/// camera-angle fields introduced in 1.21.2 carry the player's current
+/// yaw/pitch at send time. There is no dedicated clientbound acknowledgement
+/// for this specific packet, so returning `Ok(())` here means only "the
+/// packet was sent", not "the server accepted the interaction" — the same
+/// contract [`crate::core::supervisor::SupervisorHandle::use_item`] documents.
+async fn send_use_item(conn: &mut Connection, state: &mut PlayState, hand: Hand) -> Result<()> {
+    let packet = PacketUseItem {
+        hand: hand.wire_value(),
+        sequence: state.next_action_sequence(),
+        rotation: Vec2f {
+            x: state.player.position.yaw,
+            y: state.player.position.pitch,
+        },
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ITEM_ID, &output.freeze())
+        .await
+}
+
+/// Sends protocol-769 `arm_animation` (the swing animation), independent of
+/// [`send_use_item`] — vanilla sends these as separate packets and so does
+/// this API; see [`crate::core::supervisor::SupervisorHandle::swing`].
+async fn send_swing(conn: &mut Connection, hand: Hand) -> Result<()> {
+    let packet = PacketArmAnimation {
+        hand: hand.wire_value(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_ARM_ANIMATION_ID, &output.freeze())
+        .await
+}
+
 /// Runs vanilla's per-tick play-entry and movement behavior.
 async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
     let expired = state.inventory.expire_transactions(state.clock.current());
@@ -460,6 +521,7 @@ async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()>
     {
         conn.send_packet(SERVERBOUND_PLAYER_LOADED_ID, &[]).await?;
         state.player.mark_loaded();
+        state.emit(BotEvent::Spawned);
         debug!(tick = state.clock.current(), "sent player_loaded");
         return Ok(());
     }
@@ -723,10 +785,20 @@ fn apply_state_packet(
         CLIENTBOUND_SPAWN_ENTITY_ID => {
             let p = PacketSpawnEntity::decode(&mut r)?;
             state.entities.spawn(&p);
+            state.emit(BotEvent::EntitySpawned {
+                entity_id: p.entity_id,
+                uuid: p.object_uuid,
+                kind: p.r#type,
+            });
         }
         CLIENTBOUND_ENTITY_DESTROY_ID => {
             let p = PacketEntityDestroy::decode(&mut r)?;
             state.entities.destroy(&p.entity_ids);
+            for entity_id in &p.entity_ids {
+                state.emit(BotEvent::EntityRemoved {
+                    entity_id: *entity_id,
+                });
+            }
         }
         CLIENTBOUND_REL_ENTITY_MOVE_ID => {
             let p = PacketRelEntityMove::decode(&mut r)?;
@@ -989,5 +1061,35 @@ mod tests {
     fn slash_content_is_rejected_instead_of_changing_packet_kind() {
         assert!(encode_outbound_chat_action(&BotCommand::Chat("/help".into()), 0, 0).is_err());
         assert!(encode_outbound_chat_action(&BotCommand::Command("/help".into()), 0, 0).is_err());
+    }
+
+    #[test]
+    fn action_sequence_increments_and_never_repeats_within_a_session() {
+        let (event_tx, _rx) = broadcast::channel(crate::minecraft::event::EVENT_CHANNEL_CAPACITY);
+        let mut state = PlayState::new(event_tx);
+        assert_eq!(state.next_action_sequence(), 1);
+        assert_eq!(state.next_action_sequence(), 2);
+        assert_eq!(state.next_action_sequence(), 3);
+    }
+
+    #[test]
+    fn action_sequence_resets_on_a_fresh_session_reconnect_isolation() {
+        // `PlayState` is rebuilt from scratch by `run_play` on every new
+        // connection/reconnect attempt (see the module's own `run_play`),
+        // so a fresh instance starting back at 1 — not continuing from
+        // wherever a previous session's counter left off — is exactly the
+        // reconnect isolation this session-scoped counter promises.
+        let (event_tx, _rx) = broadcast::channel(crate::minecraft::event::EVENT_CHANNEL_CAPACITY);
+        let mut first_session = PlayState::new(event_tx.clone());
+        assert_eq!(first_session.next_action_sequence(), 1);
+        assert_eq!(first_session.next_action_sequence(), 2);
+        assert_eq!(first_session.next_action_sequence(), 3);
+
+        let mut second_session = PlayState::new(event_tx);
+        assert_eq!(
+            second_session.next_action_sequence(),
+            1,
+            "a new session's sequence must not continue from the old session's counter"
+        );
     }
 }
