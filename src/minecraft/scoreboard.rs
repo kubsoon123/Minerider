@@ -139,13 +139,13 @@ impl ScoreboardState {
 
     fn apply_score(&mut self, score: Score) -> ScoreboardEvent {
         let key = ScoreKey::new(score.owner.clone(), score.objective.clone());
-        let applied = if !self.objectives.contains_key(&score.objective) {
-            false
-        } else if !self.scores.contains_key(&key) && self.scores.len() >= MAX_SCORES {
-            false
-        } else {
+        let objective_exists = self.objectives.contains_key(&score.objective);
+        let has_capacity = self.scores.contains_key(&key) || self.scores.len() < MAX_SCORES;
+        let applied = if objective_exists && has_capacity {
             self.scores.insert(key.clone(), score);
             true
+        } else {
+            false
         };
         ScoreboardEvent::ScoreChanged {
             owner: key.owner.clone(),
@@ -355,7 +355,7 @@ pub enum NumberFormat {
     Blank,
     /// The raw style compound is retained for a future renderer.
     Styled(Nbt),
-    Fixed(TextComponent),
+    Fixed(Box<TextComponent>),
     Unknown {
         kind: i32,
         styling: Option<Nbt>,
@@ -817,7 +817,7 @@ fn number_format(kind: Option<i32>, styling: Option<Nbt>) -> Option<NumberFormat
             },
         }),
         Some(2) => Some(match styling {
-            Some(styling) => NumberFormat::Fixed(TextComponent::from_nbt(&styling)),
+            Some(styling) => NumberFormat::Fixed(Box::new(TextComponent::from_nbt(&styling))),
             None => NumberFormat::Unknown {
                 kind: 2,
                 styling: None,
