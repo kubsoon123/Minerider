@@ -53,6 +53,9 @@ feature):
   action bar, titles and timings, tab-list header/footer, bounded boss bars,
   and structured disconnect reasons. Signed-chat wire data is retained for
   future verification; signatures are not currently verified.
+- Headless scoreboard state: bounded, deterministically ordered objectives,
+  display slots, scores and teams, including protocol-769 number formats,
+  team text/options and one-team-per-member lifecycle semantics.
 - A push-based bot event stream (`Client::events`) and a pull-based state
   snapshot (`Client::bot_state`), plus a command-based control API
   (`Client::control`) for movement, look and chat.

@@ -1417,3 +1417,68 @@ comparisons failed on Windows despite identical generated content.
 
 **Next unfinished phase:** Phase 4e — complete scoreboard objectives,
 display slots, scores, and teams on the shared text/presentation foundation.
+
+---
+
+## Phase 4e — complete scoreboards and teams
+
+Implemented one bounded, snapshot-readable `ScoreboardState`
+(`src/minecraft/scoreboard.rs`) directly from the generated protocol-769
+packet definitions. Generated switch enums are projected into stable public
+models before state mutation or event delivery.
+
+**Packet coverage completed:**
+- `scoreboard_objective`: create, update and remove by stable objective name,
+  including structured display text, integer/hearts render type, default,
+  blank, styled, fixed and unknown number formats.
+- `scoreboard_display_objective`: list/sidebar/below-name/team-color slots,
+  explicit empty-name detach and safely preserved unknown slot ids.
+- `scoreboard_score` and `reset_score`: create/update, display name, per-score
+  number-format override, one-objective removal and all-objectives reset for
+  an owner.
+- `teams`: create, update and remove; member add/remove and atomic movement
+  between teams; display name, prefix, suffix, color, friendly-fire and
+  friendly-invisibility bits, name-tag visibility and collision rule.
+
+**Lifecycle, ordering and bounds:**
+- Objectives, display slots, scores and teams are `BTreeMap`/`BTreeSet`
+  backed for deterministic snapshots. Member-to-team ownership is indexed
+  explicitly, so one entry cannot remain in two teams.
+- Removing an objective also detaches every referencing display slot and
+  removes every score for that objective. Events report the detached/removed
+  counts.
+- Missing/out-of-order updates, removals and unknown actions are typed safe
+  no-ops. Unknown render types, team colors, visibility/collision strings,
+  display slots and number-format ids remain inspectable.
+- Server-controlled state is capped at 256 objectives, 64 display slots,
+  16,384 scores, 1,024 teams and 16,384 unique team members. Capacity rejects
+  are observable in ordered `ScoreboardEvent`s.
+- Every play snapshot carries an independent scoreboard clone; lagged event
+  consumers recover through the snapshot exactly like presentation state.
+
+**Tests added (8):** objective/display/score lifecycle and cascading removal;
+scoped/all-objective score reset; complete team/options/member lifecycle;
+out-of-order and unknown-action no-ops; unknown number-format preservation;
+deterministic ordering and objective/display/score bounds; team/member bounds;
+and malformed payload rejection. The lifecycle assertions cover explicit
+display detach, styled/fixed formats, shared text components, every team text
+field, color, visibility/collision rules and both flag bits.
+
+**Verification:** 310 workspace tests pass, 0 failed (Phase 4d baseline 302;
++8). GitHub CI passes `cargo fmt --all --check`,
+`cargo test --workspace --locked` on Linux and Windows,
+`cargo clippy --workspace --all-targets -- -D warnings`, and
+`cargo run -p minerider-codegen -- --check`.
+
+**Honest limitations:**
+- State is headless data: there is no scoreboard/HUD renderer and no claim of
+  pixel or animation parity with vanilla.
+- Semantics are unit-tested against generated protocol-769 layouts; a real
+  vanilla-client trace diff for these five packets is still pending, so the
+  conformance matrix reports `PARTIAL`, not `PASS`.
+- Styled number-format NBT is retained raw for a future renderer; fixed text
+  uses the shared `TextComponent` model immediately.
+
+**Next unfinished phase:** Phase 4f — remaining typed HUD and player-facing
+state (abilities, effects, attributes, cooldowns, border, difficulty, spawn
+and the gaps in existing health/experience/time/weather/player-list state).

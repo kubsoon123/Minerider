@@ -6,13 +6,13 @@ section). This document exists so a later, bounded session can implement
 Phase 5a without re-deriving these decisions, and so nothing here is
 mistaken for a shipped feature.
 
-This design is grounded in the actual Rust APIs as of Phase 4d:
+This design is grounded in the actual Rust APIs as of Phase 4e:
 `core::client::Client`, `core::supervisor::ClientSupervisor`,
 `minecraft::control::{ControlHandle, BotCommand}`,
 `minecraft::event::BotEvent`, `minecraft::play::StateSnapshot`, and the
 state types it aggregates (`LocalPlayer`, `EntityStore`, `InventoryState`,
-`PlayerList`, `PresentationState`). Field names below are copied from those
-types, not guessed.
+`PlayerList`, `PresentationState`, `ScoreboardState`). Field names below are
+copied from those types, not guessed.
 
 ## Why Lua sits where it does
 
@@ -188,6 +188,7 @@ bot:on("player_left", function(e) end)         -- BotEvent::PlayerLeft { uuid }
 bot:on("time", function(e) end)                -- BotEvent::Time { time_of_day }
 bot:on("weather", function(e) end)             -- BotEvent::Weather { raining }
 bot:on("kicked", function(e) end)              -- BotEvent::Kicked { reason }
+bot:on("scoreboard", function(e) end)          -- BotEvent::Scoreboard(ScoreboardEvent)
 -- Supervisor lifecycle (only fire when run under a ClientSupervisor):
 bot:on("connecting", function() end)
 bot:on("connected", function() end)
@@ -210,6 +211,7 @@ s.world_time, s.raining
 -- s.players: array of { uuid, name, gamemode, latency, listed }           (from PlayerList/PlayerEntry)
 -- s.presentation: bounded structured chat, action bar, titles, tab-list
 --                 header/footer, boss bars, and disconnect reason
+-- s.scoreboard: bounded objectives, display slots, scores, teams and members
 
 -- Persistent controls (map directly to BotCommand via ControlHandle; all
 -- fire-and-forget, never block):
