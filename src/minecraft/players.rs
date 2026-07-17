@@ -7,13 +7,21 @@
 //! already-known player), so fields are applied individually and a
 //! previously-unseen uuid is inserted with just the fields present.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use minerider_protocol::generated::v1_21_4::play::{
     PacketPlayerInfo, PacketPlayerInfoAction, PacketPlayerInfoDataItem,
+    PacketPlayerInfoDataItemChatSession, PacketPlayerInfoDataItemDisplayName,
     PacketPlayerInfoDataItemGamemode, PacketPlayerInfoDataItemLatency,
-    PacketPlayerInfoDataItemListed, PacketPlayerInfoDataItemPlayer, PacketPlayerRemove,
+    PacketPlayerInfoDataItemListPriority, PacketPlayerInfoDataItemListed,
+    PacketPlayerInfoDataItemPlayer, PacketPlayerInfoDataItemShowHat, PacketPlayerRemove,
 };
+
+use crate::minecraft::text::TextComponent;
+
+/// A defensive ceiling for tab-list state. Real servers stay far below this;
+/// the bound prevents a hostile stream of unique UUIDs from growing forever.
+pub const MAX_PLAYERS: usize = 4_096;
 
 /// One entry in the tab list.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -28,12 +36,28 @@ pub struct PlayerEntry {
     pub latency: i32,
     /// Whether the player is shown in the tab list.
     pub listed: bool,
+    /// Server-provided tab-list display name, distinct from the account name.
+    pub display_name: Option<TextComponent>,
+    /// Sorting priority within the tab list.
+    pub list_priority: i32,
+    /// Whether the player's hat skin layer is shown in the tab list.
+    pub show_hat: bool,
+    /// Bounded metadata for the currently initialized signed-chat session.
+    pub chat_session: Option<PlayerChatSession>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlayerChatSession {
+    pub session_id: u128,
+    pub expires_at_millis: i64,
+    pub public_key_bytes: usize,
+    pub signature_bytes: usize,
 }
 
 /// The set of players currently known from the tab list, keyed by uuid.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PlayerList {
-    players: HashMap<u128, PlayerEntry>,
+    players: BTreeMap<u128, PlayerEntry>,
 }
 
 /// The outcome of applying a `player_info` packet, so the caller can emit
@@ -42,6 +66,10 @@ pub struct PlayerList {
 pub struct PlayerInfoChanges {
     /// `(uuid, name)` for players inserted by this packet (first seen).
     pub joined: Vec<(u128, String)>,
+    /// Every UUID whose accepted entry was touched, in packet order.
+    pub updated: Vec<u128>,
+    /// Entries refused because the defensive player bound was full.
+    pub rejected: usize,
 }
 
 impl PlayerList {
@@ -72,6 +100,10 @@ impl PlayerList {
         let mut changes = PlayerInfoChanges::default();
         for item in &packet.data {
             let is_new = !self.players.contains_key(&item.uuid);
+            if is_new && self.players.len() >= MAX_PLAYERS {
+                changes.rejected += 1;
+                continue;
+            }
             let entry = self
                 .players
                 .entry(item.uuid)
@@ -82,6 +114,7 @@ impl PlayerList {
                     ..PlayerEntry::default()
                 });
             apply_item(entry, action, item);
+            changes.updated.push(item.uuid);
             // A newly-inserted entry only counts as a "join" once it actually
             // carries a name (the add_player action); otherwise it's a
             // latency/listed update for a player we simply hadn't seen named.
@@ -114,6 +147,16 @@ fn apply_item(
             entry.name = profile.name.clone();
         }
     }
+    if action.contains(PacketPlayerInfoAction::INITIALIZE_CHAT) {
+        if let PacketPlayerInfoDataItemChatSession::True(session) = &item.chat_session {
+            entry.chat_session = session.as_ref().map(|session| PlayerChatSession {
+                session_id: session.uuid,
+                expires_at_millis: session.public_key.expire_time,
+                public_key_bytes: session.public_key.key_bytes.len(),
+                signature_bytes: session.public_key.key_signature.len(),
+            });
+        }
+    }
     if action.contains(PacketPlayerInfoAction::UPDATE_GAME_MODE) {
         if let PacketPlayerInfoDataItemGamemode::True(mode) = item.gamemode {
             entry.gamemode = mode;
@@ -130,6 +173,21 @@ fn apply_item(
             entry.listed = listed != 0;
         }
     }
+    if action.contains(PacketPlayerInfoAction::UPDATE_DISPLAY_NAME) {
+        if let PacketPlayerInfoDataItemDisplayName::True(display_name) = &item.display_name {
+            entry.display_name = display_name.as_ref().map(TextComponent::from_nbt);
+        }
+    }
+    if action.contains(PacketPlayerInfoAction::UPDATE_LIST_ORDER) {
+        if let PacketPlayerInfoDataItemListPriority::True(priority) = item.list_priority {
+            entry.list_priority = priority;
+        }
+    }
+    if action.contains(PacketPlayerInfoAction::UPDATE_HAT) {
+        if let PacketPlayerInfoDataItemShowHat::True(show_hat) = item.show_hat {
+            entry.show_hat = show_hat;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -139,7 +197,10 @@ mod tests {
         PacketPlayerInfoDataItemChatSession, PacketPlayerInfoDataItemDisplayName,
         PacketPlayerInfoDataItemListPriority, PacketPlayerInfoDataItemShowHat,
     };
-    use minerider_protocol::generated::v1_21_4::types::GameProfile;
+    use minerider_protocol::generated::v1_21_4::types::{
+        ChatSessionValue, ChatSessionValuePublicKey, GameProfile,
+    };
+    use minerider_protocol::nbt::Nbt;
 
     fn add_item(uuid: u128, name: &str, gamemode: i32, latency: i32) -> PacketPlayerInfoDataItem {
         PacketPlayerInfoDataItem {
@@ -180,6 +241,7 @@ mod tests {
         assert_eq!(entry.gamemode, 1);
         assert_eq!(entry.latency, 42);
         assert!(entry.listed);
+        assert_eq!(changes.updated, vec![7]);
     }
 
     #[test]
@@ -225,5 +287,107 @@ mod tests {
         assert!(list.get(7).is_none());
         assert!(list.get(8).is_some());
         assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn modern_player_info_fields_are_typed_and_clearable() {
+        let mut list = PlayerList::default();
+        list.apply_info(&PacketPlayerInfo {
+            action: add_action(),
+            data: vec![add_item(7, "Notch", 0, 10)],
+        });
+        let modern = PacketPlayerInfoDataItem {
+            uuid: 7,
+            player: PacketPlayerInfoDataItemPlayer::Default,
+            chat_session: PacketPlayerInfoDataItemChatSession::True(Some(ChatSessionValue {
+                uuid: 99,
+                public_key: ChatSessionValuePublicKey {
+                    expire_time: 1234,
+                    key_bytes: vec![1, 2],
+                    key_signature: vec![3, 4, 5],
+                },
+            })),
+            gamemode: PacketPlayerInfoDataItemGamemode::Default,
+            listed: PacketPlayerInfoDataItemListed::Default,
+            latency: PacketPlayerInfoDataItemLatency::Default,
+            display_name: PacketPlayerInfoDataItemDisplayName::True(Some(Nbt::String(
+                "Boss".into(),
+            ))),
+            list_priority: PacketPlayerInfoDataItemListPriority::True(12),
+            show_hat: PacketPlayerInfoDataItemShowHat::True(true),
+        };
+        list.apply_info(&PacketPlayerInfo {
+            action: PacketPlayerInfoAction(
+                PacketPlayerInfoAction::INITIALIZE_CHAT
+                    | PacketPlayerInfoAction::UPDATE_DISPLAY_NAME
+                    | PacketPlayerInfoAction::UPDATE_LIST_ORDER
+                    | PacketPlayerInfoAction::UPDATE_HAT,
+            ),
+            data: vec![modern],
+        });
+        let entry = list.get(7).unwrap();
+        assert_eq!(entry.display_name.as_ref().unwrap().plain_text(), "Boss");
+        assert_eq!(entry.list_priority, 12);
+        assert!(entry.show_hat);
+        assert_eq!(entry.chat_session.as_ref().unwrap().session_id, 99);
+        assert_eq!(entry.chat_session.as_ref().unwrap().signature_bytes, 3);
+
+        let mut clear = add_item(7, "", 0, 0);
+        clear.chat_session = PacketPlayerInfoDataItemChatSession::True(None);
+        clear.display_name = PacketPlayerInfoDataItemDisplayName::True(None);
+        list.apply_info(&PacketPlayerInfo {
+            action: PacketPlayerInfoAction(
+                PacketPlayerInfoAction::INITIALIZE_CHAT
+                    | PacketPlayerInfoAction::UPDATE_DISPLAY_NAME,
+            ),
+            data: vec![clear],
+        });
+        let entry = list.get(7).unwrap();
+        assert!(entry.chat_session.is_none());
+        assert!(entry.display_name.is_none());
+    }
+
+    #[test]
+    fn player_bound_rejects_only_new_entries() {
+        let mut list = PlayerList::default();
+        for uuid in 0..MAX_PLAYERS as u128 {
+            list.players.insert(
+                uuid,
+                PlayerEntry {
+                    uuid,
+                    ..PlayerEntry::default()
+                },
+            );
+        }
+        let changes = list.apply_info(&PacketPlayerInfo {
+            action: add_action(),
+            data: vec![add_item(MAX_PLAYERS as u128 + 1, "overflow", 0, 0)],
+        });
+        assert_eq!(changes.rejected, 1);
+        assert!(changes.updated.is_empty());
+
+        let changes = list.apply_info(&PacketPlayerInfo {
+            action: PacketPlayerInfoAction(PacketPlayerInfoAction::UPDATE_LATENCY),
+            data: vec![PacketPlayerInfoDataItem {
+                uuid: 0,
+                latency: PacketPlayerInfoDataItemLatency::True(5),
+                ..add_item(0, "ignored", 0, 0)
+            }],
+        });
+        assert_eq!(changes.updated, vec![0]);
+        assert_eq!(list.get(0).unwrap().latency, 5);
+    }
+
+    #[test]
+    fn iteration_is_deterministic_by_uuid() {
+        let mut list = PlayerList::default();
+        list.apply_info(&PacketPlayerInfo {
+            action: add_action(),
+            data: vec![add_item(9, "nine", 0, 0), add_item(2, "two", 0, 0)],
+        });
+        assert_eq!(
+            list.iter().map(|entry| entry.uuid).collect::<Vec<_>>(),
+            vec![2, 9]
+        );
     }
 }
