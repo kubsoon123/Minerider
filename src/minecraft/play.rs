@@ -294,9 +294,11 @@ pub async fn run_play(
             }
             command = control_rx.recv(), if control_open => {
                 match command {
-                    // Chat is the one command that goes straight to the wire
-                    // rather than into the controller's local state.
-                    Some(BotCommand::Chat(text)) => send_chat(conn, &text).await?,
+                    // Outbound chat actions go straight to their distinct
+                    // protocol packets rather than into movement state.
+                    Some(action @ (BotCommand::Chat(_) | BotCommand::Command(_))) => {
+                        send_outbound_chat_action(conn, &action).await?
+                    }
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
@@ -321,47 +323,67 @@ fn apply_command(state: &mut PlayState, command: BotCommand) {
     }
 }
 
-/// Sends chat: a leading `/` becomes a `chat_command`, anything else an
-/// unsigned `chat_message`.
-///
 /// The message is sent unsigned (no cryptographic signature). Offline-mode
 /// servers and servers with `enforce-secure-profile=false` accept this;
 /// servers that enforce secure chat will reject or kick unsigned messages —
 /// full message signing (a per-message ECDSA signature over the chat session
 /// key from `/player/certificates`) is a deliberate follow-up.
-async fn send_chat(conn: &mut Connection, text: &str) -> Result<()> {
-    if let Some(command) = text.strip_prefix('/') {
-        let packet = PacketChatCommand {
-            command: command.to_string(),
-        };
-        let mut w = PacketWriter::new();
-        packet.encode(&mut w)?;
-        conn.send_packet(SERVERBOUND_CHAT_COMMAND_ID, &w.freeze())
-            .await?;
-        debug!(%command, "sent command");
-        return Ok(());
-    }
-
+async fn send_outbound_chat_action(conn: &mut Connection, action: &BotCommand) -> Result<()> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let packet = PacketChatMessage {
-        message: text.to_string(),
-        timestamp,
-        salt: rand::random(),
-        signature: None,
-        // No message-chain acknowledgement is tracked, so acknowledge zero
-        // prior messages: offset 0 and an empty (all-zero) 3-byte bitset.
-        offset: 0,
-        acknowledged: vec![0u8; 3],
-    };
-    let mut w = PacketWriter::new();
-    packet.encode(&mut w)?;
-    conn.send_packet(SERVERBOUND_CHAT_MESSAGE_ID, &w.freeze())
-        .await?;
-    debug!(message = %text, "sent chat");
+    let (id, payload) = encode_outbound_chat_action(action, timestamp, rand::random())?;
+    conn.send_packet(id, &payload).await?;
+    match action {
+        BotCommand::Chat(message) => debug!(%message, "sent chat"),
+        BotCommand::Command(command) => debug!(%command, "sent command"),
+        _ => unreachable!("encoder only accepts outbound chat actions"),
+    }
     Ok(())
+}
+
+/// Encodes exactly the packet selected by the typed action. Content never
+/// changes packet kind (in particular, there is no leading-slash inference).
+fn encode_outbound_chat_action(
+    action: &BotCommand,
+    timestamp: i64,
+    salt: i64,
+) -> Result<(i32, Vec<u8>)> {
+    action
+        .validate()
+        .map_err(|error| MineRiderError::Protocol(error.to_string()))?;
+    let mut output = PacketWriter::new();
+    let id = match action {
+        BotCommand::Chat(message) => {
+            PacketChatMessage {
+                message: message.clone(),
+                timestamp,
+                salt,
+                signature: None,
+                // No message-chain acknowledgement is tracked, so
+                // acknowledge zero prior messages: offset 0 and an empty
+                // (all-zero) 3-byte bitset.
+                offset: 0,
+                acknowledged: vec![0u8; 3],
+            }
+            .encode(&mut output)?;
+            SERVERBOUND_CHAT_MESSAGE_ID
+        }
+        BotCommand::Command(command) => {
+            PacketChatCommand {
+                command: command.clone(),
+            }
+            .encode(&mut output)?;
+            SERVERBOUND_CHAT_COMMAND_ID
+        }
+        _ => {
+            return Err(MineRiderError::Protocol(
+                "attempted to encode a non-chat control action as chat".into(),
+            ));
+        }
+    };
+    Ok((id, output.into_inner().to_vec()))
 }
 
 /// Runs vanilla's per-tick play-entry and movement behavior.
@@ -887,5 +909,31 @@ mod tests {
         );
         assert!(snap.scoreboard.objectives.contains_key("before"));
         assert_eq!(snap.hud.cooldowns.get("before"), Some(&4));
+    }
+
+    #[test]
+    fn outbound_chat_and_commands_use_distinct_protocol_packets() {
+        let (chat_id, chat_payload) =
+            encode_outbound_chat_action(&BotCommand::Chat("hello".into()), 123, 456).unwrap();
+        assert_eq!(chat_id, SERVERBOUND_CHAT_MESSAGE_ID);
+        let chat = PacketChatMessage::decode(&mut PacketReader::new(&chat_payload)).unwrap();
+        assert_eq!(chat.message, "hello");
+        assert_eq!(chat.timestamp, 123);
+        assert_eq!(chat.salt, 456);
+        assert!(chat.signature.is_none());
+        assert_eq!(chat.acknowledged, vec![0, 0, 0]);
+
+        let (command_id, command_payload) =
+            encode_outbound_chat_action(&BotCommand::Command("say hello".into()), 999, 999)
+                .unwrap();
+        assert_eq!(command_id, SERVERBOUND_CHAT_COMMAND_ID);
+        let command = PacketChatCommand::decode(&mut PacketReader::new(&command_payload)).unwrap();
+        assert_eq!(command.command, "say hello");
+    }
+
+    #[test]
+    fn slash_content_is_rejected_instead_of_changing_packet_kind() {
+        assert!(encode_outbound_chat_action(&BotCommand::Chat("/help".into()), 0, 0).is_err());
+        assert!(encode_outbound_chat_action(&BotCommand::Command("/help".into()), 0, 0).is_err());
     }
 }

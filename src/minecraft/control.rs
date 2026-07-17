@@ -15,6 +15,28 @@ use crate::minecraft::player::{LocalPlayer, MovementInput};
 /// Horizontal distance (blocks) at which a `walk_to` goal counts as reached.
 pub const ARRIVAL_RADIUS: f64 = 0.3;
 
+/// Vanilla's protocol-769 maximum for both serverbound chat messages and
+/// command text. Java measures this as UTF-16 code units (`String::length`),
+/// so Rust byte length or Unicode-scalar count would accept/reject the wrong
+/// inputs around non-BMP characters.
+pub const MAX_CHAT_UTF16_UNITS: usize = 256;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ActionValidationError {
+    #[error("chat messages must not be empty")]
+    EmptyChat,
+    #[error("commands must not be empty")]
+    EmptyCommand,
+    #[error("chat text starts with '/'; use the explicit command action instead")]
+    ChatStartsWithSlash,
+    #[error("command text must omit the leading '/'")]
+    CommandStartsWithSlash,
+    #[error("chat message is {actual} UTF-16 units; maximum is {max}")]
+    ChatTooLong { actual: usize, max: usize },
+    #[error("command is {actual} UTF-16 units; maximum is {max}")]
+    CommandTooLong { actual: usize, max: usize },
+}
+
 /// A command sent from a controller to the running play loop.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BotCommand {
@@ -31,11 +53,60 @@ pub enum BotCommand {
     Sneak(bool),
     /// Toggle the jump key on the manual overlay.
     Jump(bool),
-    /// Send a chat message, or — if it starts with `/` — run it as a command.
-    /// The play loop turns this into the right serverbound packet.
+    /// Send an ordinary unsigned chat message. It is never reinterpreted as
+    /// a command from its contents.
     Chat(String),
+    /// Run a command using the protocol's dedicated command packet. The text
+    /// excludes the leading slash.
+    Command(String),
     /// Clear any walk goal and zero all movement input.
     Stop,
+}
+
+impl BotCommand {
+    /// Validates outbound text before it enters a supervised queue or packet
+    /// encoder. Non-text commands have no action-specific constraints here.
+    pub fn validate(&self) -> Result<(), ActionValidationError> {
+        match self {
+            Self::Chat(message) => validate_chat(message),
+            Self::Command(command) => validate_command(command),
+            _ => Ok(()),
+        }
+    }
+}
+
+fn validate_chat(message: &str) -> Result<(), ActionValidationError> {
+    if message.is_empty() {
+        return Err(ActionValidationError::EmptyChat);
+    }
+    if message.starts_with('/') {
+        return Err(ActionValidationError::ChatStartsWithSlash);
+    }
+    let actual = message.encode_utf16().count();
+    if actual > MAX_CHAT_UTF16_UNITS {
+        return Err(ActionValidationError::ChatTooLong {
+            actual,
+            max: MAX_CHAT_UTF16_UNITS,
+        });
+    }
+    Ok(())
+}
+
+fn validate_command(command: &str) -> Result<(), ActionValidationError> {
+    if command.is_empty() {
+        return Err(ActionValidationError::EmptyCommand);
+    }
+    if command.starts_with('/') {
+        return Err(ActionValidationError::CommandStartsWithSlash);
+    }
+    let actual = command.encode_utf16().count();
+    if actual > MAX_CHAT_UTF16_UNITS {
+        return Err(ActionValidationError::CommandTooLong {
+            actual,
+            max: MAX_CHAT_UTF16_UNITS,
+        });
+    }
+    Ok(())
 }
 
 /// A cloneable handle for driving a connected bot from outside the play loop.
@@ -83,9 +154,15 @@ impl ControlHandle {
         self.send(BotCommand::Jump(on))
     }
 
-    /// Sends a chat message, or runs it as a command if it starts with `/`.
+    /// Sends an ordinary chat message. A leading slash is rejected by the
+    /// play-loop validator rather than silently changing packet type.
     pub fn chat(&self, message: impl Into<String>) -> Result<(), SendError<BotCommand>> {
         self.send(BotCommand::Chat(message.into()))
+    }
+
+    /// Runs a command using the dedicated packet. `command` omits `/`.
+    pub fn command(&self, command: impl Into<String>) -> Result<(), SendError<BotCommand>> {
+        self.send(BotCommand::Command(command.into()))
     }
 
     /// Clears the walk goal and stops all movement.
@@ -120,7 +197,7 @@ impl Controller {
             BotCommand::Sprint(on) => self.manual.sprint = on,
             BotCommand::Sneak(on) => self.manual.sneak = on,
             BotCommand::Jump(on) => self.manual.jump = on,
-            BotCommand::Chat(_) => {} // sent to the wire by the play loop
+            BotCommand::Chat(_) | BotCommand::Command(_) => {} // sent by the play loop
             BotCommand::Stop => {
                 self.goal = None;
                 self.manual = MovementInput::default();
@@ -256,5 +333,49 @@ mod tests {
         c.drive(&mut p);
         assert!(!c.has_goal());
         assert_eq!(p.input, MovementInput::default());
+    }
+
+    #[test]
+    fn outbound_text_validation_is_explicit_and_uses_utf16_units() {
+        assert_eq!(
+            BotCommand::Chat(String::new()).validate(),
+            Err(ActionValidationError::EmptyChat)
+        );
+        assert_eq!(
+            BotCommand::Command(String::new()).validate(),
+            Err(ActionValidationError::EmptyCommand)
+        );
+        assert_eq!(
+            BotCommand::Chat("/help".into()).validate(),
+            Err(ActionValidationError::ChatStartsWithSlash)
+        );
+        assert_eq!(
+            BotCommand::Command("/help".into()).validate(),
+            Err(ActionValidationError::CommandStartsWithSlash)
+        );
+
+        assert!(BotCommand::Chat("a".repeat(256)).validate().is_ok());
+        assert_eq!(
+            BotCommand::Chat("😀".repeat(129)).validate(),
+            Err(ActionValidationError::ChatTooLong {
+                actual: 258,
+                max: 256,
+            })
+        );
+        assert_eq!(
+            BotCommand::Command("a".repeat(257)).validate(),
+            Err(ActionValidationError::CommandTooLong {
+                actual: 257,
+                max: 256,
+            })
+        );
+    }
+
+    #[test]
+    fn chat_and_command_remain_distinct_actions() {
+        assert_ne!(
+            BotCommand::Chat("say hi".into()),
+            BotCommand::Command("say hi".into())
+        );
     }
 }
