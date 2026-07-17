@@ -213,12 +213,7 @@ impl SharedWorldContext {
         world_name: impl Into<Arc<str>>,
         hashed_seed: i64,
     ) -> World {
-        let scope = WorldScope::new(
-            self.server.clone(),
-            world_name,
-            hashed_seed,
-            &dimension,
-        );
+        let scope = WorldScope::new(self.server.clone(), world_name, hashed_seed, &dimension);
         World::with_shared_store(dimension, self.store.clone(), scope)
     }
 }

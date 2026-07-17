@@ -10,9 +10,15 @@ use std::collections::HashMap;
 use std::hint::black_box;
 use std::mem::size_of;
 use std::process::{Command, ExitCode};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use minerider::minecraft::configuration::DimensionType;
+use minerider::minecraft::shared_world::{
+    ChunkLight, ChunkSnapshot, ServerIdentity, SharedChunkStore, WorldScope,
+};
 use minerider::minecraft::world::{Chunk, ChunkSection, PalettedContainer};
+use minerider_protocol::nbt::Nbt;
 
 const SECTION_COUNT: usize = 24;
 const BLOCKS_PER_SECTION: usize = 16 * 16 * 16;
@@ -21,6 +27,7 @@ const DEFAULT_SAMPLES: usize = 5;
 const UPDATE_ROUNDS: usize = 8;
 
 type ChunkMap = HashMap<(i32, i32), Chunk>;
+type SharedChunkMap = HashMap<(i32, i32), Arc<ChunkSnapshot>>;
 
 #[derive(Debug, Clone, Copy)]
 enum Scenario {
@@ -56,7 +63,10 @@ impl Scenario {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).is_some_and(|arg| arg == "--case") {
+    if args
+        .get(1)
+        .is_some_and(|arg| arg == "--case" || arg == "--shared-case")
+    {
         return run_child(&args);
     }
     run_suite()
@@ -103,26 +113,28 @@ fn run_suite() -> ExitCode {
         let clients_arg = clients.to_string();
         let chunks_arg = chunks.to_string();
         let samples_arg = DEFAULT_SAMPLES.to_string();
-        let output = match Command::new(&exe)
-            .args([
-                "--case",
-                scenario.name(),
-                &clients_arg,
-                &chunks_arg,
-                &samples_arg,
-            ])
-            .output()
-        {
-            Ok(output) => output,
-            Err(error) => {
-                eprintln!("failed to run {} case: {error}", scenario.name());
+        for flag in ["--case", "--shared-case"] {
+            let output = match Command::new(&exe)
+                .args([
+                    flag,
+                    scenario.name(),
+                    &clients_arg,
+                    &chunks_arg,
+                    &samples_arg,
+                ])
+                .output()
+            {
+                Ok(output) => output,
+                Err(error) => {
+                    eprintln!("failed to run {} case: {error}", scenario.name());
+                    return ExitCode::FAILURE;
+                }
+            };
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+            if !output.status.success() {
+                eprint!("{}", String::from_utf8_lossy(&output.stderr));
                 return ExitCode::FAILURE;
             }
-        };
-        print!("{}", String::from_utf8_lossy(&output.stdout));
-        if !output.status.success() {
-            eprint!("{}", String::from_utf8_lossy(&output.stderr));
-            return ExitCode::FAILURE;
         }
     }
     ExitCode::SUCCESS
@@ -145,6 +157,10 @@ fn run_child(args: &[String]) -> ExitCode {
         eprintln!("samples must be a positive integer");
         return ExitCode::FAILURE;
     };
+
+    if args.get(1).is_some_and(|arg| arg == "--shared-case") {
+        return run_shared_child(scenario, clients, chunks, samples);
+    }
 
     // Exact-case warm-up, dropped before collecting samples.
     drop(build_worlds(scenario, clients, chunks));
@@ -221,6 +237,264 @@ fn run_child(args: &[String]) -> ExitCode {
         cleanup.as_micros(),
     );
     ExitCode::SUCCESS
+}
+
+fn run_shared_child(
+    scenario: Scenario,
+    clients: usize,
+    chunks: usize,
+    samples: usize,
+) -> ExitCode {
+    drop(build_shared_worlds(scenario, clients, chunks));
+
+    let rss_baseline = linux_memory_kib("VmRSS");
+    let mut construction = Vec::with_capacity(samples);
+    let mut retained = None;
+    for sample in 0..samples {
+        let start = Instant::now();
+        let built = build_shared_worlds(scenario, clients, chunks);
+        construction.push(start.elapsed());
+        if sample + 1 == samples {
+            retained = Some(built);
+        } else {
+            drop(built);
+        }
+    }
+    let (mut worlds, store, scope) = retained.expect("positive sample count");
+    black_box(&worlds);
+
+    let rss_retained = linux_memory_kib("VmRSS");
+    let rss_peak = linux_memory_kib("VmHWM");
+    let payload_copies = worlds.iter().map(HashMap::len).sum::<usize>();
+    let unique_payloads = unique_shared_payloads(&worlds);
+    let payload_heap_bytes = unique_payloads
+        .iter()
+        .map(|chunk| chunk_snapshot_heap_bytes(chunk))
+        .sum::<usize>();
+    let index_lower_bound_bytes = worlds
+        .iter()
+        .map(|world| world.capacity() * size_of::<((i32, i32), Arc<ChunkSnapshot>)>())
+        .sum::<usize>();
+    let logical_retained_bytes = payload_heap_bytes + index_lower_bound_bytes;
+    let unique_contents = unique_payloads.len();
+
+    let lookup = measure_shared_lookup(&worlds);
+    let update = if matches!(scenario, Scenario::UpdateChurn) {
+        measure_shared_updates(&mut worlds, &store, &scope)
+    } else {
+        Duration::ZERO
+    };
+    let lifecycle = if matches!(scenario, Scenario::LifecycleChurn) {
+        measure_shared_lifecycle(&mut worlds, chunks, &store, &scope)
+    } else {
+        Duration::ZERO
+    };
+
+    let cleanup_start = Instant::now();
+    drop(worlds);
+    drop(store);
+    let cleanup = cleanup_start.elapsed();
+    let rss_after_drop = linux_memory_kib("VmRSS");
+    let (construction_median, construction_min, construction_max) =
+        duration_summary(&mut construction);
+    let extrapolated_100x441 =
+        if clients == 1 && chunks == 441 && matches!(scenario, Scenario::Identical) {
+            logical_retained_bytes
+                .saturating_add(index_lower_bound_bytes.saturating_mul(99))
+        } else {
+            0
+        };
+
+    println!(
+        "RESULT,model=shared,scenario={},clients={clients},chunks_per_client={chunks},payload_copies={payload_copies},unique_contents={unique_contents},payload_heap_bytes={payload_heap_bytes},index_lower_bound_bytes={index_lower_bound_bytes},logical_retained_bytes={logical_retained_bytes},rss_baseline_kib={},rss_retained_kib={},rss_peak_kib={},rss_after_drop_kib={},construction_median_us={},construction_min_us={},construction_max_us={},lookup_total_us={},update_total_us={},lifecycle_total_us={},cleanup_us={},extrapolated_100x441_logical_bytes={extrapolated_100x441}",
+        scenario.name(),
+        optional_number(rss_baseline),
+        optional_number(rss_retained),
+        optional_number(rss_peak),
+        optional_number(rss_after_drop),
+        construction_median.as_micros(),
+        construction_min.as_micros(),
+        construction_max.as_micros(),
+        lookup.as_micros(),
+        update.as_micros(),
+        lifecycle.as_micros(),
+        cleanup.as_micros(),
+    );
+    ExitCode::SUCCESS
+}
+
+fn benchmark_scope() -> WorldScope {
+    let dimension = DimensionType {
+        key: "minecraft:overworld".into(),
+        min_y: -64,
+        height: 384,
+        logical_height: 384,
+        coordinate_scale: 1.0,
+        ultrawarm: false,
+        has_ceiling: false,
+    };
+    WorldScope::new(
+        ServerIdentity::new("benchmark.invalid", 25_565),
+        "minecraft:benchmark",
+        7,
+        &dimension,
+    )
+}
+
+fn build_shared_worlds(
+    scenario: Scenario,
+    clients: usize,
+    chunks: usize,
+) -> (Vec<SharedChunkMap>, Arc<SharedChunkStore>, WorldScope) {
+    let store = Arc::new(SharedChunkStore::new());
+    let scope = benchmark_scope();
+    let base = make_dataset(chunks, 0);
+    let worlds = (0..clients)
+        .map(|client| {
+            let dataset = match scenario {
+                Scenario::Personalized => make_dataset(chunks, client as u32 + 1),
+                _ => {
+                    let mut dataset = base.clone();
+                    if matches!(scenario, Scenario::MostlyIdentical) {
+                        let changed = chunks.div_ceil(50).max(1);
+                        for offset in 0..changed {
+                            let index = (client * changed + offset) % chunks;
+                            personalize_chunk(&mut dataset[index], client as u32 + 1);
+                        }
+                    }
+                    dataset
+                }
+            };
+            dataset
+                .into_iter()
+                .map(|chunk| {
+                    let position = (chunk.x, chunk.z);
+                    let snapshot = snapshot_from_chunk(chunk);
+                    let snapshot = store
+                        .intern(&scope, snapshot)
+                        .expect("generated snapshot fingerprints");
+                    (position, snapshot)
+                })
+                .collect()
+        })
+        .collect();
+    (worlds, store, scope)
+}
+
+fn snapshot_from_chunk(chunk: Chunk) -> ChunkSnapshot {
+    ChunkSnapshot {
+        x: chunk.x,
+        z: chunk.z,
+        sections: chunk.sections.into_iter().map(Arc::new).collect(),
+        heightmaps: Arc::new(Nbt::Compound(Vec::new())),
+        block_entities: Arc::new(Vec::new()),
+        light: Arc::new(ChunkLight::default()),
+    }
+}
+
+fn unique_shared_payloads(worlds: &[SharedChunkMap]) -> Vec<&ChunkSnapshot> {
+    let mut pointers = std::collections::HashSet::new();
+    let mut unique = Vec::new();
+    for chunk in worlds.iter().flat_map(HashMap::values) {
+        if pointers.insert(Arc::as_ptr(chunk) as usize) {
+            unique.push(chunk.as_ref());
+        }
+    }
+    unique
+}
+
+fn chunk_snapshot_heap_bytes(chunk: &ChunkSnapshot) -> usize {
+    chunk.sections.capacity() * size_of::<Arc<ChunkSection>>()
+        + chunk
+            .sections
+            .iter()
+            .map(|section| {
+                size_of::<ChunkSection>()
+                    + container_heap_bytes(&section.block_states)
+                    + container_heap_bytes(&section.biomes)
+            })
+            .sum::<usize>()
+}
+
+fn measure_shared_lookup(worlds: &[SharedChunkMap]) -> Duration {
+    let positions = worlds
+        .first()
+        .map(|world| world.keys().copied().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let start = Instant::now();
+    let mut checksum = 0u64;
+    for _ in 0..32 {
+        for world in worlds {
+            for position in &positions {
+                if let Some(value) = world
+                    .get(position)
+                    .and_then(|chunk| chunk.sections.get(1))
+                    .and_then(|section| section.block_states.get(2_047))
+                {
+                    checksum = checksum.wrapping_add(u64::from(value));
+                }
+            }
+        }
+    }
+    black_box(checksum);
+    start.elapsed()
+}
+
+fn measure_shared_updates(
+    worlds: &mut [SharedChunkMap],
+    store: &SharedChunkStore,
+    scope: &WorldScope,
+) -> Duration {
+    let start = Instant::now();
+    for (client, world) in worlds.iter_mut().enumerate() {
+        let Some(position) = world.keys().next().copied() else {
+            continue;
+        };
+        for round in 0..UPDATE_ROUNDS {
+            let current = world.get(&position).expect("position came from map");
+            let mut next = (**current).clone();
+            let mut section = (*next.sections[1]).clone();
+            let state = 30_000 + client as u32 * UPDATE_ROUNDS as u32 + round as u32;
+            materialize_and_set(&mut section.block_states, 2_000 + round, state);
+            next.sections[1] = Arc::new(section);
+            let next = store
+                .intern(scope, next)
+                .expect("generated snapshot fingerprints");
+            world.insert(position, next);
+        }
+    }
+    start.elapsed()
+}
+
+fn measure_shared_lifecycle(
+    worlds: &mut [SharedChunkMap],
+    chunks: usize,
+    store: &SharedChunkStore,
+    scope: &WorldScope,
+) -> Duration {
+    let replacement = make_dataset(chunks, 0);
+    let start = Instant::now();
+    for round in 0..4 {
+        for world in worlds.iter_mut() {
+            let removed = world
+                .keys()
+                .copied()
+                .filter(|(x, z)| (x + z + round) & 1 == 0)
+                .collect::<Vec<_>>();
+            for position in removed {
+                world.remove(&position);
+            }
+            for chunk in &replacement {
+                if !world.contains_key(&(chunk.x, chunk.z)) {
+                    let snapshot = store
+                        .intern(scope, snapshot_from_chunk(chunk.clone()))
+                        .expect("generated snapshot fingerprints");
+                    world.insert((chunk.x, chunk.z), snapshot);
+                }
+            }
+        }
+    }
+    start.elapsed()
 }
 
 fn parse_positive(value: Option<&String>) -> Option<usize> {

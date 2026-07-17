@@ -246,9 +246,9 @@ impl Client {
         let (control_tx, control_rx) = channel();
         let (state_tx, state_rx) = watch::channel(StateSnapshot::default());
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
-        let world_sharing = cfg.share_chunk_payloads.then(|| {
-            SharedWorldContext::process(ServerIdentity::new(&cfg.host, cfg.port))
-        });
+        let world_sharing = cfg
+            .share_chunk_payloads
+            .then(|| SharedWorldContext::process(ServerIdentity::new(&cfg.host, cfg.port)));
         Ok(Client {
             conn,
             uuid: success.uuid,
