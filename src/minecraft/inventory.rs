@@ -778,6 +778,8 @@ impl Default for InventoryState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minerider_protocol::buffer::{PacketReader, PacketWriter};
+    use minerider_protocol::traits::{Decode, Encode};
 
     fn item(item_id: i32, count: i32) -> Slot {
         Slot {
@@ -1022,6 +1024,11 @@ mod tests {
             assert_eq!(prepared.packet.state_id, 7);
             assert!(prepared.packet.changed_slots.is_empty());
             assert_eq!(prepared.packet.cursor_item, empty_slot());
+            let mut output = PacketWriter::new();
+            prepared.packet.encode(&mut output).unwrap();
+            let bytes = output.into_inner();
+            let decoded = PacketWindowClick::decode(&mut PacketReader::new(&bytes)).unwrap();
+            assert_eq!(decoded, prepared.packet);
         }
     }
 
