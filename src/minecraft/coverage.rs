@@ -426,21 +426,29 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_RESPAWN_ID => handled(state_only(
             "reset dimension/world and readiness gate for a new life",
         )),
-        play::CLIENTBOUND_OPEN_WINDOW_ID => handled(state_only("track newly opened container")),
-        play::CLIENTBOUND_CLOSE_WINDOW_ID => handled(state_only("clear tracked open container")),
-        play::CLIENTBOUND_WINDOW_ITEMS_ID => {
-            handled(state_only("refresh a window's slots and the cursor item"))
-        }
-        play::CLIENTBOUND_SET_SLOT_ID => handled(state_only("update one inventory/container slot")),
-        play::CLIENTBOUND_SET_CURSOR_ITEM_ID => handled(state_only("update the cursor item")),
+        play::CLIENTBOUND_OPEN_WINDOW_ID => handled(state_only(
+            "replace open container, cancel stale transactions and emit inventory events",
+        )),
+        play::CLIENTBOUND_CLOSE_WINDOW_ID => handled(state_only(
+            "close matching container, cancel transactions and emit inventory events",
+        )),
+        play::CLIENTBOUND_WINDOW_ITEMS_ID => handled(state_only(
+            "apply bounded full slot/cursor correction and resolve transactions",
+        )),
+        play::CLIENTBOUND_SET_SLOT_ID => handled(state_only(
+            "apply bounded slot update and confirm newer-state transactions",
+        )),
+        play::CLIENTBOUND_SET_CURSOR_ITEM_ID => handled(state_only(
+            "update authoritative cursor item and emit event",
+        )),
         play::CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => handled(state_only(
-            "update a container property (furnace progress, etc.)",
+            "update bounded deterministic window property state and emit event",
         )),
         play::CLIENTBOUND_HELD_ITEM_SLOT_ID => {
-            handled(state_only("track the server-selected hotbar slot"))
+            handled(state_only("validate and track the selected hotbar slot"))
         }
         play::CLIENTBOUND_SET_PLAYER_INVENTORY_ID => handled(state_only(
-            "update bounded hotbar item and held-item projection; emit HUD event",
+            "update bounded player inventory plus hotbar/held-item projections; emit events",
         )),
         play::CLIENTBOUND_PLAYER_INFO_ID => handled(state_only(
             "apply bounded deterministic player-list fields and emit join/HUD events",
