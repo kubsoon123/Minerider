@@ -64,6 +64,7 @@ use crate::minecraft::players::PlayerList;
 use crate::minecraft::presentation::{
     decode_update, ChatKind, PresentationEvent, PresentationState,
 };
+use crate::minecraft::scoreboard::{decode_update as decode_scoreboard_update, ScoreboardState};
 use crate::minecraft::world::World;
 use crate::minecraft::RESOURCE_PACK_STATUS_DECLINED;
 
@@ -90,6 +91,8 @@ pub struct PlayState {
     pub players: PlayerList,
     /// Chat, titles, action bar, tab-list header/footer, and boss bars.
     pub presentation: PresentationState,
+    /// Objectives, display slots, scores, teams, and team membership.
+    pub scoreboard: ScoreboardState,
     /// World time (day-time in ticks) and whether it is raining.
     pub world_time: i64,
     pub raining: bool,
@@ -127,6 +130,7 @@ impl PlayState {
             inventory: InventoryState::default(),
             players: PlayerList::default(),
             presentation: PresentationState::default(),
+            scoreboard: ScoreboardState::default(),
             world_time: 0,
             raining: false,
             controller: Controller::default(),
@@ -180,6 +184,11 @@ impl PlayState {
         }
     }
 
+    fn apply_scoreboard(&mut self, update: crate::minecraft::scoreboard::ScoreboardUpdate) {
+        let event = self.scoreboard.apply(update);
+        self.emit(BotEvent::Scoreboard(Box::new(event)));
+    }
+
     /// A cheap, externally-readable snapshot of the parts of play state a
     /// caller would want to observe (position, health, inventory, entities).
     /// The full `World` (block/chunk data) is intentionally excluded: cloning
@@ -193,6 +202,7 @@ impl PlayState {
             inventory: self.inventory.clone(),
             players: self.players.clone(),
             presentation: self.presentation.clone(),
+            scoreboard: self.scoreboard.clone(),
             world_time: self.world_time,
             raining: self.raining,
         }
@@ -214,6 +224,7 @@ pub struct StateSnapshot {
     pub inventory: InventoryState,
     pub players: PlayerList,
     pub presentation: PresentationState,
+    pub scoreboard: ScoreboardState,
     pub world_time: i64,
     pub raining: bool,
 }
@@ -546,6 +557,10 @@ fn apply_state_packet(
         state.apply_presentation(update);
         return Ok(true);
     }
+    if let Some(update) = decode_scoreboard_update(id, payload)? {
+        state.apply_scoreboard(update);
+        return Ok(true);
+    }
     let mut r = PacketReader::new(payload);
     match id {
         CLIENTBOUND_LOGIN_ID => {
@@ -782,6 +797,15 @@ mod tests {
         state.player.health = 7.5;
         state.presentation.action_bar =
             Some(crate::minecraft::text::TextComponent::literal("before"));
+        state.scoreboard.objectives.insert(
+            "before".into(),
+            crate::minecraft::scoreboard::Objective {
+                name: "before".into(),
+                display_name: crate::minecraft::text::TextComponent::literal("Before"),
+                render_type: crate::minecraft::scoreboard::ObjectiveRenderType::Integer,
+                number_format: None,
+            },
+        );
         let snap = state.snapshot(42);
 
         assert_eq!(snap.tick, 42);
@@ -792,6 +816,7 @@ mod tests {
         state.player.health = 20.0;
         state.presentation.action_bar =
             Some(crate::minecraft::text::TextComponent::literal("after"));
+        state.scoreboard.objectives.clear();
         assert_eq!(
             snap.player.health, 7.5,
             "snapshot is independent of live state"
@@ -804,5 +829,6 @@ mod tests {
                 .plain_text(),
             "before"
         );
+        assert!(snap.scoreboard.objectives.contains_key("before"));
     }
 }

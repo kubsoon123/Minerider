@@ -22,6 +22,7 @@ pub mod play;
 pub mod player;
 pub mod players;
 pub mod presentation;
+pub mod scoreboard;
 pub mod text;
 pub mod world;
 

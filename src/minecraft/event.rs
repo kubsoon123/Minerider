@@ -10,6 +10,7 @@
 //! network.
 
 use crate::minecraft::presentation::PresentationEvent;
+use crate::minecraft::scoreboard::ScoreboardEvent;
 
 /// The buffer depth of the event broadcast channel. Deep enough that a
 /// consumer polling at a human or per-tick cadence never lags on a normal
@@ -51,6 +52,9 @@ pub enum BotEvent {
     /// These events are emitted in packet order and the corresponding state
     /// is available in a fresh snapshot after a lagged receiver recovers.
     Presentation(Box<PresentationEvent>),
+    /// Ordered objective, display-slot, score, or team update. The bounded
+    /// aggregate state is available in snapshots after receiver lag.
+    Scoreboard(Box<ScoreboardEvent>),
 
     // ---- Supervisor lifecycle events ------------------------------------
     // Emitted by `crate::core::supervisor::ClientSupervisor` around
