@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::core::client::{Client, ClientConfig};
 use crate::core::error::{MineRiderError, RetryClass};
-use crate::minecraft::control::BotCommand;
+use crate::minecraft::control::{ActionValidationError, BotCommand};
 use crate::minecraft::event::{BotEvent, EVENT_CHANNEL_CAPACITY};
 use crate::minecraft::play::StateSnapshot;
 use crate::minecraft::player::MovementInput;
@@ -250,6 +250,14 @@ pub enum SupervisorOutcome {
 /// layer) can match on exactly what happened instead of guessing from text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ControlError {
+    /// The action was rejected before queueing because its text cannot be
+    /// represented as a valid protocol-769 chat/command action.
+    #[error(transparent)]
+    InvalidAction(ActionValidationError),
+    /// The bounded supervisor queue is at capacity. The action was not
+    /// queued and may be retried deliberately by the caller.
+    #[error("the supervised command queue is full")]
+    QueueFull,
     /// No session is currently connected (never connected yet, mid-backoff,
     /// or mid-connect-attempt). The command was rejected immediately, not
     /// queued for whenever a session eventually appears.
@@ -278,6 +286,7 @@ pub enum ControlError {
 /// whether it actually reached a live session.
 struct QueuedCommand {
     command: BotCommand,
+    generation: u64,
     respond: oneshot::Sender<Result<(), ControlError>>,
 }
 
@@ -354,11 +363,26 @@ impl SupervisorHandle {
     /// resolves cleanly cancels the wait: the supervisor still processes
     /// the command exactly once and simply discards the reply.
     pub async fn send_command(&self, command: BotCommand) -> Result<(), ControlError> {
+        command.validate().map_err(ControlError::InvalidAction)?;
+        match *self.status_rx.borrow() {
+            SupervisorStatus::Connected => {}
+            SupervisorStatus::Stopped => return Err(ControlError::SupervisorStopped),
+            _ => return Err(ControlError::NotConnected),
+        }
+        let generation = self.generation();
         let (respond, receive) = oneshot::channel();
-        self.command_tx
-            .send(QueuedCommand { command, respond })
-            .await
-            .map_err(|_| ControlError::SupervisorStopped)?;
+        let queued = QueuedCommand {
+            command,
+            generation,
+            respond,
+        };
+        match self.command_tx.try_send(queued) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => return Err(ControlError::QueueFull),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                return Err(ControlError::SupervisorStopped);
+            }
+        }
         receive.await.map_err(|_| ControlError::SupervisorStopped)?
     }
 
@@ -393,9 +417,15 @@ impl SupervisorHandle {
         self.send_command(BotCommand::Jump(on)).await
     }
 
-    /// Sends a chat message, or runs it as a command if it starts with `/`.
+    /// Sends an ordinary chat message. Commands are never inferred from `/`.
     pub async fn chat(&self, message: impl Into<String>) -> Result<(), ControlError> {
         self.send_command(BotCommand::Chat(message.into())).await
+    }
+
+    /// Runs a command using the protocol's dedicated command packet. The
+    /// text excludes the leading slash.
+    pub async fn command(&self, command: impl Into<String>) -> Result<(), ControlError> {
+        self.send_command(BotCommand::Command(command.into())).await
     }
 
     /// Clears the walk goal and stops all movement — named `stop_movement`
@@ -646,9 +676,13 @@ impl ClientSupervisor {
                     return SessionEnd::Error(result.err().unwrap_or(MineRiderError::ConnectionClosed));
                 }
                 Some(cmd) = self.command_rx.recv() => {
-                    let outcome = control
-                        .send(cmd.command)
-                        .map_err(|_| ControlError::Disconnected);
+                    let outcome = if cmd.generation != self.generation {
+                        Err(ControlError::SessionReplaced)
+                    } else {
+                        control
+                            .send(cmd.command)
+                            .map_err(|_| ControlError::Disconnected)
+                    };
                     let _ = cmd.respond.send(outcome);
                 }
                 event = events_rx.recv() => {
@@ -672,6 +706,28 @@ impl ClientSupervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn handle_for_queue_test(
+        status: SupervisorStatus,
+        generation: u64,
+    ) -> (SupervisorHandle, mpsc::Receiver<QueuedCommand>) {
+        let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let (_, state_rx) = watch::channel(StateSnapshot::default());
+        let (_, status_rx) = watch::channel(status);
+        let (_, generation_rx) = watch::channel(generation);
+        let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        (
+            SupervisorHandle {
+                event_tx,
+                state_rx,
+                status_rx,
+                generation_rx,
+                command_tx,
+                cancel: CancellationToken::new(),
+            },
+            command_rx,
+        )
+    }
 
     fn policy() -> ReconnectPolicy {
         ReconnectPolicy::enabled()
@@ -760,5 +816,45 @@ mod tests {
 
         let unlimited = ReconnectPolicy::enabled().with_max_retries(RetryLimit::Unlimited);
         assert!(!unlimited.retries_exhausted(u32::MAX));
+    }
+
+    #[tokio::test]
+    async fn invalid_actions_are_typed_before_connectivity_checks() {
+        let (handle, _rx) = handle_for_queue_test(SupervisorStatus::Disconnected, 0);
+        assert_eq!(
+            handle.chat("").await,
+            Err(ControlError::InvalidAction(
+                ActionValidationError::EmptyChat
+            ))
+        );
+        assert_eq!(handle.chat("hello").await, Err(ControlError::NotConnected));
+    }
+
+    #[tokio::test]
+    async fn queue_capacity_returns_typed_error_without_waiting() {
+        let (handle, _rx) = handle_for_queue_test(SupervisorStatus::Connected, 7);
+        let mut pending_replies = Vec::new();
+        for _ in 0..COMMAND_CHANNEL_CAPACITY {
+            let (respond, receive) = oneshot::channel();
+            let queued = handle.command_tx.try_send(QueuedCommand {
+                command: BotCommand::Stop,
+                generation: 7,
+                respond,
+            });
+            assert!(queued.is_ok(), "fill bounded queue");
+            pending_replies.push(receive);
+        }
+        assert_eq!(handle.chat("hello").await, Err(ControlError::QueueFull));
+    }
+
+    #[tokio::test]
+    async fn queued_action_captures_current_generation() {
+        let (handle, mut rx) = handle_for_queue_test(SupervisorStatus::Connected, 7);
+        let task = tokio::spawn(async move { handle.command("say hello").await });
+        let queued = rx.recv().await.expect("queued action");
+        assert_eq!(queued.generation, 7);
+        assert_eq!(queued.command, BotCommand::Command("say hello".into()));
+        queued.respond.send(Ok(())).unwrap();
+        assert_eq!(task.await.unwrap(), Ok(()));
     }
 }
