@@ -55,7 +55,7 @@ or lose an id.
 | 4 | statistics | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 5 | acknowledge_player_digging | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 6 | block_break_animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 7 | tile_entity_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 7 | tile_entity_data | handled | — | — | update block entity in cached chunk snapshot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 8 | block_action | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 9 | block_change | handled | — | — | update one cached block state | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 10 | boss_bar | handled | — | — | apply bounded add/update/remove state by stable uuid and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
@@ -91,7 +91,7 @@ or lose an id.
 | 40 | map_chunk | handled | — | — | decode and store all block-state/biome chunk sections | PARTIAL | join_idle, initial_chunks | unit-tested state projection; mock/vanilla capture pending |
 | 41 | world_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 42 | world_particles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 43 | update_light | stored | — | — | store light data | NOT IMPLEMENTED |  | none |
+| 43 | update_light | handled | — | — | replace light data in cached chunk snapshot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 44 | login | handled | — | — | store own entity id, dimension, world info | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 45 | map | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 46 | trade_list | ignored | — | — | none | NOT IMPLEMENTED |  | none |

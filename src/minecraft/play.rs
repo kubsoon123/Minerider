@@ -21,9 +21,9 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition, PacketRelEntityMove,
     PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
     PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
-    PacketUnloadChunk, PacketUpdateHealth, PacketUpdateTime, PacketWindowItems,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
-    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
+    PacketUpdateTime, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
@@ -34,11 +34,12 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
     CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
     CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
-    CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID,
-    CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID,
-    SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
-    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
-    SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+    CLIENTBOUND_TILE_ENTITY_DATA_ID, CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID,
+    CLIENTBOUND_UPDATE_LIGHT_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
+    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
+    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_POSITION_ID,
+    SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
     SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
 use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
@@ -67,6 +68,7 @@ use crate::minecraft::presentation::{
     decode_update, ChatKind, PresentationEvent, PresentationState,
 };
 use crate::minecraft::scoreboard::{decode_update as decode_scoreboard_update, ScoreboardState};
+use crate::minecraft::shared_world::SharedWorldContext;
 use crate::minecraft::world::World;
 use crate::minecraft::RESOURCE_PACK_STATUS_DECLINED;
 
@@ -109,6 +111,7 @@ pub struct PlayState {
     received_position: bool,
     dimension: Option<DimensionType>,
     world: Option<World>,
+    world_sharing: Option<SharedWorldContext>,
     /// Whether a `client_command` respawn request is outstanding: set when we
     /// detect death, cleared when the `respawn` packet arrives. Prevents
     /// resending the request every tick while the server processes it.
@@ -128,6 +131,13 @@ impl PlayState {
     /// Fresh play state for a newly-joined client, emitting events into
     /// `event_tx`.
     pub fn new(event_tx: broadcast::Sender<BotEvent>) -> Self {
+        Self::with_world_sharing(event_tx, None)
+    }
+
+    fn with_world_sharing(
+        event_tx: broadcast::Sender<BotEvent>,
+        world_sharing: Option<SharedWorldContext>,
+    ) -> Self {
         Self {
             player: LocalPlayer::default(),
             entities: EntityStore::default(),
@@ -144,6 +154,7 @@ impl PlayState {
             received_position: false,
             dimension: None,
             world: None,
+            world_sharing,
             respawn_pending: false,
             was_alive: true,
         }
@@ -267,8 +278,9 @@ pub async fn run_play(
     mut control_rx: UnboundedReceiver<BotCommand>,
     state_tx: watch::Sender<StateSnapshot>,
     event_tx: broadcast::Sender<BotEvent>,
+    world_sharing: Option<SharedWorldContext>,
 ) -> Result<()> {
-    let mut state = PlayState::new(event_tx);
+    let mut state = PlayState::with_world_sharing(event_tx, world_sharing);
     // High-frequency ignored packets warn once per id, then drop to debug;
     // bounded by the number of clientbound play ids, so memory is fixed.
     let mut warned_ids = std::collections::HashSet::new();
@@ -577,6 +589,20 @@ async fn handle_clientbound(
                 world.apply_block_change(&update)?;
             }
         }
+        CLIENTBOUND_TILE_ENTITY_DATA_ID => {
+            let mut r = PacketReader::new(&packet.payload);
+            let update = PacketTileEntityData::decode(&mut r)?;
+            if let Some(world) = state.world.as_mut() {
+                world.apply_block_entity_update(&update)?;
+            }
+        }
+        CLIENTBOUND_UPDATE_LIGHT_ID => {
+            let mut r = PacketReader::new(&packet.payload);
+            let update = PacketUpdateLight::decode(&mut r)?;
+            if let Some(world) = state.world.as_mut() {
+                world.apply_light_update(&update)?;
+            }
+        }
         CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
             let mut r = PacketReader::new(&packet.payload);
             let pack = PacketCommonAddResourcePack::decode(&mut r)?;
@@ -665,7 +691,14 @@ fn apply_state_packet(
                     ))
                 })?;
             state.dimension = Some(dimension.clone());
-            state.world = Some(World::new(dimension.clone()));
+            state.world = Some(match &state.world_sharing {
+                Some(sharing) => sharing.world(
+                    dimension.clone(),
+                    p.world_state.name.clone(),
+                    p.world_state.hashed_seed,
+                ),
+                None => World::new(dimension.clone()),
+            });
             state.emit(BotEvent::Login {
                 entity_id: p.entity_id,
             });
@@ -692,7 +725,14 @@ fn apply_state_packet(
                     ))
                 })?;
             state.dimension = Some(dimension.clone());
-            state.world = Some(World::new(dimension.clone()));
+            state.world = Some(match &state.world_sharing {
+                Some(sharing) => sharing.world(
+                    dimension.clone(),
+                    p.world_state.name.clone(),
+                    p.world_state.hashed_seed,
+                ),
+                None => World::new(dimension.clone()),
+            });
             debug!("respawned; awaiting new position and chunk");
         }
         CLIENTBOUND_UPDATE_HEALTH_ID => {

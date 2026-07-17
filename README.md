@@ -44,7 +44,11 @@ feature):
   and zlib compression.
 - A fully generated 1.21.4 packet layer (237 packets) — no hand-maintained
   packet ids or layouts.
-- World state: chunk/section decoding, block storage, collision shapes.
+- World state: chunk/section decoding, block storage, collision shapes, and a
+  bounded process-wide interner for equal immutable chunk payloads. Every bot
+  keeps independent visibility and copy-on-write updates; strict sharing is
+  enabled by default and can be disabled with
+  `ClientConfig::with_chunk_sharing(false)`.
 - Vanilla-shaped player physics: gravity, walking/sprinting/jumping,
   friction-aware ground movement, step-up, knockback, auto-respawn.
 - Entity tracking, bounded inventory/container state and transaction
@@ -140,9 +144,11 @@ feature):
   `crates/minerider-protocol/src/generated/` and are never edited by hand.
 
 Bots share static data globally (registries, packet definitions, block/item
-data, collision tables); each bot stores only its own connection, player
-state and the world cache it actually needs. Crate-level details and the
-byte-level pipeline live in [docs/architecture.md](docs/architecture.md).
+data, collision tables). Each bot owns its connection, player state and chunk
+position map; fully equal decoded chunk payloads can share bounded immutable
+ownership only within the same server/world/dimension scope. See
+[the ownership audit and benchmark](docs/shared_world_benchmark.md) and the
+byte-level pipeline in [docs/architecture.md](docs/architecture.md).
 
 ## Layout
 
@@ -175,6 +181,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 cargo run -p minerider-codegen -- --check   # generated-files drift gate
+cargo run --release --bin shared_world_benchmark  # paired ownership benchmark
 ```
 
 `crates/minerider-protocol/src/generated/**` and
