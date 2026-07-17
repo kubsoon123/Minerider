@@ -2,6 +2,7 @@
 //! and run the play-state loop.
 
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tracing::info;
@@ -19,8 +20,10 @@ use crate::minecraft::configuration::ConfigurationData;
 use crate::minecraft::control::{channel, BotCommand, ControlHandle};
 use crate::minecraft::event::{BotEvent, EVENT_CHANNEL_CAPACITY};
 use crate::minecraft::play::StateSnapshot;
+use crate::minecraft::shared_world::{ServerIdentity, SharedWorldContext};
 use crate::minecraft::{configuration, handshake, login, play};
 use crate::network::connection::{Connection, ConnectionTimeouts};
+use crate::network::socks5::Socks5ProxyConfig;
 use crate::trace::TraceRecorder;
 
 /// Default bound on a complete packet send (`write_all` + `flush` together);
@@ -41,17 +44,19 @@ pub const DEFAULT_CONNECT_DEADLINE: Duration = Duration::from_secs(60);
 #[repr(u8)]
 enum ConnectStage {
     TcpConnect = 0,
-    Handshake = 1,
-    Login = 2,
-    Configuration = 3,
+    ProxyNegotiate = 1,
+    Handshake = 2,
+    Login = 3,
+    Configuration = 4,
 }
 
 impl ConnectStage {
     fn from_u8(value: u8) -> Self {
         match value {
             0 => Self::TcpConnect,
-            1 => Self::Handshake,
-            2 => Self::Login,
+            1 => Self::ProxyNegotiate,
+            2 => Self::Handshake,
+            3 => Self::Login,
             _ => Self::Configuration,
         }
     }
@@ -59,6 +64,7 @@ impl ConnectStage {
     fn label(self) -> &'static str {
         match self {
             Self::TcpConnect => "TCP connect",
+            Self::ProxyNegotiate => "SOCKS5 proxy negotiation",
             Self::Handshake => "handshake",
             Self::Login => "login",
             Self::Configuration => "configuration",
@@ -95,6 +101,18 @@ pub struct ClientConfig {
     /// at every stage. The per-read timeout inside each stage still applies
     /// as defense in depth underneath this.
     pub connect_deadline: Duration,
+    /// Routes the Minecraft TCP connection through a SOCKS5 proxy instead of
+    /// connecting directly. `None` (the default) connects directly. Wrapped
+    /// in `Arc` so multiple bot configs can share one immutable proxy
+    /// configuration cheaply, or each hold their own — see
+    /// [`Self::with_socks5_proxy`]. The handshake always advertises `host`/
+    /// `port` above, never the proxy's endpoint; see
+    /// [`crate::network::connection::Connection::connect_via_proxy`].
+    pub proxy: Option<Arc<Socks5ProxyConfig>>,
+    /// Share fully decoded, immutable chunk payloads with other clients in
+    /// this process when server, world, dimension, position, and content all
+    /// match. Each client still owns its position visibility and updates.
+    pub share_chunk_payloads: bool,
 }
 
 impl ClientConfig {
@@ -111,6 +129,8 @@ impl ClientConfig {
             view_distance: crate::minecraft::DEFAULT_VIEW_DISTANCE,
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             connect_deadline: DEFAULT_CONNECT_DEADLINE,
+            proxy: None,
+            share_chunk_payloads: true,
         }
     }
 
@@ -139,6 +159,23 @@ impl ClientConfig {
         self.connect_deadline = deadline;
         self
     }
+
+    /// Routes the connection through the given SOCKS5 proxy instead of
+    /// connecting directly (see [`Self::proxy`]). Accepts an `Arc` so
+    /// several configs — e.g. every bot in [`crate::core::supervisor`] or
+    /// `src/bin/swarm.rs` — can share one proxy configuration without
+    /// cloning credentials per bot; wrap a fresh `Socks5ProxyConfig` in its
+    /// own `Arc::new(..)` for a config that shouldn't be shared.
+    pub fn with_socks5_proxy(mut self, proxy: Arc<Socks5ProxyConfig>) -> Self {
+        self.proxy = Some(proxy);
+        self
+    }
+
+    /// Enables or disables strict process-wide chunk-payload sharing.
+    pub fn with_chunk_sharing(mut self, enabled: bool) -> Self {
+        self.share_chunk_payloads = enabled;
+        self
+    }
 }
 
 /// A connected Minecraft client in [`ConnectionState::Play`].
@@ -157,6 +194,7 @@ pub struct Client {
     /// [`run`](Self::run) call, kept here so [`events`](Self::events) can
     /// hand out new subscriptions (including before `run` has ever started).
     event_tx: broadcast::Sender<BotEvent>,
+    world_sharing: Option<SharedWorldContext>,
 }
 
 impl Client {
@@ -207,12 +245,21 @@ impl Client {
         stage: &AtomicU8,
     ) -> Result<Client> {
         info!(host = %cfg.host, port = cfg.port, version = %cfg.version.minecraft, "connecting");
-        stage.store(ConnectStage::TcpConnect as u8, Ordering::Relaxed);
         let timeouts = ConnectionTimeouts {
             write: cfg.write_timeout,
             ..ConnectionTimeouts::default()
         };
-        let mut conn = Connection::connect_with_timeouts(&cfg.host, cfg.port, timeouts).await?;
+        let mut conn = match &cfg.proxy {
+            Some(proxy) => {
+                stage.store(ConnectStage::ProxyNegotiate as u8, Ordering::Relaxed);
+                info!(proxy_host = %proxy.host, proxy_port = proxy.port, "routing through SOCKS5 proxy");
+                Connection::connect_via_proxy(&cfg.host, cfg.port, proxy, timeouts).await?
+            }
+            None => {
+                stage.store(ConnectStage::TcpConnect as u8, Ordering::Relaxed);
+                Connection::connect_with_timeouts(&cfg.host, cfg.port, timeouts).await?
+            }
+        };
         if let Some(trace) = trace {
             conn.set_trace(trace);
         }
@@ -233,6 +280,9 @@ impl Client {
         let (control_tx, control_rx) = channel();
         let (state_tx, state_rx) = watch::channel(StateSnapshot::default());
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let world_sharing = cfg
+            .share_chunk_payloads
+            .then(|| SharedWorldContext::process(ServerIdentity::new(&cfg.host, cfg.port)));
         Ok(Client {
             conn,
             uuid: success.uuid,
@@ -243,6 +293,7 @@ impl Client {
             state_tx: Some(state_tx),
             state_rx,
             event_tx,
+            world_sharing,
         })
     }
 
@@ -290,6 +341,7 @@ impl Client {
             control_rx,
             state_tx,
             self.event_tx.clone(),
+            self.world_sharing.clone(),
         )
         .await
     }

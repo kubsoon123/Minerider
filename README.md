@@ -44,7 +44,11 @@ feature):
   and zlib compression.
 - A fully generated 1.21.4 packet layer (237 packets) — no hand-maintained
   packet ids or layouts.
-- World state: chunk/section decoding, block storage, collision shapes.
+- World state: chunk/section decoding, block storage, collision shapes, and a
+  bounded process-wide interner for equal immutable chunk payloads. Every bot
+  keeps independent visibility and copy-on-write updates; strict sharing is
+  enabled by default and can be disabled with
+  `ClientConfig::with_chunk_sharing(false)`.
 - Vanilla-shaped player physics: gravity, walking/sprinting/jumping,
   friction-aware ground movement, step-up, knockback, auto-respawn.
 - Entity tracking, bounded inventory/container state and transaction
@@ -85,6 +89,15 @@ feature):
   or a permanent auth/protocol error unless explicitly configured to; see
   the example below and
   [`core::supervisor`](src/core/supervisor.rs) for the full policy surface.
+- Optional SOCKS5 transport (`ClientConfig::proxy`,
+  [`network::socks5`](src/network/socks5.rs)) for the Minecraft connection
+  itself: no-auth or username/password authentication, domain (proxy-side
+  DNS)/IPv4/IPv6 targets, per-client or shared proxy configuration,
+  redacted credentials, and reconnect through the same configured route.
+  Direct connection remains the default; there is no proxy rotation or pool
+  (a single, explicitly configured proxy only — see "Acceptable use" above).
+  Microsoft/Xbox/Mojang authentication is unaffected and stays direct. See
+  [docs/socks5_benchmark.md](docs/socks5_benchmark.md).
 - Offline-mode (cracked-server) login.
 - Microsoft/Xbox Live/Minecraft Services (premium) login — implemented and
   unit-tested against realistic fixtures and a local mock session server;
@@ -146,9 +159,11 @@ feature):
   `crates/minerider-protocol/src/generated/` and are never edited by hand.
 
 Bots share static data globally (registries, packet definitions, block/item
-data, collision tables); each bot stores only its own connection, player
-state and the world cache it actually needs. Crate-level details and the
-byte-level pipeline live in [docs/architecture.md](docs/architecture.md).
+data, collision tables). Each bot owns its connection, player state and chunk
+position map; fully equal decoded chunk payloads can share bounded immutable
+ownership only within the same server/world/dimension scope. See
+[the ownership audit and benchmark](docs/shared_world_benchmark.md) and the
+byte-level pipeline in [docs/architecture.md](docs/architecture.md).
 
 ## Layout
 
@@ -166,7 +181,8 @@ src/
                 player/entity/inventory/player-list state, control, events
   auth/         Microsoft/Xbox Live/Minecraft Services premium login
   trace/        packet capture, normalization and semantic diffing
-  bin/          conformance_matrix (docs generator), swarm (many-bots demo)
+  bin/          conformance_matrix (docs generator), swarm (many-bots demo),
+                socks5_benchmark (local proxy transport benchmark)
 tests/          integration tests (mock server, conformance scenarios,
                 raw-socket stream edge cases)
 docs/           architecture, codegen pipeline, progress log, validation
@@ -181,6 +197,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 cargo run -p minerider-codegen -- --check   # generated-files drift gate
+cargo run --release --bin shared_world_benchmark  # paired ownership benchmark
 ```
 
 `crates/minerider-protocol/src/generated/**` and
@@ -404,6 +421,9 @@ retired. Everything worth keeping from it is documented in
 - [docs/wrapper_api_readiness.md](docs/wrapper_api_readiness.md) — what a
   future scripting/application wrapper will have available, module by
   module, and what's still missing.
+- [docs/socks5_benchmark.md](docs/socks5_benchmark.md) — SOCKS5 transport
+  architecture, secret handling, test inventory and local performance
+  report.
 - [docs/lua_design.md](docs/lua_design.md) — design for the planned Lua
   scripting layer (not implemented yet; see "Not implemented" above).
 - [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) — reporting
