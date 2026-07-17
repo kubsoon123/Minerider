@@ -1133,4 +1133,58 @@ mod tests {
             Err(InventoryActionError::TimedOut)
         );
     }
+
+    #[tokio::test]
+    async fn inventory_api_queues_state_and_generation_bound_request() {
+        let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let mut snapshot = StateSnapshot::default();
+        snapshot.inventory.player_inventory.state_id = 7;
+        let (state_tx, state_rx) = watch::channel(snapshot);
+        let (_, status_rx) = watch::channel(SupervisorStatus::Connected);
+        let (_, generation_rx) = watch::channel(3);
+        let (command_tx, mut command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        let handle = SupervisorHandle {
+            event_tx,
+            state_rx,
+            status_rx,
+            generation_rx,
+            command_tx,
+            next_inventory_transaction: Arc::new(AtomicU64::new(1)),
+            cancel: CancellationToken::new(),
+        };
+        let task = {
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                handle
+                    .inventory_click_in_generation(
+                        3,
+                        0,
+                        InventoryClick::QuickMove { slot: 0 },
+                        Duration::from_secs(1),
+                    )
+                    .await
+            })
+        };
+        let queued = command_rx.recv().await.expect("queued inventory command");
+        let request = match queued.command {
+            BotCommand::InventoryClick(request) => request,
+            other => panic!("expected inventory click, got {other:?}"),
+        };
+        assert_eq!(request.transaction_id, 1);
+        assert_eq!(request.generation, 3);
+        assert_eq!(request.window_id, 0);
+        assert_eq!(request.state_id, 7);
+        queued.respond.send(Ok(())).unwrap();
+
+        let mut completed = state_tx.borrow().clone();
+        completed
+            .inventory
+            .completed_transactions
+            .insert(1, InventoryOutcome::Confirmed { state_id: 8 });
+        state_tx.send(completed).unwrap();
+        assert_eq!(
+            task.await.unwrap(),
+            Ok(InventoryOutcome::Confirmed { state_id: 8 })
+        );
+    }
 }
