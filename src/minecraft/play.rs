@@ -148,7 +148,7 @@ impl PlayState {
 
     fn apply_presentation(&mut self, update: crate::minecraft::presentation::PresentationUpdate) {
         let event = self.presentation.apply(update);
-        self.emit(BotEvent::Presentation(event.clone()));
+        self.emit(BotEvent::Presentation(Box::new(event.clone())));
         match event {
             PresentationEvent::Chat(message) => match message.kind {
                 ChatKind::Player | ChatKind::Disguised => {
