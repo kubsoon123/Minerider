@@ -1,15 +1,20 @@
 //! Dimension-aware chunk storage and 1.21.4 paletted-container decoding.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use minerider_protocol::buffer::PacketReader;
 use minerider_protocol::generated::v1_21_4::play::{
-    PacketBlockChange, PacketMapChunk, PacketMultiBlockChange, PacketUnloadChunk,
+    PacketBlockChange, PacketMapChunk, PacketMultiBlockChange, PacketTileEntityData,
+    PacketUnloadChunk, PacketUpdateLight,
 };
 
 use crate::core::error::{MineRiderError, Result};
 use crate::minecraft::configuration::DimensionType;
 use crate::minecraft::physics::{collision_boxes, Aabb};
+use crate::minecraft::shared_world::{
+    BlockEntitySnapshot, ChunkLight, ChunkSnapshot, SharedChunkStore, WorldScope,
+};
 
 const BLOCKS_PER_SECTION: usize = 16 * 16 * 16;
 const BIOMES_PER_SECTION: usize = 4 * 4 * 4;
@@ -165,7 +170,8 @@ impl Chunk {
 #[derive(Debug, Clone)]
 pub struct World {
     pub dimension: DimensionType,
-    chunks: HashMap<(i32, i32), Chunk>,
+    chunks: HashMap<(i32, i32), Arc<ChunkSnapshot>>,
+    shared: Option<(Arc<SharedChunkStore>, WorldScope)>,
 }
 
 impl World {
@@ -173,17 +179,35 @@ impl World {
         Self {
             dimension,
             chunks: HashMap::new(),
+            shared: None,
+        }
+    }
+
+    pub fn with_shared_store(
+        dimension: DimensionType,
+        store: Arc<SharedChunkStore>,
+        scope: WorldScope,
+    ) -> Self {
+        Self {
+            dimension,
+            chunks: HashMap::new(),
+            shared: Some((store, scope)),
         }
     }
 
     pub fn insert_chunk(&mut self, packet: &PacketMapChunk) -> Result<()> {
-        let chunk = Chunk::decode(packet, self.dimension.section_count())?;
-        self.chunks.insert((chunk.x, chunk.z), chunk);
+        let chunk = ChunkSnapshot::decode(packet, self.dimension.section_count())?;
+        let position = (chunk.x, chunk.z);
+        let chunk = self.intern(chunk)?;
+        self.chunks.insert(position, chunk);
         Ok(())
     }
 
     pub fn unload_chunk(&mut self, packet: &PacketUnloadChunk) {
         self.chunks.remove(&(packet.chunk_x, packet.chunk_z));
+        if let Some((store, _)) = &self.shared {
+            store.prune();
+        }
     }
 
     pub fn has_chunk(&self, x: i32, z: i32) -> bool {
@@ -264,19 +288,110 @@ impl World {
         Ok(())
     }
 
-    fn set_block_state(&mut self, x: i32, y: i32, z: i32, state: u32) -> Result<()> {
-        let chunk = self
+    pub fn apply_light_update(&mut self, packet: &PacketUpdateLight) -> Result<()> {
+        let position = (packet.chunk_x, packet.chunk_z);
+        let current = self
             .chunks
-            .get_mut(&(x.div_euclid(16), z.div_euclid(16)))
+            .get(&position)
+            .ok_or_else(|| {
+                protocol(format!(
+                    "light update for unloaded chunk at {},{}",
+                    packet.chunk_x, packet.chunk_z
+                ))
+            })?
+            .clone();
+        let mut next = (*current).clone();
+        next.light = Arc::new(ChunkLight {
+            sky_mask: packet.sky_light_mask.clone(),
+            block_mask: packet.block_light_mask.clone(),
+            empty_sky_mask: packet.empty_sky_light_mask.clone(),
+            empty_block_mask: packet.empty_block_light_mask.clone(),
+            sky_arrays: packet.sky_light.clone(),
+            block_arrays: packet.block_light.clone(),
+        });
+        let next = self.intern(next)?;
+        self.chunks.insert(position, next);
+        Ok(())
+    }
+
+    pub fn apply_block_entity_update(&mut self, packet: &PacketTileEntityData) -> Result<()> {
+        let position = (
+            packet.location.x.div_euclid(16),
+            packet.location.z.div_euclid(16),
+        );
+        let current = self
+            .chunks
+            .get(&position)
+            .ok_or_else(|| {
+                protocol(format!(
+                    "block entity update for unloaded chunk at {},{}",
+                    packet.location.x, packet.location.z
+                ))
+            })?
+            .clone();
+        let mut next = (*current).clone();
+        let local_x = packet.location.x.rem_euclid(16) as u8;
+        let local_z = packet.location.z.rem_euclid(16) as u8;
+        let mut entities = (*next.block_entities).clone();
+        let existing = entities.iter().position(|entity| {
+            entity.local_x == local_x
+                && entity.local_z == local_z
+                && entity.y == packet.location.y
+        });
+        match (&packet.nbt_data, existing) {
+            (Some(nbt), Some(index)) => {
+                entities[index] = BlockEntitySnapshot {
+                    local_x,
+                    local_z,
+                    y: packet.location.y,
+                    kind: packet.action,
+                    nbt: Some(nbt.clone()),
+                };
+            }
+            (Some(nbt), None) => entities.push(BlockEntitySnapshot {
+                local_x,
+                local_z,
+                y: packet.location.y,
+                kind: packet.action,
+                nbt: Some(nbt.clone()),
+            }),
+            (None, Some(index)) => {
+                entities.remove(index);
+            }
+            (None, None) => {}
+        }
+        next.block_entities = Arc::new(entities);
+        let next = self.intern(next)?;
+        self.chunks.insert(position, next);
+        Ok(())
+    }
+
+    fn set_block_state(&mut self, x: i32, y: i32, z: i32, state: u32) -> Result<()> {
+        let position = (x.div_euclid(16), z.div_euclid(16));
+        let current = self
+            .chunks
+            .get(&position)
             .ok_or_else(|| protocol(format!("block update for unloaded chunk at {x},{z}")))?;
         let section_index = (y - self.dimension.min_y).div_euclid(16);
-        if section_index < 0 || section_index as usize >= chunk.sections.len() {
+        if section_index < 0 || section_index as usize >= current.sections.len() {
             return Err(protocol(format!("block update y {y} outside dimension")));
         }
-        let section = &mut chunk.sections[section_index as usize];
+        let mut next = (**current).clone();
+        let mut section = (*next.sections[section_index as usize]).clone();
         let index = (y.rem_euclid(16) as usize * 16 + z.rem_euclid(16) as usize) * 16
             + x.rem_euclid(16) as usize;
-        materialize_and_set(&mut section.block_states, BLOCKS_PER_SECTION, index, state)
+        materialize_and_set(&mut section.block_states, BLOCKS_PER_SECTION, index, state)?;
+        next.sections[section_index as usize] = Arc::new(section);
+        let next = self.intern(next)?;
+        self.chunks.insert(position, next);
+        Ok(())
+    }
+
+    fn intern(&self, chunk: ChunkSnapshot) -> Result<Arc<ChunkSnapshot>> {
+        match &self.shared {
+            Some((store, scope)) => store.intern(scope, chunk),
+            None => Ok(Arc::new(chunk)),
+        }
     }
 }
 
