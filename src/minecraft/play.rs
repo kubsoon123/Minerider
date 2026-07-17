@@ -587,8 +587,7 @@ fn apply_state_packet(
         CLIENTBOUND_LOGIN_ID => {
             let p = PacketLogin::decode(&mut r)?;
             state.player.on_login(&p);
-            let hud_event = state.hud.on_login(&p);
-            state.emit_hud(hud_event);
+            state.hud.on_login(&p);
             let dimension = configuration
                 .dimension_types
                 .get(p.world_state.dimension as usize)
@@ -634,7 +633,6 @@ fn apply_state_packet(
             let p = PacketUpdateHealth::decode(&mut r)?;
             state.player.on_health(&p);
             let hud_event = state.hud.on_health(&p);
-            state.emit_hud(hud_event);
             state.emit(BotEvent::Health {
                 health: p.health,
                 food: p.food,
@@ -646,6 +644,7 @@ fn apply_state_packet(
                 state.emit(BotEvent::Death);
             }
             state.was_alive = alive;
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_EXPERIENCE_ID => {
             let p = PacketExperience::decode(&mut r)?;
@@ -747,26 +746,26 @@ fn apply_state_packet(
         CLIENTBOUND_PLAYER_INFO_ID => {
             let p = PacketPlayerInfo::decode(&mut r)?;
             let changes = state.players.apply_info(&p);
-            state.emit_hud(HudEvent::PlayerListChanged {
-                updated: changes.updated.clone(),
-                removed: Vec::new(),
-                rejected: changes.rejected,
-            });
             for (uuid, name) in changes.joined {
                 state.emit(BotEvent::PlayerJoined { uuid, name });
             }
+            state.emit_hud(HudEvent::PlayerListChanged {
+                updated: changes.updated,
+                removed: Vec::new(),
+                rejected: changes.rejected,
+            });
         }
         CLIENTBOUND_PLAYER_REMOVE_ID => {
             let p = PacketPlayerRemove::decode(&mut r)?;
             let removed = state.players.apply_remove(&p);
-            state.emit_hud(HudEvent::PlayerListChanged {
-                updated: Vec::new(),
-                removed: removed.clone(),
-                rejected: 0,
-            });
-            for uuid in removed {
+            for &uuid in &removed {
                 state.emit(BotEvent::PlayerLeft { uuid });
             }
+            state.emit_hud(HudEvent::PlayerListChanged {
+                updated: Vec::new(),
+                removed,
+                rejected: 0,
+            });
         }
         CLIENTBOUND_UPDATE_TIME_ID => {
             let p = PacketUpdateTime::decode(&mut r)?;
@@ -776,14 +775,12 @@ fn apply_state_packet(
             let time_of_day = p.time.rem_euclid(24_000);
             state.world_time = time_of_day;
             let hud_event = state.hud.on_time(&p);
-            state.emit_hud(hud_event);
             state.emit(BotEvent::Time { time_of_day });
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_GAME_STATE_CHANGE_ID => {
             let p = PacketGameStateChange::decode(&mut r)?;
-            if let Some(hud_event) = state.hud.on_game_state(&p) {
-                state.emit_hud(hud_event);
-            }
+            let hud_event = state.hud.on_game_state(&p);
             match p.reason {
                 GAME_STATE_BEGIN_RAINING => {
                     state.raining = true;
@@ -797,6 +794,9 @@ fn apply_state_packet(
                     debug!(gamemode = p.game_mode, "gamemode changed");
                 }
                 _ => {}
+            }
+            if let Some(hud_event) = hud_event {
+                state.emit_hud(hud_event);
             }
         }
         _ => return Ok(false),

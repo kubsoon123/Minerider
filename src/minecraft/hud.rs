@@ -88,15 +88,10 @@ impl Default for HudState {
 }
 
 impl HudState {
-    pub(crate) fn on_login(&mut self, packet: &PacketLogin) -> HudEvent {
+    pub(crate) fn on_login(&mut self, packet: &PacketLogin) {
         self.entity_id = Some(packet.entity_id);
         self.hardcore = packet.is_hardcore;
         self.apply_spawn_info(&packet.world_state, 0);
-        HudEvent::SessionInitialized {
-            entity_id: packet.entity_id,
-            hardcore: self.hardcore,
-            game_mode: self.game_mode,
-        }
     }
 
     pub(crate) fn on_respawn(&mut self, packet: &PacketRespawn) -> HudEvent {
@@ -690,11 +685,6 @@ pub struct SpawnPosition {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HudEvent {
-    SessionInitialized {
-        entity_id: i32,
-        hardcore: bool,
-        game_mode: GameMode,
-    },
     VitalsChanged {
         vitals: Vitals,
     },
