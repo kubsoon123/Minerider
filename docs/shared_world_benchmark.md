@@ -264,3 +264,248 @@ protocol-codegen drift, the paired release benchmark, and workspace tests on
 Ubuntu and Windows all pass. The Ubuntu job reports exactly 347 passed tests
 and zero failures (339 at the audited base plus eight new sharing/isolation
 tests).
+
+## S6 — full-runtime memory benchmark
+
+S2–S5 prove chunk-*payload* sharing: they construct bare `HashMap<(i32,
+i32), Chunk>` / `HashMap<(i32, i32), Arc<ChunkSnapshot>>` values directly, with
+no `Connection`, no `Client`, no Tokio task, no socket, no channel and no
+play-loop state. That is a real and useful lower bound on the chunk-storage
+piece specifically, but it cannot answer "how much RAM does one more
+complete, connected bot actually cost" — a real client also owns socket read/
+write buffers, a `FrameCodec`, control/state/event channels, a `PlayState`
+(inventory, scoreboard, HUD, tab list, presentation state), and whatever the
+Tokio runtime retains for its task and I/O driver. None of that is chunk data,
+none of it is shared by `SharedChunkStore`, and all of it was invisible to
+S2–S5.
+
+`src/bin/full_runtime_benchmark.rs` closes that gap: it runs real
+`minerider::core::client::Client` instances — the same type real callers and
+`src/bin/swarm.rs` use — against a real Tokio multi-thread runtime and real
+`127.0.0.1` TCP sockets, talking to an in-process mock server built from the
+same primitives as `tests/common`. It never connects to any external host;
+every byte on the wire is synthetic protocol data generated locally.
+
+### Methodology
+
+Each `(chunk scenario, client count, chunk-sharing on/off)` case runs in a
+fresh child process (`full_runtime_benchmark --case <scenario> <clients>
+<on|off> <sample>`), so one case's allocator high-water mark never leaks into
+the next — the same isolation principle S2's harness already uses, extended
+to a real client/server pair instead of bare data structures. Within one
+child process:
+
+1. An in-process mock server binds `127.0.0.1:0` and accepts exactly
+   `clients` connections, each running the full vanilla handshake → login →
+   configuration → play sequence (no encryption exchange — offline-mode
+   login, straight to `Set Compression` + `Login Success`, matching this
+   repo's existing `Mode::Plain` test-mock behavior).
+2. `clients` real `Client::connect` + `client.run()` tasks are spawned
+   against it, each with its own `ClientConfig` (`share_chunk_payloads` set
+   per case).
+3. The server walks every connection through a fixed lifecycle in lockstep,
+   gated by a shared `tokio::sync::watch` stage channel plus per-stage
+   "reached" counters so a stage's memory is only sampled once *every*
+   client has actually processed it (proven by that client's own
+   acknowledgement packet — `chunk_batch_received` + `player_loaded` for
+   chunks, teleport confirmation for the idle stage — not merely once the
+   server finished writing):
+   `idle_connected → chunks_loaded → entity_hud_inventory populated →
+   update_churn (20 rounds of health + one resent chunk section) →
+   unloaded (every chunk explicitly unloaded) → disconnected (server kicks
+   every client; client.run() tasks return) → cleanup (everything dropped)`.
+4. Process RSS/working-set is sampled after each stage (plus once before
+   anything is spawned, as `baseline`), with a 150 ms settle delay so the
+   Tokio scheduler has drained its queues first. Linux reads
+   `/proc/self/status` `VmRSS`; Windows calls `K32GetProcessMemoryInfo` via
+   `windows-sys` (`WorkingSetSize`) — both report this **process's own**
+   resident/working-set memory, the actual metric Mission B asked for, not
+   a logical lower bound.
+5. Chunk content follows the same four contracts S2 uses:
+   `identical-49`/`identical-441` (every client gets byte-identical
+   content), `mostly-identical` (~2% of each client's chunks carry a
+   per-client palette tweak), `personalized` (every client's content is
+   unique).
+
+Run it yourself with:
+
+```text
+cargo run --release --bin full_runtime_benchmark
+```
+
+which runs the full local matrix (below) and prints one `RESULT,...` CSV line
+per stage per sample; or invoke one case directly for a quick check, e.g.
+`cargo run --release --bin full_runtime_benchmark -- --case identical-49 10 on 0`.
+
+### Environment (local only — not a CI-verified number)
+
+Unlike S2–S5, this section's numbers were **not** produced on GitHub Actions.
+`full_runtime_benchmark` is deliberately not wired into the CI workflow: an
+early full-matrix run on this same machine hit one transient timeout out of
+44 case-runs (`mostly-identical`, 100 clients, third repeat, stalled waiting
+for all 100 connections to reach `idle_connected` — most likely ephemeral
+TCP-port/socket cleanup pressure from launching a 100-loopback-connection
+child process repeatedly in quick succession, not a protocol bug; the retry
+with a short cooldown between runs succeeded cleanly). A benchmark that can
+occasionally stall on infrastructure noise unrelated to the code under test
+must not be allowed to fail an otherwise-green required CI job — exactly the
+"do not put unstable RSS thresholds/timings into normal CI" constraint this
+mission specified. `cargo build`/`clippy`/`fmt` still cover this file in CI;
+only *running* the benchmark suite is local-only, same as `src/bin/swarm.rs`.
+
+Measured on: Windows 11 Home (build 26200), Intel64 Family 6 Model 167
+(~2.6 GHz base, reported core count not exposed to the sandboxed shell used),
+32 GiB RAM, `rustc 1.97.0 (2d8144b78 2026-07-07)`, release profile (thin LTO,
+`codegen-units = 1`), loopback TCP, no antivirus exclusions added or needed.
+Each cell below is the median of independent child-process samples (5 samples
+for clients ≤ 25, 3 for clients ≥ 50, listed as `median (min-max)`); every
+`baseline` cell across every case in the matrix stayed within
+6,104–6,232 KiB, confirming case-to-case isolation is clean before any client
+is even spawned.
+
+### Results: `identical-49`, chunk-sharing on vs off
+
+All values are process RSS in KiB (median across samples; `Δ` columns show
+the range).
+
+| Stage | N=1 | N=10 | N=25 | N=50 | N=100 |
+|---|---:|---:|---:|---:|---:|
+| baseline | 6,212 | 6,212 | 6,216 | 6,224 | 6,220 |
+| idle_connected | 7,552 | 8,828 | 9,980 | 11,928 | 15,320 |
+| **sharing on** — chunks_loaded | 8,660 | 11,524 | 13,744 | 16,272 | 20,272 |
+| entity_hud_inventory | 8,748 | 11,744 | 14,104 | 16,548 | 20,956 |
+| update_churn | 8,824 | 12,208 | 15,024 | 16,884 | 22,508 |
+| unloaded | 8,516 | 11,992 | 14,264 | 16,756 | 21,272 |
+| disconnected / cleanup | 8,508 | 11,272 | 12,040 | 12,132 | 12,484 |
+| **sharing off** — chunks_loaded | 8,596 | 16,156 | 25,308 | 38,988 | 65,120 |
+| entity_hud_inventory | 8,688 | 16,316 | 25,520 | 39,408 | 66,608 |
+| update_churn | 8,708 | 17,196 | 27,988 | 41,912 | 70,164 |
+| unloaded | 8,408 | 12,800 | 15,544 | 18,568 | 24,684 |
+| disconnected / cleanup | 8,440 | 11,896 | 13,008 | 13,728 | 15,240 |
+
+`idle_connected` (before any chunk exists) is within noise between the two
+sharing settings at every tier (7,552 vs 7,532 at N=1; 15,320 vs 15,164 at
+N=100) — expected, since `share_chunk_payloads` only changes chunk storage.
+`unloaded` and `disconnected`/`cleanup` both fall close to `idle_connected`'s
+level again in the sharing-on case, and further still with sharing off
+(there is more retained-but-unloadable Rust-heap memory to release, and the
+allocator visibly returns more of it), which is the cleanup-correctness
+signal this benchmark adds that S2–S5 could not: it proves unload and
+disconnect actually shrink *process* memory, not just a logical byte count.
+
+### Results: worst-case chunk content at N=100
+
+| Scenario | Sharing | chunks_loaded RSS | avg over baseline (KiB/client) |
+|---|---|---:|---:|
+| identical-49 | on | 20,272 | 140.5 |
+| identical-49 | off | 65,120 | 589.0 |
+| mostly-identical (~2% unique) | on | 20,756 | 145.8 |
+| mostly-identical (~2% unique) | off | 65,912 | 597.7 |
+| personalized (100% unique) | on | 66,528 | 604.0 |
+| personalized (100% unique) | off | 65,416 | 593.0 |
+
+With fully personalized content, sharing is measurably *worse* than sharing
+off (604.0 vs 593.0 KiB/client) — the interner's own bookkeeping (fingerprint
+hashing, shard locks, `Weak` slots) is pure overhead when it can never find a
+match. This full-runtime measurement independently reproduces what PR #2's
+own logical-byte benchmark already disclosed (S4: "+2.96% logical memory,
++4.1% RSS" for the personalized control) — the two benchmarks, built from
+completely different code paths, agree on the direction and rough magnitude
+of the one case where sharing does not pay for itself.
+
+### Results: `identical-441` (large view distance)
+
+100 × 441 real connected clients was not attempted locally (441 chunks ×
+100 real socket-backed clients, repeated for median/range, was judged not
+worth the wall-clock time on a single developer machine for this pass); S2's
+existing logical extrapolation from one real client remains the only 100×441
+estimate. `identical-441` was run for real up to 25 clients:
+
+| Stage | N=1 | N=10 | N=25 |
+|---|---:|---:|---:|
+| baseline | 6,220 | 6,216 | 6,220 |
+| idle_connected | 7,556 | 8,996 | 9,860 |
+| chunks_loaded | 12,864 | 17,832 | 19,048 |
+| entity_hud_inventory | 12,952 | 18,116 | 19,208 |
+| update_churn | 12,984 | 18,504 | 20,148 |
+| unloaded | 9,276 | 13,780 | 15,204 |
+| disconnected / cleanup | 9,280 | 12,616 | 12,560 |
+
+Because content is identical across clients, `chunks_loaded − baseline` per
+client falls sharply as N grows (2,448 → 531 → 301 KiB/client for
+`identical-49`; 6,644 → 1,162 → 513 KiB/client for `identical-441`): a larger
+view distance costs much more for the *first* client but, with sharing on,
+adds far less per additional client than the flat per-chunk logical model
+would predict, because almost all of that additional view is bytes the
+process already has interned.
+
+### Marginal- and average-cost model
+
+Using `identical-49`, chunk-sharing on, `chunks_loaded` stage (the closest
+real-world analog to "N players standing in the same loaded area"):
+
+```text
+RSS_baseline  =  6,216 KiB   (median across every case's pre-spawn baseline)
+RSS_1         =  8,660 KiB
+RSS_100       = 20,272 KiB
+
+average_at_100      = (RSS_100 - RSS_baseline) / 100 = (20272 - 6216) / 100  ≈ 140.6 KiB/client
+marginal_1_to_100   = (RSS_100 - RSS_1) / 99          = (20272 - 8660) / 99   ≈ 117.3 KiB/client
+
+linear fit (all 5 tiers, least squares):
+  RSS(N) ≈ 10,044 KiB + 108.9 KiB × N      (sharing on)
+  RSS(N) ≈ 10,017 KiB + 559.6 KiB × N      (sharing off)
+```
+
+Per-stage marginal cost (`(RSS_100 - RSS_1) / 99`, sharing on vs off,
+`identical-49`):
+
+| Stage | Sharing on | Sharing off |
+|---|---:|---:|
+| idle_connected (fixed connection/task/channel cost, no chunks yet) | 78.5 KiB/client | 77.1 KiB/client |
+| chunks_loaded | 117.3 KiB/client | 571.0 KiB/client |
+| entity_hud_inventory | 123.3 KiB/client | 585.1 KiB/client |
+| update_churn (peak) | 138.2 KiB/client | 620.8 KiB/client |
+| unloaded | 128.9 KiB/client | 164.4 KiB/client |
+| disconnected / cleanup | 40.2 KiB/client | 68.7 KiB/client |
+
+Reading this against S4's chunk-only claim: the pure chunk-payload benchmark
+(S4) showed the identical-100 case falling from 474,244 KiB to 16,548 KiB —
+about a 96.5% RSS reduction — because it measures *only* the chunk store.
+Once the full client (connection, codec, channels, `PlayState`, HUD,
+inventory, Tokio task) is included, the fixed non-chunk cost per client
+(≈78 KiB just to be idly connected) does not shrink with chunk sharing, so
+the *whole-client* marginal-cost reduction at this synthetic 49-chunk view
+distance is a real but far more modest ≈4.9× (571.0 → 117.3 KiB/client at
+`chunks_loaded`), not ~29×. Sharing still clearly pays for itself, and pays
+increasingly more as view distance or client count grows (the `identical-441`
+numbers above show the same trend more strongly), but the flat chunk-only
+benchmark on its own overstates the whole-process win at small view
+distances specifically because it has no fixed per-client cost to dilute it.
+
+### What this benchmark does not include
+
+- **CI verification.** These are local, single-machine numbers (see
+  "Environment" above), not GitHub-Actions-verified like S2–S5.
+- **100 × 441 real sockets.** Only extrapolated (S2) plus a real 1/10/25
+  measurement (S6) exist for the largest view distance.
+- **Kernel-side TCP memory.** Socket send/receive buffers, TIME_WAIT
+  connection state and any OS-level networking-stack memory are outside
+  process RSS entirely and are not measured here or anywhere else in this
+  file.
+- **Allocator-return behavior across repeated cycles in one long-lived
+  process.** Every case starts a fresh process; this benchmark does not show
+  what happens to a single long-running bot process across many repeated
+  connect/disconnect cycles (fragmentation, arena growth that never shrinks
+  back).
+- **Encryption.** The mock server skips the AES/RSA exchange entirely (same
+  simplification `tests/common::Mode::Plain` already uses) to keep 100-client
+  runs fast; a real online-mode connection retains an additional
+  `StreamCipher` per connection, not accounted for here.
+- **Real server behavior.** No real Minecraft server, real player traffic
+  pattern, or real anti-cheat/plugin load is represented; this is entirely
+  synthetic protocol data against a minimal mock.
+- Everything else already listed as excluded in S2 (allocator metadata,
+  `HashMap` control bytes) still applies to the `logical_retained_bytes`
+  figures referenced above from S2/S4; S6 reports RSS only, no logical model
+  of its own.
