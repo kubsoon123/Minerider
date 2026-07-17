@@ -36,6 +36,11 @@ pub enum MineRiderError {
     /// Transport failure talking to a Microsoft/Xbox/Mojang HTTP endpoint.
     #[error("authentication request failed: {0}")]
     AuthTransport(#[from] reqwest::Error),
+
+    /// SOCKS5 proxy connect/negotiation failure (see
+    /// [`crate::network::socks5`]). Never carries a username or password.
+    #[error("proxy error: {0}")]
+    Proxy(#[from] crate::network::socks5::ProxySocks5Error),
 }
 
 pub type Result<T> = std::result::Result<T, MineRiderError>;
@@ -82,6 +87,7 @@ impl MineRiderError {
             MineRiderError::Wire(_) => RetryClass::ProtocolIncompatible,
             MineRiderError::Protocol(_) => RetryClass::ProtocolIncompatible,
             MineRiderError::Crypto(_) => RetryClass::ProtocolIncompatible,
+            MineRiderError::Proxy(inner) => inner.retry_class(),
         }
     }
 }
