@@ -62,7 +62,9 @@ feature):
   and a bounded deterministic modern player list.
 - A push-based bot event stream (`Client::events`) and a pull-based state
   snapshot (`Client::bot_state`), plus a command-based control API
-  (`Client::control`) for movement, look and chat.
+  (`Client::control`) for movement, look, ordinary chat and explicit commands.
+  Protocol-769 chat/command actions are distinct, validated to vanilla's
+  UTF-16 length bound and never inferred from a leading slash.
 - Reliability: a configurable write timeout and an overall connect-to-play
   deadline (`ClientConfig::write_timeout`/`connect_deadline`), and a
   `core::supervisor::ClientSupervisor` for long-running authorized clients
@@ -214,8 +216,9 @@ let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
 
 // Observe from another task: handle.events() / handle.state() / handle.status().
 // handle.stop() requests a clean shutdown from anywhere, at any point.
-// handle.walk_to(x, z).await / handle.chat("hi").await control whichever
-// session is currently active; each fails with a typed `ControlError`
+// handle.walk_to(x, z).await / handle.chat("hi").await /
+// handle.command("say hi").await control whichever session is currently
+// active; each fails with a typed `ControlError`
 // (never silently queued) if there isn't one right now.
 let outcome = supervisor.run().await;
 ```

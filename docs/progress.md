@@ -1534,3 +1534,44 @@ pending, so these state-only obligations are `PARTIAL`, not `PASS`.
 
 **Next unfinished phase:** Phase 4g — supervised outbound chat and command
 actions with explicit packet semantics, validation and typed responses.
+
+---
+
+## Phase 4g — outbound chat and command API
+
+Replaced leading-slash inference with two explicit control actions:
+`BotCommand::Chat` always targets protocol 769 `chat_message`, while
+`BotCommand::Command` always targets `chat_command` and stores command text
+without `/`.
+
+**Validation and packet semantics:**
+- Empty chat/command text, command text with a leading slash, chat text that
+  looks like a command, and overlength text are rejected before queueing.
+- The 256-character protocol limit is measured as Java-compatible UTF-16
+  code units, not UTF-8 bytes or Rust scalar values.
+- Chat encoding preserves timestamp/salt, an absent signature and the
+  protocol-769 three-byte empty acknowledgement window. Command encoding uses
+  the dedicated packet and never receives chat-only fields.
+
+**Supervisor behavior:**
+- The existing 64-entry bounded queue now uses `try_send`: capacity returns
+  typed `ControlError::QueueFull` immediately instead of awaiting space.
+- `ControlError::InvalidAction` carries the typed validation reason; offline
+  and stopped states still return `NotConnected`/`SupervisorStopped`.
+- Every queued action captures the active session generation. `run_session`
+  compares it before forwarding, so an old action cannot execute after a
+  reconnect even across a narrow status/queue race.
+
+**Tests added (7):** UTF-16/empty/slash/maximum validation; distinct typed
+actions; exact chat and command packet encoding; slash rejection without
+packet-kind inference; typed validation before connectivity checks; queue
+capacity; and captured generation. Existing integration coverage continues
+to exercise disconnected sessions, concurrent serialization and successful
+commands after a generation-changing reconnect.
+
+**Honest limitations:** outbound player chat is unsigned and carries no
+cryptographic message-chain acknowledgement state; secure-chat-enforcing
+servers may reject it. This phase does not claim signed-chat conformance.
+
+**Next unfinished phase:** Phase 4h — correct bounded inventory/window
+transactions with typed click modes, confirmations and generation safety.

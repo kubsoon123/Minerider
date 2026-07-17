@@ -227,6 +227,7 @@ bot:sneak(on)              -- BotCommand::Sneak
 bot:jump(on)               -- BotCommand::Jump
 bot:stop()                 -- BotCommand::Stop
 bot:chat(message)          -- BotCommand::Chat
+bot:command(command)       -- BotCommand::Command; no leading slash
 
 -- Supervisor control, if running under one:
 bot:disconnect()           -- SupervisorHandle::stop()
