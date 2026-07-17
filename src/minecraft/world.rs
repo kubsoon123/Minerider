@@ -205,9 +205,6 @@ impl World {
 
     pub fn unload_chunk(&mut self, packet: &PacketUnloadChunk) {
         self.chunks.remove(&(packet.chunk_x, packet.chunk_z));
-        if let Some((store, _)) = &self.shared {
-            store.prune();
-        }
     }
 
     pub fn has_chunk(&self, x: i32, z: i32) -> bool {

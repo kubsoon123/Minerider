@@ -239,12 +239,7 @@ fn run_child(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run_shared_child(
-    scenario: Scenario,
-    clients: usize,
-    chunks: usize,
-    samples: usize,
-) -> ExitCode {
+fn run_shared_child(scenario: Scenario, clients: usize, chunks: usize, samples: usize) -> ExitCode {
     drop(build_shared_worlds(scenario, clients, chunks));
 
     let rss_baseline = linux_memory_kib("VmRSS");
@@ -299,8 +294,7 @@ fn run_shared_child(
         duration_summary(&mut construction);
     let extrapolated_100x441 =
         if clients == 1 && chunks == 441 && matches!(scenario, Scenario::Identical) {
-            logical_retained_bytes
-                .saturating_add(index_lower_bound_bytes.saturating_mul(99))
+            logical_retained_bytes.saturating_add(index_lower_bound_bytes.saturating_mul(99))
         } else {
             0
         };
@@ -485,12 +479,11 @@ fn measure_shared_lifecycle(
                 world.remove(&position);
             }
             for chunk in &replacement {
-                if !world.contains_key(&(chunk.x, chunk.z)) {
-                    let snapshot = store
+                world.entry((chunk.x, chunk.z)).or_insert_with(|| {
+                    store
                         .intern(scope, snapshot_from_chunk(chunk.clone()))
-                        .expect("generated snapshot fingerprints");
-                    world.insert((chunk.x, chunk.z), snapshot);
-                }
+                        .expect("generated snapshot fingerprints")
+                });
             }
         }
     }

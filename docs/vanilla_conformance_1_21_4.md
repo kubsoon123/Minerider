@@ -179,3 +179,4 @@ or lose an id.
 | 128 | set_projectile_power | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 129 | custom_report_details | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 130 | server_links | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+
