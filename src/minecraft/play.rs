@@ -17,25 +17,22 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow, PacketCraftProgressBar,
     PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook, PacketEntityMoveLook,
     PacketEntityTeleport, PacketEntityVelocity, PacketExperience, PacketGameStateChange,
-    PacketHeldItemSlot, PacketKeepAlive, PacketKickDisconnect, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPlayerChat, PacketPlayerInfo,
-    PacketPlayerRemove, PacketPosition, PacketProfilelessChat, PacketRelEntityMove,
+    PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk, PacketMultiBlockChange,
+    PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition, PacketRelEntityMove,
     PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetSlot,
-    PacketSpawnEntity, PacketSyncEntityPosition, PacketSystemChat, PacketTeleportConfirm,
-    PacketUnloadChunk, PacketUpdateHealth, PacketUpdateTime, PacketWindowItems,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
-    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm, PacketUnloadChunk,
+    PacketUpdateHealth, PacketUpdateTime, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
     CLIENTBOUND_HELD_ITEM_SLOT_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
     CLIENTBOUND_LOGIN_ID, CLIENTBOUND_MAP_CHUNK_ID, CLIENTBOUND_MULTI_BLOCK_CHANGE_ID,
-    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_CHAT_ID, CLIENTBOUND_PLAYER_INFO_ID,
-    CLIENTBOUND_PLAYER_REMOVE_ID, CLIENTBOUND_POSITION_ID, CLIENTBOUND_PROFILELESS_CHAT_ID,
-    CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID, CLIENTBOUND_RESPAWN_ID,
-    CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID,
-    CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_SYSTEM_CHAT_ID, CLIENTBOUND_UNLOAD_CHUNK_ID,
+    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_INFO_ID, CLIENTBOUND_PLAYER_REMOVE_ID,
+    CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
+    CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_SLOT_ID,
+    CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_UNLOAD_CHUNK_ID,
     CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
     SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
     SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
@@ -46,7 +43,7 @@ use minerider_protocol::generated::v1_21_4::play::{
 use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
 use minerider_protocol::packet::RawPacket;
 use minerider_protocol::traits::{Decode, Encode};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -61,10 +58,12 @@ use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::entity::EntityStore;
 use crate::minecraft::event::BotEvent;
 use crate::minecraft::inventory::InventoryState;
-use crate::minecraft::nbt_reason_text;
 use crate::minecraft::physics::Vec3;
 use crate::minecraft::player::{LocalPlayer, MovementPacket};
 use crate::minecraft::players::PlayerList;
+use crate::minecraft::presentation::{
+    decode_update, ChatKind, PresentationEvent, PresentationState,
+};
 use crate::minecraft::world::World;
 use crate::minecraft::RESOURCE_PACK_STATUS_DECLINED;
 
@@ -89,6 +88,8 @@ pub struct PlayState {
     pub inventory: InventoryState,
     /// Tab-list players, keyed by uuid.
     pub players: PlayerList,
+    /// Chat, titles, action bar, tab-list header/footer, and boss bars.
+    pub presentation: PresentationState,
     /// World time (day-time in ticks) and whether it is raining.
     pub world_time: i64,
     pub raining: bool,
@@ -125,6 +126,7 @@ impl PlayState {
             entities: EntityStore::default(),
             inventory: InventoryState::default(),
             players: PlayerList::default(),
+            presentation: PresentationState::default(),
             world_time: 0,
             raining: false,
             controller: Controller::default(),
@@ -144,6 +146,40 @@ impl PlayState {
         let _ = self.event_tx.send(event);
     }
 
+    fn apply_presentation(&mut self, update: crate::minecraft::presentation::PresentationUpdate) {
+        let event = self.presentation.apply(update);
+        self.emit(BotEvent::Presentation(event.clone()));
+        match event {
+            PresentationEvent::Chat(message) => match message.kind {
+                ChatKind::Player | ChatKind::Disguised => {
+                    let sender = message
+                        .sender
+                        .as_ref()
+                        .map(|value| value.plain_text())
+                        .filter(|value| !value.is_empty())
+                        .or_else(|| {
+                            message
+                                .signed
+                                .as_ref()
+                                .map(|signed| signed.sender_uuid.to_string())
+                        })
+                        .unwrap_or_default();
+                    self.emit(BotEvent::Chat {
+                        sender,
+                        message: message.content.plain_text(),
+                    });
+                }
+                ChatKind::System => self.emit(BotEvent::SystemChat {
+                    message: message.content.plain_text(),
+                }),
+            },
+            PresentationEvent::Disconnected { reason } => self.emit(BotEvent::Kicked {
+                reason: reason.plain_text(),
+            }),
+            _ => {}
+        }
+    }
+
     /// A cheap, externally-readable snapshot of the parts of play state a
     /// caller would want to observe (position, health, inventory, entities).
     /// The full `World` (block/chunk data) is intentionally excluded: cloning
@@ -156,6 +192,7 @@ impl PlayState {
             entities: self.entities.clone(),
             inventory: self.inventory.clone(),
             players: self.players.clone(),
+            presentation: self.presentation.clone(),
             world_time: self.world_time,
             raining: self.raining,
         }
@@ -176,6 +213,7 @@ pub struct StateSnapshot {
     pub entities: EntityStore,
     pub inventory: InventoryState,
     pub players: PlayerList,
+    pub presentation: PresentationState,
     pub world_time: i64,
     pub raining: bool,
 }
@@ -212,16 +250,19 @@ pub async fn run_play(
             biased;
             read = conn.read_packet() => {
                 let packet = read?;
-                handle_clientbound(
+                let result = handle_clientbound(
                     conn,
                     &mut state,
                     configuration,
                     &packet,
                     &mut warned_ids,
-                ).await?;
+                ).await;
                 // Publish promptly on state-changing packets (health, death,
-                // inventory, entities) rather than waiting up to one tick.
+                // inventory, presentation, entities) rather than waiting up
+                // to one tick. Publish disconnect state before returning its
+                // terminal error as well.
                 let _ = state_tx.send(state.snapshot(state.clock.current()));
+                result?;
             }
             command = control_rx.recv(), if control_open => {
                 match command {
@@ -466,12 +507,18 @@ async fn handle_clientbound(
             }
         }
         CLIENTBOUND_KICK_DISCONNECT_ID => {
-            let mut r = PacketReader::new(&packet.payload);
-            let disconnect = PacketKickDisconnect::decode(&mut r)?;
-            let reason = nbt_reason_text(&disconnect.reason);
-            state.emit(BotEvent::Kicked {
-                reason: reason.clone(),
-            });
+            let Some(update) = decode_update(packet.id, &packet.payload)? else {
+                return Err(MineRiderError::Protocol(
+                    "kick_disconnect was not decoded as presentation state".to_string(),
+                ));
+            };
+            state.apply_presentation(update);
+            let reason = state
+                .presentation
+                .disconnect_reason
+                .as_ref()
+                .map(|reason| reason.plain_text())
+                .unwrap_or_default();
             return Err(MineRiderError::Disconnected(reason));
         }
         other => {
@@ -495,6 +542,10 @@ fn apply_state_packet(
     id: i32,
     payload: &[u8],
 ) -> Result<bool> {
+    if let Some(update) = decode_update(id, payload)? {
+        state.apply_presentation(update);
+        return Ok(true);
+    }
     let mut r = PacketReader::new(payload);
     match id {
         CLIENTBOUND_LOGIN_ID => {
@@ -640,37 +691,6 @@ fn apply_state_packet(
             let p = PacketHeldItemSlot::decode(&mut r)?;
             state.inventory.held_item_slot(&p);
         }
-        CLIENTBOUND_PLAYER_CHAT_ID => {
-            let p = PacketPlayerChat::decode(&mut r)?;
-            // `network_name` is the sender's rendered display name; fall back
-            // to the raw uuid only if it renders empty.
-            let sender = nbt_reason_text(&p.network_name);
-            let sender = if sender.is_empty() {
-                p.sender_uuid.to_string()
-            } else {
-                sender
-            };
-            info!(%sender, message = %p.plain_message, "chat");
-            state.emit(BotEvent::Chat {
-                sender,
-                message: p.plain_message,
-            });
-        }
-        CLIENTBOUND_SYSTEM_CHAT_ID => {
-            let p = PacketSystemChat::decode(&mut r)?;
-            if !p.is_action_bar {
-                let message = nbt_reason_text(&p.content);
-                info!(%message, "chat (system)");
-                state.emit(BotEvent::SystemChat { message });
-            }
-        }
-        CLIENTBOUND_PROFILELESS_CHAT_ID => {
-            let p = PacketProfilelessChat::decode(&mut r)?;
-            let sender = nbt_reason_text(&p.name);
-            let message = nbt_reason_text(&p.message);
-            info!(%sender, %message, "chat (profileless)");
-            state.emit(BotEvent::Chat { sender, message });
-        }
         CLIENTBOUND_PLAYER_INFO_ID => {
             let p = PacketPlayerInfo::decode(&mut r)?;
             let changes = state.players.apply_info(&p);
@@ -760,6 +780,8 @@ mod tests {
             broadcast::channel(crate::minecraft::event::EVENT_CHANNEL_CAPACITY);
         let mut state = PlayState::new(event_tx);
         state.player.health = 7.5;
+        state.presentation.action_bar =
+            Some(crate::minecraft::text::TextComponent::literal("before"));
         let snap = state.snapshot(42);
 
         assert_eq!(snap.tick, 42);
@@ -768,9 +790,19 @@ mod tests {
         // Mutating the source afterward must not affect an already-taken
         // snapshot: it's a real clone, not a shared reference.
         state.player.health = 20.0;
+        state.presentation.action_bar =
+            Some(crate::minecraft::text::TextComponent::literal("after"));
         assert_eq!(
             snap.player.health, 7.5,
             "snapshot is independent of live state"
+        );
+        assert_eq!(
+            snap.presentation
+                .action_bar
+                .as_ref()
+                .expect("snapshot action bar")
+                .plain_text(),
+            "before"
         );
     }
 }
