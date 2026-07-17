@@ -13,6 +13,7 @@ use tokio::net::TcpStream;
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
+use crate::network::socks5::{self, Socks5ProxyConfig};
 use crate::trace::format::Direction;
 use crate::trace::recorder::TraceRecorder;
 
@@ -143,6 +144,25 @@ impl Connection {
             state: ConnectionState::Handshaking,
             trace: None,
         })
+    }
+
+    /// Connects to `host:port` through a SOCKS5 proxy instead of directly:
+    /// TCP-connects to `proxy`, negotiates SOCKS5, and issues `CONNECT
+    /// host:port` — the proxy, not this process, resolves `host` when it
+    /// isn't already a literal IP (see [`socks5::connect`]). The returned
+    /// `Connection` is otherwise identical to one from
+    /// [`Self::connect_with_timeouts`]: `host`/`port` here only pick the
+    /// SOCKS5 tunnel's destination, so callers (see
+    /// [`crate::core::client::Client::connect`]) still send the *original*
+    /// Minecraft hostname/port in the handshake, never the proxy's.
+    pub async fn connect_via_proxy(
+        host: &str,
+        port: u16,
+        proxy: &Socks5ProxyConfig,
+        timeouts: ConnectionTimeouts,
+    ) -> Result<Connection> {
+        let stream = socks5::connect(proxy, host, port, timeouts.connect).await?;
+        Self::from_tcp_stream(stream)
     }
 
     /// Wraps an already-connected stream (used to build the server side of
