@@ -6,19 +6,26 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::configuration::{
-    PacketCustomPayload, PacketDisconnect, PacketRegistryData, CLIENTBOUND_DISCONNECT_ID,
+    PacketCustomPayload, PacketDisconnect, PacketRegistryData, PacketResourcePackReceive,
+    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_DISCONNECT_ID,
     CLIENTBOUND_FINISH_CONFIGURATION_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_PING_ID,
-    CLIENTBOUND_REGISTRY_DATA_ID, CLIENTBOUND_SELECT_KNOWN_PACKS_ID, SERVERBOUND_CUSTOM_PAYLOAD_ID,
+    CLIENTBOUND_REGISTRY_DATA_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
+    CLIENTBOUND_SELECT_KNOWN_PACKS_ID, SERVERBOUND_CUSTOM_PAYLOAD_ID,
     SERVERBOUND_FINISH_CONFIGURATION_ID, SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_PONG_ID,
-    SERVERBOUND_SELECT_KNOWN_PACKS_ID, SERVERBOUND_SETTINGS_ID,
+    SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, SERVERBOUND_SELECT_KNOWN_PACKS_ID,
+    SERVERBOUND_SETTINGS_ID,
 };
+use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
 use minerider_protocol::traits::{Decode, Encode};
 use tracing::{debug, warn};
 
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
 use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
-use crate::minecraft::{brand_payload, nbt_reason_text, vanilla_client_information, BRAND_CHANNEL};
+use crate::minecraft::{
+    brand_payload, nbt_reason_text, vanilla_client_information, BRAND_CHANNEL,
+    RESOURCE_PACK_STATUS_DECLINED,
+};
 use crate::network::connection::Connection;
 
 /// Safety bound on packets read during configuration.
@@ -55,9 +62,9 @@ impl DimensionType {
 
 /// Sends the two packets a vanilla client emits on entering configuration:
 /// `client_information` (settings) and the `minecraft:brand` plugin message.
-async fn send_client_configuration(conn: &mut Connection) -> Result<()> {
+async fn send_client_configuration(conn: &mut Connection, view_distance: i8) -> Result<()> {
     let mut w = PacketWriter::new();
-    vanilla_client_information().encode(&mut w)?;
+    vanilla_client_information(view_distance).encode(&mut w)?;
     conn.send_packet(SERVERBOUND_SETTINGS_ID, &w.freeze())
         .await?;
 
@@ -164,8 +171,11 @@ fn store_registry(data: &mut ConfigurationData, packet: PacketRegistryData) -> R
 ///
 /// On entry the client sends its settings and brand, exactly as vanilla
 /// does, before processing the server's configuration packets.
-pub async fn run_configuration(conn: &mut Connection) -> Result<ConfigurationData> {
-    send_client_configuration(conn).await?;
+pub async fn run_configuration(
+    conn: &mut Connection,
+    view_distance: i8,
+) -> Result<ConfigurationData> {
+    send_client_configuration(conn, view_distance).await?;
     let mut data = ConfigurationData::default();
 
     for _ in 0..MAX_CONFIGURATION_PACKETS {
@@ -197,6 +207,22 @@ pub async fn run_configuration(conn: &mut Connection) -> Result<ConfigurationDat
                     SERVERBOUND_PONG_ID
                 };
                 conn.send_packet(response_id, &packet.payload).await?;
+            }
+            CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
+                let mut r = PacketReader::new(&packet.payload);
+                let pack = PacketCommonAddResourcePack::decode(&mut r)?;
+                debug!(uuid = %pack.uuid, forced = pack.forced, "declining offered resource pack");
+                let response = PacketResourcePackReceive {
+                    uuid: pack.uuid,
+                    result: RESOURCE_PACK_STATUS_DECLINED,
+                };
+                let mut w = PacketWriter::new();
+                response.encode(&mut w)?;
+                conn.send_packet(SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, &w.freeze())
+                    .await?;
+            }
+            CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
+                // No client-side pack state to remove and no wire response.
             }
             CLIENTBOUND_SELECT_KNOWN_PACKS_ID => {
                 // Vanilla 1.21.4 selects the built-in core pack. Echoing every

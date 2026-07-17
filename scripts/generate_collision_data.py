@@ -21,6 +21,27 @@ for shape_id in shape_ids:
         boxes = [boxes]
     shapes.append(boxes)
 
+# Vanilla `Block.getFriction()` overrides (default 0.6). These constants are
+# hardcoded in the 1.21.4 client's block classes, not present in minecraft-data,
+# so we key them by block name and resolve state-id ranges from blocks.json.
+# Honey block and soul sand keep the default 0.6 friction (their slowdowns are
+# separate velocity multipliers, applied elsewhere).
+FRICTION_OVERRIDES = {
+    "slime_block": 0.8,
+    "ice": 0.98,
+    "packed_ice": 0.98,
+    "frosted_ice": 0.98,
+    "blue_ice": 0.989,
+}
+name_to_range = {block["name"]: (block["minStateId"], block["maxStateId"]) for block in blocks}
+friction_ranges = []
+for name, friction in FRICTION_OVERRIDES.items():
+    if name not in name_to_range:
+        raise SystemExit(f"friction override for unknown block {name}")
+    lo, hi = name_to_range[name]
+    friction_ranges.append((lo, hi, friction))
+friction_ranges.sort()
+
 max_state = max(block["maxStateId"] for block in blocks)
 state_shapes = [None] * (max_state + 1)
 for block in blocks:
@@ -51,8 +72,11 @@ lines = [
     "",
     "use super::physics::Aabb;",
     "",
-    f"#[cfg(test)] pub const STATE_COUNT: usize = {len(state_shapes)};",
+    "#[cfg(test)]",
+    "#[rustfmt::skip]",
+    f"pub const STATE_COUNT: usize = {len(state_shapes)};",
     "",
+    "#[rustfmt::skip]",
     "pub static SHAPE_BOXES: &[Aabb] = &[",
 ]
 def rust_float(value):
@@ -61,13 +85,20 @@ def rust_float(value):
 
 for box in flat_boxes:
     lines.append("    Aabb::new(" + ", ".join(rust_float(value) for value in box) + "),")
-lines += ["];", "", "pub static SHAPE_RANGES: &[(u16, u8)] = &["]
+lines += ["];", "", "#[rustfmt::skip]", "pub static SHAPE_RANGES: &[(u16, u8)] = &["]
 for start, count in shape_ranges:
     lines.append(f"    ({start}, {count}),")
-lines += ["];", "", "pub static STATE_SHAPES: &[u16] = &["]
+lines += ["];", "", "#[rustfmt::skip]", "pub static STATE_SHAPES: &[u16] = &["]
 for start in range(0, len(state_shapes), 24):
     chunk = state_shapes[start : start + 24]
     lines.append("    " + ", ".join(map(str, chunk)) + ",")
+lines += ["];", ""]
+lines.append("/// Inclusive global state-id ranges whose block overrides the")
+lines.append("/// default 0.6 friction, sorted by start id. Everything else is 0.6.")
+lines.append("#[rustfmt::skip]")
+lines.append("pub static FRICTION_OVERRIDES: &[(u32, u32, f32)] = &[")
+for lo, hi, friction in friction_ranges:
+    lines.append(f"    ({lo}, {hi}, {rust_float(friction)}),")
 lines += ["];", ""]
 OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 print(f"wrote {OUT.relative_to(ROOT)}: {len(state_shapes)} states, {len(shapes)} shapes")

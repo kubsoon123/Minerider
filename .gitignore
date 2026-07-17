@@ -18,3 +18,10 @@ usercache.json
 banned-*.json
 ops.json
 whitelist.json
+
+# Cached Microsoft sign-in refresh token (a live credential, never commit).
+.minerider_msa_cache.json
+
+# Local slash-command transcripts exported by the coding agent (never commit;
+# narrow pattern so it doesn't blanket-ignore legitimate .txt files).
+*-local-command*.txt

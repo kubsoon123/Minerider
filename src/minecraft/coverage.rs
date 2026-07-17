@@ -269,13 +269,17 @@ fn configuration_coverage(id: i32) -> CoverageEntry {
         configuration::CLIENTBOUND_REGISTRY_DATA_ID => handled(state_only(
             "store dimension types for chunk decode and world physics",
         )),
-        configuration::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID
-        | configuration::CLIENTBOUND_ADD_RESOURCE_PACK_ID => ignored(not_implemented(
-            Some("resource_pack_receive"),
-            TimingClass::Strict,
-            "download/show resource pack prompt",
-            "",
-        )),
+        configuration::CLIENTBOUND_ADD_RESOURCE_PACK_ID => handled(Obligation {
+            responds_with: Some("resource_pack_receive"),
+            timing: TimingClass::Strict,
+            state_update: "none",
+            status: ConformanceStatus::Partial,
+            scenario: "resource_pack",
+            evidence: EVIDENCE_MOCK,
+        }),
+        configuration::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
+            handled(state_only("no client-side pack state to remove"))
+        }
         configuration::CLIENTBOUND_STORE_COOKIE_ID => ignored(Obligation {
             status: ConformanceStatus::NotImplemented,
             ..NO_RESPONSE
@@ -396,16 +400,29 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_UPDATE_HEALTH_ID => {
             handled(state_only("update health/hunger/saturation"))
         }
+        play::CLIENTBOUND_RESPAWN_ID => handled(state_only(
+            "reset dimension/world and readiness gate for a new life",
+        )),
+        play::CLIENTBOUND_OPEN_WINDOW_ID => handled(state_only("track newly opened container")),
+        play::CLIENTBOUND_CLOSE_WINDOW_ID => handled(state_only("clear tracked open container")),
+        play::CLIENTBOUND_WINDOW_ITEMS_ID => {
+            handled(state_only("refresh a window's slots and the cursor item"))
+        }
+        play::CLIENTBOUND_SET_SLOT_ID => handled(state_only("update one inventory/container slot")),
+        play::CLIENTBOUND_SET_CURSOR_ITEM_ID => handled(state_only("update the cursor item")),
+        play::CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => handled(state_only(
+            "update a container property (furnace progress, etc.)",
+        )),
+        play::CLIENTBOUND_HELD_ITEM_SLOT_ID => {
+            handled(state_only("track the server-selected hotbar slot"))
+        }
+        play::CLIENTBOUND_PLAYER_CHAT_ID => handled(state_only("log the message")),
+        play::CLIENTBOUND_SYSTEM_CHAT_ID => handled(state_only("log the message")),
+        play::CLIENTBOUND_PROFILELESS_CHAT_ID => handled(state_only("log the message")),
         play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
             Some("configuration_acknowledged"),
             TimingClass::Strict,
             "re-enter configuration state",
-            "",
-        )),
-        play::CLIENTBOUND_RESPAWN_ID => ignored(not_implemented(
-            None,
-            TimingClass::None,
-            "switch dimension; drop world cache",
             "",
         )),
         play::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
@@ -415,13 +432,16 @@ fn play_coverage(id: i32) -> CoverageEntry {
             evidence: EVIDENCE_NONE,
             ..NO_RESPONSE
         }),
-        play::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID | play::CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
-            ignored(not_implemented(
-                Some("resource_pack_receive"),
-                TimingClass::Strict,
-                "download/show resource pack prompt",
-                "",
-            ))
+        play::CLIENTBOUND_ADD_RESOURCE_PACK_ID => handled(Obligation {
+            responds_with: Some("resource_pack_receive"),
+            timing: TimingClass::Strict,
+            state_update: "none",
+            status: ConformanceStatus::Partial,
+            scenario: "resource_pack",
+            evidence: EVIDENCE_MOCK,
+        }),
+        play::CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
+            handled(state_only("no client-side pack state to remove"))
         }
         play::CLIENTBOUND_TRANSFER_ID => ignored(not_implemented(
             None,

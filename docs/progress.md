@@ -537,3 +537,626 @@ strict clippy, rustfmt, protocol codegen drift and conformance-matrix drift pass
   remained connected, decoded the live dimension/chunk stream and sent
   `player_loaded` on tick 5. Official-vanilla/client-reference comparison is
   still required before raising byte/timing evidence beyond `PARTIAL`.
+
+---
+
+## Phase 3e — vanilla input movement: walk/sprint/jump (complete)
+
+**Completed:**
+- New `MovementInput` control surface on `LocalPlayer` (forward/strafe impulses
+  in `-1.0..=1.0`, plus jump/sprint/sneak), the Mineflayer-style intent applied
+  each physics tick. This is the input half of `LivingEntity.travel`/`aiStep`
+  that the Phase 3d collision foundation was built to receive.
+- `tick_physics` implements the normal (non-fluid, non-elytra, no-effect)
+  branch in vanilla order: sub-`0.003` per-axis velocity clamp → ground jump
+  (`0.42` impulse, plus the sprint-jump `±0.2` horizontal boost) → `moveRelative`
+  input acceleration using the friction-influenced speed → `move` collision
+  clip → gravity → drag. Ground speed uses the `0.21600002 / friction³`
+  attribute scaling (walk `0.1`, sprint `0.13`); air speed uses `0.02` / `0.026`.
+  Sneaking scales impulses by `0.3`; a `10`-tick ground-jump cooldown matches
+  vanilla `noJumpDelay`.
+- **Gravity-ordering correction:** the Phase 3d idle branch applied gravity
+  *before* the move, which lands one tick early and converges to a `-4.0`
+  terminal velocity. Reconstructing 1.21.4 `LivingEntity.travel` shows gravity
+  is applied to the *post-move* velocity, so stored `v.y = (moved_y - 0.08) *
+  0.98`. `tick_physics` now does this, reproducing vanilla's `-3.92` terminal
+  velocity, `-0.0784` first-fall-tick velocity and `1.2522`-block jump apex.
+  Unit tests pin these constants so behavior is anchored to physics, not to the
+  (self-generated) conformance fixture.
+- Vanilla `Mth.sin`/`Mth.cos` lookup tables (65536 entries, `10430.378` index
+  scale) in `physics.rs` drive input rotation, so a server's own movement
+  re-simulation agrees with ours for any non-cardinal facing — not just the
+  cardinal directions where `Math.sin` and the table coincide.
+
+**Verification:** 185 workspace tests pass, 0 fail (+9 movement/trig tests).
+Four conformance scenarios, strict clippy (`--workspace --all-targets -D
+warnings`), rustfmt, protocol codegen drift and conformance-matrix drift pass.
+
+**Fixture note:** the corrected gravity ordering shifts the join-idle scenario's
+first `on_ground=true` report from tick 2 to tick 3 (a resting player has
+`v.y = 0`, so its first physics tick detects no ground and lands the next tick,
+exactly as vanilla does). `join_idle.jsonl` was regenerated to record this; the
+other three fixtures were unchanged (their diffs were pure run-timing noise).
+
+**Honest limits / next:**
+- Block friction is the default `0.6`. Ice, packed/blue ice, slime, honey and
+  soul sand need a friction table keyed by the block under the player; their
+  movement is currently wrong. This is the next parity gap for input movement.
+- Rotation uses the exact `Mth` table, but positions are still driven by our own
+  `f64` arithmetic; a real vanilla-client capture of walking/jumping remains the
+  authority before raising this beyond `PARTIAL`.
+- Still unimplemented `travel` branches: fluids (water/lava), ladders/climbables,
+  elytra, step-up assist, auto-jump, movement-affecting effects (speed, jump
+  boost, slow falling, levitation) and attribute modifiers beyond sprint.
+- The input is not yet wired to a scripting/bot API surface; the play loop
+  applies whatever `LocalPlayer.input` holds (default: none), so on-server
+  behavior is unchanged until a controller sets it.
+
+---
+
+## Phase 3f — bot control API, block friction, step-up (complete)
+
+**Completed:**
+- **Control API (`minecraft/control.rs`).** A cloneable `ControlHandle` pushes
+  `BotCommand`s (`walk_to`, `look`, `set_input`, `sprint`, `sneak`, `jump`,
+  `stop`) over an unbounded channel into the play loop; `Client::control()`
+  hands one out. Each tick a `Controller` folds the active goal and manual
+  overlay into the player's `input` and facing before physics. `walk_to` steers
+  yaw with `atan2(-dx, dz)` and holds forward until within `0.3` blocks. The
+  play `select!` gained a command branch that disables itself once all handles
+  drop, so a closed channel can't spin the loop. An end-to-end test walks a bot
+  to a target through real physics.
+- **Block friction (generated).** `generate_collision_data.py` now emits
+  `FRICTION_OVERRIDES` (ice/packed/frosted ice `0.98`, blue ice `0.989`, slime
+  `0.8`; everything else the default `0.6`), resolved from vendored `blocks.json`
+  state ranges. `tick_physics` samples the block at `floor(feetY - 0.2)` below
+  the player, so ground speed and drag are now surface-correct — ice is slippery,
+  slime grippy — pinned by tests (ice out-slides stone, override values match).
+- **Auto step-up (`collide_with_step`).** Vanilla's `Entity.collide` two-probe
+  step algorithm: a blocked grounded move retries lifted by `maxUpStep` (`0.6`),
+  keeps whichever variant travels farther horizontally, then settles down. The
+  collision core was refactored into a pure `clip_movement` that both `collide`
+  and the step path share; the world query is expanded upward by the step height.
+  A walking `walk_to` bot now climbs slabs/paths/single steps but not full
+  blocks, and does not step while airborne (tested).
+
+**Verification:** 197 workspace tests pass, 0 fail (+12 control/friction/step
+tests). Four conformance scenarios unchanged, strict clippy, rustfmt (hand-
+written files; the generated `collision_data.rs` keeps its compact generated
+form), protocol codegen drift and the collision generator's own reproducibility
+all pass.
+
+**Capture harness (`docs/vanilla_capture.md`).** Documented the manual
+procedure for a real vanilla-client byte/timing capture and diff (mitm proxy +
+`MINERIDER_TRACE` + the existing `normalize`/`diff` tooling), with the scenario
+matrix and the deltas to expect. This is the step that would raise movement
+evidence past `PARTIAL`; it needs a human with a Minecraft account and cannot be
+automated.
+
+**Honest limits / next:**
+- Movement effects (speed, jump boost, slow falling, levitation) and fluids
+  (water/lava buoyancy + drag), ladders/climbables and elytra are still
+  unimplemented. Effects specifically need local-player effect tracking
+  (`entity_effect`/`remove_entity_effect`), which does not exist yet — their
+  physics would be dead code until then. Do not run those parity scenarios.
+- Honey-block and soul-sand *slowdowns* (velocity multipliers, distinct from
+  friction) are not modeled.
+- Positions are still `f64` throughout; vanilla mixes `f32`/`f64`. Sub-ULP
+  drift is expected and only a real-client capture can bound it.
+- `walk_to` is straight-line steering with no obstacle avoidance or pathfinding;
+  it climbs steps but will push into walls it cannot step over.
+
+---
+
+## Phase 3g — knockback, respawn, and world-query resilience (complete)
+
+Found live against a local Paper 1.21.4 server, not in unit tests: the bot
+joined in creative (server `force-gamemode`), so hits were silently absorbed;
+switching it to Survival and killing it exposed three real gaps at once.
+
+**Completed:**
+- **Self-targeted knockback.** `entity_velocity` was always forwarded to the
+  generic remote-`EntityStore`, so a hit that targeted the bot's own entity id
+  never reached its physics — zero knockback even outside creative. `play.rs`
+  now compares the packet's id against `LocalPlayer.entity_id` and calls the
+  new `LocalPlayer::apply_velocity` (an absolute set, 1/8000-block units, not
+  additive) when they match. Verified: the bot now flies back and lands
+  correctly on a real hit.
+- **World-query resilience.** `World::collision_boxes` treated any block
+  outside currently-loaded chunks as a fatal `Result::Err` that tore down the
+  whole connection — triggered live when a post-death state pushed the query
+  outside tracked terrain. It now returns `Ok(false)` for "not loaded yet" and
+  the physics tick is skipped and retried next tick, while an unrecognized
+  block-state id (a genuine table bug, not a streaming gap) is still fatal.
+- **Auto-respawn.** The client had no death/respawn handling at all: once
+  killed, it reconnected into Paper's persisted dead player state forever
+  (`Health: 0`, climbing `DeathTime`), invisible and unable to be hit again.
+  `handle_tick` now detects `!player.is_alive()` and sends
+  `client_command(action_id=PERFORM_RESPAWN)` once (a `respawn_pending` flag
+  prevents resending every tick); the `respawn` clientbound packet resets
+  dimension/world exactly like play `login` and calls the new
+  `LocalPlayer::on_respawn` (clears velocity/ground state, drops `loaded` so
+  the existing wait-for-position-and-chunk gate re-runs cleanly). This is also
+  just correct bot-framework behavior — Mineflayer auto-respawns by default,
+  since there is no death screen to click.
+
+**Verification:** 201 workspace tests pass (+4: knockback semantics and
+displacement, world-query completeness, respawn state reset), strict clippy,
+rustfmt (hand-written files only — an editor auto-format hook reformatted the
+generated `collision_data.rs` mid-session twice; both times it was restored via
+`python scripts/generate_collision_data.py`, confirming the generator stays the
+source of truth), protocol codegen drift all pass. Confirmed live: after the
+fix, `data get entity MineRiderBot Health` reports `20.0f` immediately on
+reconnect with no manual intervention.
+
+**Honest limits / next:**
+- Respawn is immediate with no delay, unlike a human's death-screen click
+  latency; if that pattern matters for a specific anti-cheat's heuristics, a
+  configurable delay is a small follow-up.
+- The respawn position/dimension come from whatever the server assigns (world
+  spawn or bed); we do not yet expose a way to choose or override it.
+- Death is detected by `health <= 0` after `update_health`; a kill packet
+  sequence that omits or delays that update (uncommon, but not verified against
+  a real server) would delay the respawn request correspondingly.
+
+---
+
+## Phase 3h — inventory/container ("GUI") state tracking (complete)
+
+**Completed:**
+- New `minecraft/inventory.rs`: a pure projection of every clientbound
+  container packet, mirroring `entity.rs`/`world.rs`. `InventoryState` holds
+  the player's own inventory (window id 0, always present), at most one open
+  non-player container (`open_window`, replaced wholesale when a new one opens
+  — matching vanilla, which implicitly closes the previous one), the single
+  shared cursor item, and the server-selected hotbar slot.
+- Wired into `PlayState.inventory` and `apply_state_packet`: `open_window`,
+  `close_window`, `window_items` (full slot refresh + cursor), `set_slot`
+  (single-index update, including the legacy `window_id: -1` cursor address),
+  `set_cursor_item`, `craft_progress_bar` (container properties — furnace
+  progress, enchanting-table levels/costs, ...) and `held_item_slot`.
+  Server-driven surprises degrade gracefully rather than panicking: a
+  `set_slot` index past the known window length grows the slot list instead of
+  panicking; updates for a window id that isn't currently open/player-owned
+  (stale/already-replaced) are silently ignored, matching this project's
+  established stance on treating unexpected server data as recoverable.
+- `coverage.rs` gained entries for all seven packets (previously falling
+  through to `log_unhandled` warnings every time an inventory changed) plus a
+  fix for `CLIENTBOUND_RESPAWN_ID`, which still carried its pre-Phase-3g
+  `ignored(not_implemented(...))` entry — a real drift between code and the
+  coverage table that `every_clientbound_id_is_classified` doesn't catch
+  because it only requires *some* entry, not the *correct* one.
+- Deliberately **not** implemented: sending `window_click` to actually
+  interact with a menu. Each menu type (crafting, anvil, enchanting table,
+  furnace, ...) has distinct slot semantics and shift-click/quick-move rules;
+  this phase is the passive "always know what's in every GUI" foundation that
+  interaction logic would sit on top of.
+
+**Verification:** 213 workspace tests pass (+12: inventory module unit tests),
+strict clippy, rustfmt (hand-written files), protocol codegen drift, and both
+conformance-matrix tests (`conformance_doc_is_up_to_date`,
+`every_clientbound_id_is_classified`) pass — the doc was regenerated via
+`cargo run --bin conformance_matrix` after the coverage-table changes.
+
+**Process note:** an editor auto-format hook reformatted the generated
+`collision_data.rs` into verbose rustfmt style twice more this session
+(previously seen in Phase 3g); both times restored via
+`python scripts/generate_collision_data.py`. This is now a recurring friction
+point — the honest-limits item from Phase 3d ("add a drift check for the
+generated collision Rust table") would also make this class of accidental
+edit fail loudly in CI instead of relying on manual vigilance.
+
+**Honest limits / next:**
+- No `window_click`/`set_creative_slot` sending: the bot can see every GUI but
+  cannot act in one yet (take items, craft, place in a furnace, rename in an
+  anvil). This is the natural next step once interaction is wanted.
+- `state_id` (the window's revision counter) is tracked but unused; sending
+  clicks correctly requires echoing the latest value, which only matters once
+  `window_click` exists.
+- Multi-block containers (double chests) and horse/donkey inventories
+  (`open_horse_window`, a distinct packet) are covered by the same generic
+  `Window` model but `open_horse_window` itself is not yet decoded/handled.
+
+---
+
+## Phase 3i — live state channel, resource-pack handling, username validation (complete)
+
+Autonomous session (user away ~5h): three self-contained gaps closed before
+the larger Phase 3j premium-login work below.
+
+**Completed:**
+- **`Client::bot_state()`**: a `tokio::sync::watch::Receiver<StateSnapshot>`,
+  the read-side counterpart to `Client::control()`. `PlayState::snapshot`
+  clones player/entities/inventory (not the full `World` — cloning chunk data
+  every tick would be expensive; block queries are a future on-demand
+  accessor) and the play loop publishes after every clientbound packet and at
+  the end of every tick. `EntityStore` gained `Clone` (its `Entity` fields
+  were already `Copy`) to make this possible. Verified live: a new
+  conformance test spawns a bot against the join-idle mock, grabs a receiver
+  before calling `run()`, and asserts it observes `loaded` flip to `true`.
+- **Resource pack response.** Vanilla always answers `add_resource_pack` with
+  `resource_pack_receive` (configuration *and* play state both have this
+  exchange); MineRider previously never responded, which some servers would
+  eventually time out and kick for. It now responds `Declined` — the same
+  honest choice a real player unchecking "Server Resource Packs" makes, not a
+  fabricated "loaded" claim; a server that force-kicks for declining a
+  *required* pack still kicks MineRider, exactly as it would a real player.
+  New `RESOURCE_PACK_STATUS_DECLINED` constant shared by both state handlers.
+  Verified with a new mock-server scenario (`Mode::ResourcePack`) exercising
+  both the configuration- and play-state packet variants in one real round
+  trip; `coverage.rs`'s two entries upgraded from `NotImplemented` to
+  `Partial`/`EVIDENCE_MOCK` accordingly.
+- **Client-side username validation.** Vanilla validates the offline/legacy
+  username shape (3-16 ASCII letters/digits/underscore) before ever opening a
+  connection. MineRider previously sent anything verbatim; an invalid name
+  reached the server as a raw string and came back as an opaque Netty
+  decode-exception disconnect (found live: a 20-character test username
+  triggered exactly this). `login()` now rejects it locally with a clear
+  error before sending `login_start`. Premium usernames (from a verified
+  profile) skip this check — they're valid by construction.
+
+**Verification:** 234 workspace tests pass (89 lib + 145 across integration
+binaries), strict clippy, rustfmt (hand-written files), protocol codegen
+drift, and both conformance-matrix tests pass. One test binary
+(`config_disconnect`) intermittently fails to *execute* under
+`cargo test --workspace` with a Windows access-denied error — confirmed to be
+Windows Defender transiently locking a freshly-built `.exe`, not a code
+regression: the same test passes cleanly every time when run in isolation
+(`cargo test --test config_disconnect`).
+
+---
+
+## Phase 3j — premium (Microsoft/Xbox Live) login (complete, live sign-in unverified)
+
+The other half of this autonomous session: online-mode servers require a
+real Microsoft account, not just a valid-shaped username. New top-level
+`auth` module implements the full chain a vanilla launcher runs.
+
+**Completed:**
+- **`auth::server_hash`**: the Mojang session-server "server ID hash" — SHA-1
+  over server id + shared secret + server public key, then Minecraft's
+  non-standard signed hex digest (the raw digest interpreted as a
+  two's-complement big-endian integer, exactly like Java's
+  `BigInteger(byte[])`, printed in base 16 with a `-` for negative values).
+  Getting the sign/negation order backwards silently breaks every
+  negative-hash server id — the kind of "one bad packet" mistake that would
+  desync online-mode auth without ever throwing an error — so this is
+  verified against the three canonical test vectors from the protocol
+  encryption documentation (fetched and cross-checked live, not from memory:
+  `"Notch"`, `"jeb_"` (negative), `"simon"`), not just spot-checked.
+- **`auth::microsoft`**: the OAuth2 device-code flow (RFC 8628) against the
+  Microsoft identity platform — no browser-redirect listener needed, suits a
+  headless bot. Polls the token endpoint honoring the server's `interval` and
+  `slow_down` backoff; maps `authorization_declined`/`expired_token`/
+  `bad_verification_code` to clear errors. A `refresh_token` path skips the
+  device-code prompt on subsequent runs.
+- **`auth::xbox`**: Xbox Live user authentication then XSTS authorization for
+  the `rp://api.minecraftservices.com/` relying party (the wrong relying
+  party is a silent way to get a token Minecraft Services then rejects).
+  Failed XSTS authorizations carry a numeric `XErr` Microsoft documents (no
+  Xbox account, region-blocked, needs adult verification, child account not
+  in a family group); these are mapped to specific, actionable messages
+  instead of a bare HTTP status.
+- **`auth::minecraft_services`**: trades the XSTS token for a Minecraft
+  Services access token, verifies game ownership via the entitlements
+  endpoint (fails fast with a clear message instead of a confusing profile
+  404 later), and fetches the real profile (UUID parsed from undashed hex,
+  username).
+- **`auth::session`**: the session-server `join` call.
+- **`MicrosoftAuthenticator`** ties the chain together: `sign_in` (device
+  code) and `resume` (refresh token) both end at a `PremiumSession`.
+- **Wired into the vanilla handshake**, not bolted on separately:
+  `login()` now takes `premium: Option<&PremiumSession>`. With a session, it
+  sends the real username/UUID in `login_start`, and — critically — calls the
+  session join **after computing the shared secret but before answering
+  `encryption_begin`**, matching the exact ordering an online-mode server
+  requires (the server may call Mojang's `hasJoined` as soon as it decrypts
+  the encryption response; a join that races behind that fails). Without a
+  premium session, a server reporting `should_authenticate` now fails with a
+  clear error instead of silently proceeding offline-mode and getting kicked
+  downstream. `ClientConfig::with_premium(session)` and CLI support
+  (`MINERIDER_MS_CLIENT_ID`, `MINERIDER_MS_REFRESH_TOKEN`) wire it end to end.
+
+**Verification:** 16 unit tests cover the parsing/error-mapping logic of every
+stage (device code, poll outcomes including pending/slow-down/decline,
+XBL/XSTS success and every documented `XErr`, Minecraft Services login,
+entitlement check, profile parsing including malformed UUIDs, the session
+join's UUID hex formatting) using realistic fixture JSON — this is where
+"did I get the field name right" bugs hide, and all of it runs with no
+network access. The `server_id_hash` vectors are the one piece verified
+against ground truth rather than internal self-consistency.
+
+**Follow-up in the same session — the join-before-response wire ordering is
+now proven, not just inspected.** `session::join_to` and a
+`#[cfg(test)] PremiumSession::for_test` make the session-server URL
+overridable; a new `premium_login_joins_session_server_before_encryption_response`
+test in `login.rs` drives the real `login()` function over an actual TCP
+socket against a hand-rolled mock Minecraft login server (reusing
+`Connection`, real RSA keypair generation, real encryption) *and* a
+hand-rolled mock HTTP server capturing the join POST — both matching this
+project's existing no-framework-mocking convention. It asserts the captured
+`accessToken`/`selectedProfile`/`serverId` match values computed
+independently from the same live-negotiated shared secret and public key,
+and that `login()` only completes (compress → success) after that join
+lands, which by construction proves the ordering the source already
+guarantees: `join_session(...).await?` sits before the encryption-response
+send in a single linear `async fn`, so the mock's `read_packet` for that
+response cannot even be reached otherwise.
+
+**Honest limits / next — read before relying on this for a real server:**
+- **The full live chain end to end is still unverified against the real
+  Microsoft/Xbox/Mojang services.** Running it requires (a) a Microsoft
+  account to click through the device-code page, and (b) an Azure AD
+  application registered for device-code sign-in with Xbox Live delegated
+  permissions — the one-time setup every third-party launcher documents in
+  its own README, which only the account owner can do (MineRider deliberately
+  does not, and should not, ship a hardcoded client id). Neither is available
+  to an unattended coding session. Treat this the same as the vanilla-capture
+  gap in `docs/vanilla_capture.md`: implemented and tested against documented
+  behavior and a live mock of the *shape* of the exchange, not yet checked
+  against the real services.
+- Token persistence is manual: the CLI prints the refresh token to stderr for
+  the user to save as an environment variable. No on-disk token cache.
+  `resume()` does not fall back to `sign_in()` on failure (e.g. an expired
+  refresh token) — it just errors, so the user knows to unset the env var and
+  re-run.
+- No skin/cape data is fetched or used (irrelevant to protocol conformance,
+  since MineRider has no renderer).
+
+**Final verification for this session:** 236 workspace tests pass, strict
+clippy, rustfmt (hand-written files), protocol codegen drift, and both
+conformance-matrix tests — after the join-ordering test above. Offline-mode
+login re-confirmed live against the local Paper server (unaffected by any of
+this session's changes to `login()`).
+
+---
+
+## Stabilization session — build fix, generated-file formatting, RSA hardening, v0.1.0-alpha release prep (autonomous, owner away ~2h)
+
+Found the working tree mid-Phase-3k: `player.rs`'s new `players`/`event`
+modules and `play.rs`'s `BotEvent` broadcast plumbing were present, but
+`core/client.rs` had not been updated to match — **the workspace did not
+compile.** Fixed rather than reverted, since the in-progress design was
+sound and nearly complete:
+
+**Completed:**
+- **Build fix.** `Client` now owns a `broadcast::Sender<BotEvent>`, created
+  in `connect_inner` alongside the existing `state_tx`/`state_rx` watch pair,
+  cloned into `play::run_play` on each `run()` call; a new
+  `Client::events()` mirrors `bot_state()` as the push-based counterpart.
+  Separately, `players.rs` assumed `PacketPlayerInfoDataItemListed::True`
+  carried a `bool`, but minecraft-data models the `listed` field's wire type
+  as `varint` (same shape as `gamemode`) — the generated variant is
+  `True(i32)`. Fixed at the point of use (`listed != 0`); the wire bytes for
+  0/1 are identical either way, so this is a type-mismatch fix, not a
+  protocol-behavior change.
+- **Generated-file formatting made structurally safe.** `collision_data.rs`
+  has been accidentally reformatted into verbose rustfmt style by editor
+  auto-format hooks at least three times across prior sessions (Phases 3d,
+  3g, 3h), each time caught manually and restored via the generator. Adding
+  a `rustfmt.toml` `ignore` entry does not work on stable Rust (this
+  toolchain: `rustc`/`rustfmt` 1.9.0-stable) — `ignore` requires nightly.
+  `scripts/generate_collision_data.py` now emits `#[rustfmt::skip]` above
+  each generated item (the same mechanism `minerider-codegen` already uses
+  for its own output), so `cargo fmt --all --check` passes on the generated
+  file structurally instead of by convention, and an accidental
+  editor-triggered reformat is no longer possible. Verified deterministic:
+  regenerating twice produces byte-identical output.
+- **Security hardening (bounded task): RSA server-key size validation.**
+  `docs/engineering_review.md` §2 flagged this from the Phase 1 audit and it
+  was never addressed: `crypto::rsa::encrypt_pkcs1v15` accepted any DER key
+  size from the server's Encryption Request with no bound, so a malicious or
+  broken server could force several seconds of client CPU per encryption (two
+  happen per login) with an oversized key, or hand back a degenerate one.
+  Added `validate_key_bits` (512-4096 bits, vanilla's own keys are 1024-bit),
+  checked immediately after DER parsing and before any encryption attempt.
+  New tests: exact boundary behavior (pure function, no keygen needed) and an
+  end-to-end rejection using a real generated 384-bit key.
+- **Release hygiene for a public `v0.1.0-alpha`:** `LICENSE-MIT` /
+  `LICENSE-APACHE` (canonical texts; the Cargo manifests already declared
+  `MIT OR Apache-2.0` but the files didn't exist), `THIRD_PARTY_NOTICES.md`
+  for vendored `minecraft-data` (confirmed MIT upstream via the GitHub repo,
+  not assumed from memory), `SECURITY.md`, `CONTRIBUTING.md` (generated-file
+  rules, testing conventions, acceptable-use, alpha checklist), a rewritten
+  `README.md` (accurate phase/feature status, explicit "Lua not implemented
+  yet" instead of describing it as available, a Minecraft-branding
+  disclaimer, acceptable-use section, no unverified performance numbers),
+  a conservative GitHub Actions CI workflow (`fmt`/`test`/`clippy`/codegen
+  drift, Linux + Windows for the test job — created locally, not pushed),
+  and `Cargo.toml` metadata (`minerider-protocol` path dependency now
+  declares `version` so a future `cargo publish` isn't immediately blocked;
+  `readme` field added). Repository/homepage URL and legal author identity
+  were deliberately left unset — unknown, not guessed.
+- **Hygiene:** narrow `.gitignore` rule for local slash-command transcript
+  files (`*-local-command*.txt`) instead of a blanket `*.txt` exclusion;
+  confirmed no secrets, tokens, `.env` files, or the Microsoft refresh-token
+  cache are tracked or untracked-but-unignored.
+
+**Verification:** 251 workspace tests pass, 0 failed (was 249 before this
+session's two new RSA tests; the +2 from the prior session's uncommitted
+`players`/`event`/inventory work are included once the build was fixed).
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D
+warnings`, and `cargo run -p minerider-codegen -- --check` all clean.
+
+**Problems / honest limitations carried forward:**
+- The write-timeout and overall connect-to-play-deadline gaps from
+  `docs/engineering_review.md` §2 are still open (only the RSA key-size item
+  was picked for this session, per the "exactly one bounded task" rule) —
+  `Connection::send_packet`'s `write_all`/`flush` have no timeout, so a
+  server that stops reading can still hang a bot indefinitely.
+- Repository URL, homepage, and legal copyright identity remain unset in
+  `Cargo.toml`/`LICENSE-MIT` (generic "MineRider contributors" used) —
+  owner action needed before `cargo publish` or crates.io metadata matters.
+- No live end-to-end run against the real Microsoft/Xbox/Mojang services or
+  a real vanilla-client reference capture was performed this session (both
+  require human/account involvement, unchanged from Phase 3j).
+
+---
+
+## Phase 3l / 4a — resilient long-running authorized client runtime (autonomous)
+
+Closed the two lifecycle gaps left open by the previous session
+(`docs/engineering_review.md` §2: no write timeout, no overall
+connect-to-play deadline) and added a supervised-reconnect layer for
+authorized long-running clients — monitoring, QA/compatibility testing,
+authorized load testing. Explicitly **not** anti-AFK-kick or ban-evasion:
+reconnect is disabled unless opted in, and never retries after an explicit
+server rejection or a permanent auth/protocol error unless the policy is
+deliberately configured to.
+
+**Completed:**
+- **Write timeout.** `Connection::send_packet`'s `write_all` + `flush` now
+  run against one shared deadline (`write_frame_with_timeout`, a small
+  helper generic over `AsyncWrite` so it's unit-testable with an in-memory
+  fake instead of real, flaky TCP backpressure). Configurable via the new
+  `ConnectionTimeouts` struct and `ClientConfig::write_timeout`/
+  `with_write_timeout`; default 30s. On timeout the connection is marked
+  `write_failed` and every later `send_packet`/`read_packet` call fails fast
+  — a partially-sent, possibly-mid-frame write (and, for an encrypted
+  connection, a CFB8 keystream that has already advanced past bytes that
+  may never have reached the wire) cannot be proven safe to build on, so the
+  connection is treated as failed rather than silently reused.
+- **Overall connect-to-play deadline.** `Client::connect` now wraps its
+  whole TCP-connect → handshake → login → configuration sequence in one
+  `tokio::time::timeout` (`ClientConfig::connect_deadline`, default 60s) —
+  one shared budget, not reset at each stage, with the existing per-read
+  timeout still underneath as defense in depth. An internal `AtomicU8`
+  stage tracker (not a `Cell`, so the wrapping future stays `Send` for
+  `tokio::spawn` — `src/bin/swarm.rs` spawns `Client::connect` per bot)
+  means a deadline timeout names which stage it happened in
+  ("... exceeded during login"). The Mojang session-server `join` HTTP call
+  deliberately has no timeout of its own: it already runs inside this one
+  deadline, so a second independent timeout would just be two clocks racing
+  for nothing; documented at the call site in `login.rs`.
+- **`core::supervisor::ClientSupervisor`** (new module): owns connection
+  lifecycle policy across however many (re)connect attempts a
+  `ReconnectPolicy` allows, while `Client` still represents exactly one
+  session. `ClientSupervisor::new(cfg, policy)` returns `(Self,
+  SupervisorHandle)` — the handle (cloneable, obtained before `run()`
+  consumes the supervisor) exposes `events()`, `state()`, `status()` and
+  `stop()`, mirroring the existing `Client::control()`/`bot_state()`/
+  `events()` shape. `run()`'s loop is strictly sequential — one
+  `Client::connect` call site, always awaited to completion before any
+  retry — so duplicate simultaneous connection attempts for the same
+  account are structurally impossible, not just policy-discouraged.
+- **`RetryClass` + centralized classification** (`core::error`): every
+  `MineRiderError` maps to `Transient`, `ServerRejected`, `AuthFailure` or
+  `ProtocolIncompatible` via one method (`retry_class()`), tested directly —
+  not scattered string-matching. `ReconnectPolicy::decision_for(class)` is
+  the one place that turns a class into `Retry`/`Stop`.
+- **`ReconnectPolicy`**: `enabled` (default `false` — a bare `Client` or a
+  disabled-policy supervisor never auto-reconnects), `max_retries`
+  (`RetryLimit::Count`/`Unlimited`, default `Count(5)`), exponential backoff
+  (`initial_delay`/`max_delay`/`multiplier`, defaults 1s/60s/2.0), optional
+  `Jitter::Deterministic(fraction)` (a reproducible function of the attempt
+  number, not real randomness, so backoff tests stay deterministic even
+  with jitter on), `stable_session_reset` (a session connected at least this
+  long resets the backoff counter on its next failure, default 60s), and
+  per-class `RetryDecision` — defaults `Retry` only for `Transient`; `Stop`
+  for `ServerRejected`/`AuthFailure`/`ProtocolIncompatible` unless the
+  policy is explicitly reconfigured otherwise.
+- **Cancellation**: `tokio_util::sync::CancellationToken` (new dependency;
+  justification below), checked/awaited at every cancellable point — before
+  a connect attempt, mid-connect, mid-backoff-sleep, and while relaying a
+  live session's traffic — so `SupervisorHandle::stop()` interrupts a 30s
+  backoff sleep or a stalled connect attempt immediately rather than
+  waiting it out.
+- **Unified `BotEvent` stream**: rather than a second, competing event
+  type, `core::supervisor` added lifecycle variants directly to the
+  existing `BotEvent` enum (`Connecting`, `Connected`, `Disconnected`,
+  `ReconnectScheduled`, `RetryAttemptStarted`, `RetriesExhausted`,
+  `StoppedByCancellation`) alongside the existing play-session ones
+  (`Login`, `Health`, `Chat`, `Kicked`, ...). The supervisor relays a live
+  session's events onto its own long-lived channel and interleaves its own
+  lifecycle events on the same stream, so one subscription sees both.
+- **State staleness**: `SupervisorHandle::state()` is reset to
+  `StateSnapshot::default()` the instant a session ends (before any backoff
+  sleep), and `SupervisorHandle::status()` is a separate, always-current
+  `SupervisorStatus` (`Connecting`/`Connected`/`Disconnected`/
+  `ReconnectScheduled`/`Stopped`) — combined, an observer never sees a
+  frozen "still connected" snapshot after a disconnect, and never pays for
+  cloning world/chunk data on a lifecycle transition (`StateSnapshot` never
+  held that to begin with).
+- **Account safety**: the supervisor never touches the Microsoft/Xbox
+  device-code sign-in flow at all (that already happened once, upstream, in
+  `main.rs`, before a `ClientConfig` even exists) — it only ever reuses the
+  same already-completed `PremiumSession` across reconnect attempts, exactly
+  as a real launcher reconnecting multiple times would. If that session's
+  access token expires mid-campaign, the resulting `MineRiderError::Auth`
+  classifies as `AuthFailure`, whose default policy is `Stop` — no
+  hammering an expired token in a loop. Refreshing a premium session
+  automatically is out of scope for this milestone and was deliberately
+  left unimplemented rather than half-automated.
+- **CLI**: `MINERIDER_WRITE_TIMEOUT_SECS`, `MINERIDER_CONNECT_DEADLINE_SECS`,
+  `MINERIDER_RECONNECT=1`, `MINERIDER_MAX_RETRIES=<n|unlimited>`,
+  `MINERIDER_INITIAL_BACKOFF_MS`/`MINERIDER_MAX_BACKOFF_MS`. Default
+  behavior is unchanged (one-shot connect); reconnect mode prints each
+  lifecycle event and maps `SupervisorOutcome` to the process exit code.
+  `MINERIDER_TRACE` and the `MINERIDER_WALK_TO`/`MINERIDER_CHAT` manual test
+  hooks are not available together with `MINERIDER_RECONNECT` in this
+  milestone (documented, not silently ignored) — the supervisor doesn't yet
+  forward a control handle for whichever session is currently active.
+  Manually verified end-to-end against a closed port: lifecycle events
+  printed in the correct order (`Connecting` →
+  `ReconnectScheduled`/`RetryAttemptStarted` × 2 → exhausted), correct
+  `FAILURE` exit code, no hang, no crash.
+
+**New dependency: `tokio-util` (`sync` feature set, default-features off).**
+A hand-rolled `watch::channel<bool>` cancellation flag was tried first (no
+new dependency) and rejected: `watch::Receiver::wait_for`'s `Ok` value
+borrows the receiver, which conflicted with calling `&self` methods
+(`emit`/`set_status`) in the same `tokio::select!` arm (a real
+borrow-checker error, not a style preference), and the fallback of matching
+on `changed()` directly raises a *busy-loop* risk once the sending handle is
+ever dropped without calling `stop()` (a closed `watch` channel's
+`changed()` resolves immediately forever after). `tokio_util::sync::
+CancellationToken` — the Tokio project's own purpose-built primitive for
+exactly this — has neither problem and is a small, official, actively
+maintained addition (`futures-sink` is its only extra transitive
+dependency).
+
+**Tests added** (all against local mock servers/sockets, no real network,
+paused/short real time — no multi-second sleeps): `connection.rs` — write
+success within timeout, `write_all`-stage and `flush`-stage timeout
+identification (via `tokio::io::duplex` and a `poll_flush`-always-pending
+wrapper), poisoning classification; `error.rs` — `retry_class()` for every
+error variant; `supervisor.rs` — backoff growth/cap, deterministic-jitter
+reproducibility and bounds, disabled-policy-never-retries, enabled-policy
+defaults, opt-in override, retry-limit counting;
+`tests/connect_deadline.rs` — deadline firing mid-login (naming the stage)
+and a healthy connect completing well within a generous deadline;
+`tests/supervisor.rs` — full lifecycle-event-order + state-reset-on-
+disconnect, transient-disconnect-then-successful-reconnect (a real second
+TCP connection, sequentially, not concurrently), max-retries-exhausted
+(real connection-refused), cancellation interrupting a 30s backoff in
+under 2s, explicit server rejection *not* retried by default, and a
+permanent protocol-incompatibility (online-mode required, no premium
+session attached) *not* retried by default.
+
+**Verification:** 275 workspace tests pass, 0 failed (was 251; +24: 2 RSA
+tests were already counted, +4 connection, +1 error, +6 supervisor unit,
++2 connect_deadline, +6 tests/supervisor — some earlier counts overlap
+milestones, see each module's own test output for the authoritative
+per-file count). `cargo fmt --all --check`, `cargo clippy --workspace
+--all-targets -D warnings`, and `cargo run -p minerider-codegen -- --check`
+all clean.
+
+**Honest limitations:**
+- The supervisor does not forward a `ControlHandle`/chat/movement API for
+  whichever session is currently active — only lifecycle/state/event
+  observability. Driving a supervised bot's movement is a follow-up.
+- No premium-session refresh/renewal during a long reconnect campaign — an
+  expired access token stops the supervisor (`AuthFailure` → default
+  `Stop`) rather than being silently re-authenticated.
+- `RetryClass::ProtocolIncompatible` and `AuthFailure` are grouped by the
+  *shape* of the underlying `MineRiderError` variant, not by inspecting
+  message text; a future error variant added without updating
+  `retry_class()`'s match would need the match arm added deliberately (the
+  match is exhaustive today, so the compiler enforces this for any new
+  variant).
+- The exact-count assertion in `tests/supervisor.rs`'s reconnect test proves
+  attempts happen sequentially for that scenario; there is no separate
+  stress test hammering the supervisor with concurrent `stop()`/status
+  reads from multiple tasks.
+- No live Microsoft/Xbox/Mojang or real vanilla-server run this session
+  (unchanged from prior sessions — both require human/account involvement).

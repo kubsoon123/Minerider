@@ -79,6 +79,13 @@ impl MockServer {
         Self::start(Mode::TeleportCorrection).await
     }
 
+    /// Plain login, then during configuration the server offers a resource
+    /// pack. The mock asserts the client declines it (echoing the offered
+    /// uuid) rather than staying silent or claiming to have loaded it.
+    pub async fn start_resource_pack() -> MockServer {
+        Self::start(Mode::ResourcePack).await
+    }
+
     async fn start(mode: Mode) -> MockServer {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -113,6 +120,7 @@ enum Mode {
     JoinIdle,
     ChunkStreaming,
     TeleportCorrection,
+    ResourcePack,
 }
 
 fn ensure(cond: bool, msg: impl Into<String>) -> Result<()> {
@@ -245,6 +253,49 @@ async fn run_server(
         )?;
     }
 
+    if mode == Mode::ResourcePack {
+        use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
+        use minerider_protocol::traits::Encode;
+
+        const OFFERED_PACK_UUID: u128 = 0x1234_5678_9abc_def0_1122_3344_5566_7788;
+        let pack = PacketCommonAddResourcePack {
+            uuid: OFFERED_PACK_UUID,
+            url: "https://example.invalid/pack.zip".to_string(),
+            hash: String::new(),
+            forced: false,
+            prompt_message: None,
+        };
+        let mut w = PacketWriter::new();
+        pack.encode(&mut w)
+            .map_err(|e| MineRiderError::Protocol(format!("mock server: encode pack: {e}")))?;
+        conn.send_packet(
+            configuration::CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+            &w.into_inner(),
+        )
+        .await?;
+
+        let response = conn.read_packet().await?;
+        ensure(
+            response.id == configuration::SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+            format!(
+                "expected resource_pack_receive 0x{:02x}, got 0x{:02x}",
+                configuration::SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+                response.id
+            ),
+        )?;
+        let mut r = PacketReader::new(&response.payload);
+        let uuid = r.read_uuid()?;
+        let result = r.get_varint()?;
+        ensure(
+            uuid == OFFERED_PACK_UUID,
+            "resource_pack_receive echoed the wrong pack uuid",
+        )?;
+        ensure(
+            result == 1,
+            format!("expected declined (result=1), got {result}"),
+        )?;
+    }
+
     // Configuration: Finish Configuration (S2C 0x03), expect C2S 0x03.
     if mode == Mode::ConfigDisconnect {
         // Configuration Disconnect (S2C 0x02) instead: the reason is a
@@ -362,10 +413,53 @@ async fn run_server(
         _ => {}
     }
 
+    if mode == Mode::ResourcePack {
+        // The identical exchange also happens in the play state (a distinct
+        // packet id from the configuration-state one, same wire shape);
+        // vanilla answers it there too, not just during configuration.
+        use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
+        use minerider_protocol::traits::Encode;
+
+        const PLAY_PACK_UUID: u128 = 0x1122_3344_5566_7788_99aa_bbcc_ddee_ff00;
+        let pack = PacketCommonAddResourcePack {
+            uuid: PLAY_PACK_UUID,
+            url: "https://example.invalid/play-pack.zip".to_string(),
+            hash: String::new(),
+            forced: false,
+            prompt_message: None,
+        };
+        let mut w = PacketWriter::new();
+        pack.encode(&mut w)
+            .map_err(|e| MineRiderError::Protocol(format!("mock server: encode pack: {e}")))?;
+        conn.send_packet(play::CLIENTBOUND_ADD_RESOURCE_PACK_ID, &w.into_inner())
+            .await?;
+
+        let response = conn.read_packet().await?;
+        ensure(
+            response.id == play::SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+            format!(
+                "expected play resource_pack_receive 0x{:02x}, got 0x{:02x}",
+                play::SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+                response.id
+            ),
+        )?;
+        let mut r = PacketReader::new(&response.payload);
+        let uuid = r.read_uuid()?;
+        let result = r.get_varint()?;
+        ensure(
+            uuid == PLAY_PACK_UUID,
+            "play resource_pack_receive echoed the wrong pack uuid",
+        )?;
+        ensure(
+            result == 1,
+            format!("expected declined (result=1), got {result}"),
+        )?;
+    }
+
     // Play state: keep-alives (S2C 0x27, i64 payload), expect C2S 0x1a echoes.
     let keepalive_ids: &[i64] = match mode {
         Mode::Encrypted | Mode::JoinIdle => &[42, 43, 44],
-        Mode::Plain => &[42],
+        Mode::Plain | Mode::ResourcePack => &[42],
         Mode::ConfigDisconnect | Mode::ChunkStreaming | Mode::TeleportCorrection => {
             unreachable!("non-keepalive mock modes returned earlier")
         }

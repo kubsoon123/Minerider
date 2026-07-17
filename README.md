@@ -1,50 +1,126 @@
 # MineRider
 
-A high performance Minecraft Java Edition client engine: **Rust core, Lua
-scripting, generated protocol**. Built to run many bots per machine with
-low RAM and low CPU, while staying close to vanilla behavior.
+A Minecraft Java Edition client engine written in Rust, built to run many
+bots per machine with low RAM and low CPU while staying close to vanilla
+behavior. Aimed at server QA, load/soak testing, training-data collection and
+automation on servers you own or are explicitly authorized to connect to.
 
-Target version: **Minecraft 1.21.4** (protocol 769). The protocol layer is
-designed so future versions are generated, not hand-maintained.
+> **v0.1.0-alpha.** Early, actively developed software. APIs, wire coverage
+> and behavior can change without notice. Read the "Status" section below
+> before relying on this for anything beyond experimentation.
+
+MineRider is an independent project and is not an official Minecraft product.
+It is not approved by or associated with Mojang or Microsoft.
+
+Target version: **Minecraft Java Edition 1.21.4** (protocol 769). The
+protocol layer is generated from vendored `minecraft-data`, so future
+versions are added by regenerating, not hand-editing packet code.
+
+## Acceptable use
+
+MineRider is built for **authorized use only**: your own servers, or servers
+whose operator has explicitly agreed to let you connect bots for testing,
+monitoring or automation. It is not designed for, and must not be used for,
+anti-cheat bypassing, AFK-kick evasion, ban evasion, proxy rotation, chat
+spam, griefing, or account farming. If a feature would only make sense as a
+way to hide bots from server administrators, it does not belong in this
+project (see `CONTRIBUTING.md`).
 
 ## Status
 
-Early development. Phase 1 (connection core) and phase 2 (minecraft-data
-packet pipeline) are complete — see [docs/progress.md](docs/progress.md)
-and [docs/codegen.md](docs/codegen.md). Local Paper and official vanilla
-1.21.4 server validation passes login, play entry, keep-alives, teleport
-confirmation, chunk-batch acknowledgement, and a 55-minute idle soak.
-Full vanilla-client reference parity remains pending; see the
-[validation report](docs/paper_1_21_4_validation_report.md).
+Actively developed. Phases 1–2 (connection core, generated protocol) are
+complete and validated against a local Paper 1.21.4 server and the official
+Mojang vanilla 1.21.4 server (login, encryption, compression, keep-alives, a
+55-minute idle soak). Phase 3 (world/tick engine, player and entity state,
+physics, inventory, tab list, bot events, control API, premium auth) is
+underway — see [docs/progress.md](docs/progress.md) for the detailed,
+chronological log of what has landed and what its known gaps are.
+
+**Implemented and exercised** (unit tests, mock-server integration tests,
+and/or a live local-server run — see `docs/progress.md` for which, per
+feature):
+
+- Handshake → login → configuration → play, with RSA/AES-128-CFB8 encryption
+  and zlib compression.
+- A fully generated 1.21.4 packet layer (237 packets) — no hand-maintained
+  packet ids or layouts.
+- World state: chunk/section decoding, block storage, collision shapes.
+- Vanilla-shaped player physics: gravity, walking/sprinting/jumping,
+  friction-aware ground movement, step-up, knockback, auto-respawn.
+- Entity tracking, inventory/container state tracking, tab-list (player
+  info) tracking.
+- A push-based bot event stream (`Client::events`) and a pull-based state
+  snapshot (`Client::bot_state`), plus a command-based control API
+  (`Client::control`) for movement, look and chat.
+- Reliability: a configurable write timeout and an overall connect-to-play
+  deadline (`ClientConfig::write_timeout`/`connect_deadline`), and a
+  `core::supervisor::ClientSupervisor` for long-running authorized clients
+  — reconnect-with-backoff, centralized retry classification, and clean
+  cancellation. Reconnect is disabled by default and never retries after an
+  explicit server rejection or a permanent auth/protocol error unless
+  explicitly configured to; see the example below and
+  [`core::supervisor`](src/core/supervisor.rs) for the full policy surface.
+- Offline-mode (cracked-server) login.
+- Microsoft/Xbox Live/Minecraft Services (premium) login — implemented and
+  unit-tested against realistic fixtures and a local mock session server;
+  **the full live chain against the real Microsoft/Xbox/Mojang services has
+  not been run in this environment** (it requires a real Microsoft account
+  and cannot be exercised by an automated session). Treat it as
+  implemented-and-tested-against-spec, not field-proven, until you've run it
+  yourself once.
+- A conformance/tracing harness (`src/trace`, `tests/conformance*`) that
+  captures and diffs real packet traces against documented vanilla behavior.
+
+**Partial or unverified:**
+
+- Byte/timing parity with a real official vanilla client has not been
+  captured (see [docs/vanilla_capture.md](docs/vanilla_capture.md)); current
+  evidence is unit tests, mock-server assertions, and local Paper/vanilla
+  server runs, which is a real but narrower guarantee than a client-to-client
+  diff.
+- Physics branches not yet implemented: fluids (water/lava), ladders/
+  climbables, elytra, potion-effect movement modifiers, honey/soul-sand
+  slowdown multipliers.
+- No sending of inventory actions (`window_click`) — containers are tracked
+  read-only.
+- No pathfinding/obstacle avoidance (`walk_to` is straight-line steering).
+- No chat message signing (messages are sent unsigned; servers that enforce
+  secure chat will reject or kick for this).
+
+**Not implemented:**
+
+- **Lua scripting.** The architecture anticipates a Lua automation layer
+  (`minerider-lua`, see roadmap in `docs/engineering_review.md`), but it does
+  not exist yet in this repository: there is no `src/lua`, no `.lua` files,
+  and no `mlua` dependency. Bots are currently driven directly through the
+  Rust `Client` API (`control()`, `bot_state()`, `events()`). Treat any
+  mention of Lua elsewhere in the docs as a roadmap item, not a shipped
+  feature.
 
 ## Architecture
 
 ```text
-                  User Bots
-                     |
-               Lua API Layer
+                  Your bot code (Rust, via Client)
                      |
              MineRider Engine
                      |
 ---------------------------------------------
- Network | Protocol | World | Physics | Behavior
+ Network | Protocol | World | Physics | State
 ---------------------------------------------
                      |
              Minecraft Server
 ```
 
-- **Rust** owns everything performance critical: TCP, async runtime (tokio),
-  protocol, encryption (RSA + AES-128-CFB8), compression (zlib), world
-  state, entities, physics, tick engine.
-- **Lua** (mlua, phase 5) owns bot logic, automation and plugins.
+- **Rust** owns everything: TCP, async runtime (tokio), protocol, encryption
+  (RSA + AES-128-CFB8), compression (zlib), world state, entities, physics,
+  tick engine, inventory/player-list tracking, Microsoft/Xbox Live auth.
 - **Protocol definitions are generated from minecraft-data** into
-  `crates/minerider-protocol/src/generated/` and never edited by hand
-  (237 packets for 1.21.4).
+  `crates/minerider-protocol/src/generated/` and are never edited by hand.
 
 Bots share static data globally (registries, packet definitions, block/item
-data); each bot stores only its own connection, player state and the world
-cache it actually needs. Crate-level details, wire byte order and benchmark
-numbers live in [docs/architecture.md](docs/architecture.md).
+data, collision tables); each bot stores only its own connection, player
+state and the world cache it actually needs. Crate-level details and the
+byte-level pipeline live in [docs/architecture.md](docs/architecture.md).
 
 ## Layout
 
@@ -58,22 +134,90 @@ crates/
 src/
   core/         client facade, state machine, tick engine, error type
   network/      async TCP transport, connection manager
-  minecraft/    handshake, login, configuration, play state handling
-  lua/          scripting API (phase 5)
-tests/          integration tests (mock server, raw-socket stream edge cases)
-docs/           architecture notes, codegen pipeline, progress log
+  minecraft/    handshake, login, configuration, play state, world, physics,
+                player/entity/inventory/player-list state, control, events
+  auth/         Microsoft/Xbox Live/Minecraft Services premium login
+  trace/        packet capture, normalization and semantic diffing
+  bin/          conformance_matrix (docs generator), swarm (many-bots demo)
+tests/          integration tests (mock server, conformance scenarios,
+                raw-socket stream edge cases)
+docs/           architecture, codegen pipeline, progress log, validation
+                reports, conformance matrix
 ```
 
 ## Development
 
 ```sh
 cargo build
-cargo test
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all --check
 cargo run -p minerider-codegen -- --check   # generated-files drift gate
 ```
 
-Live-server tests are gated behind environment variables and never run by
-default.
+`crates/minerider-protocol/src/generated/**` and
+`src/minecraft/collision_data.rs` are machine-generated — regenerate them
+with `cargo run -p minerider-codegen` and `python
+scripts/generate_collision_data.py` respectively; never hand-edit them (see
+[CONTRIBUTING.md](CONTRIBUTING.md)).
+
+Live-server tests and the premium-login CLI path require real network access
+and, for premium login, a Microsoft account; neither runs as part of the
+default test suite.
+
+### Basic usage
+
+```sh
+cargo run -- <host> <port> <username>            # offline-mode connect
+MINERIDER_PREMIUM=1 cargo run -- <host> <port> <ignored-username>  # premium
+cargo run --bin swarm -- <host> <port> <count> [username_prefix]   # many bots
+
+# Long-running, authorized client with reconnect-with-backoff. Only use this
+# against servers you own or are explicitly permitted to run bots on.
+MINERIDER_RECONNECT=1 MINERIDER_MAX_RETRIES=10 cargo run -- <host> <port> <username>
+```
+
+See `src/main.rs` for the full set of `MINERIDER_*` environment variables
+(view distance, packet tracing, scripted walk/chat for manual testing,
+reconnect/backoff/timeouts).
+
+### Reconnect supervisor (library usage)
+
+For authorized monitoring, compatibility testing, or a long-running bot,
+`core::supervisor::ClientSupervisor` layers reconnect-with-backoff on top of
+an ordinary `Client` — it never fakes activity and never retries after an
+explicit server rejection or a permanent auth/protocol error unless you
+configure it to:
+
+```rust
+use minerider::core::client::ClientConfig;
+use minerider::core::supervisor::{ClientSupervisor, ReconnectPolicy};
+
+let cfg = ClientConfig::new("localhost", 25565, "MonitorBot");
+let policy = ReconnectPolicy::enabled(); // disabled by default; opt in explicitly
+let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
+
+// Observe from another task: handle.events() / handle.state() / handle.status().
+// handle.stop() requests a clean shutdown from anywhere, at any point.
+let outcome = supervisor.run().await;
+```
+
+See [docs/progress.md](docs/progress.md) (Phase 3l / 4a) for the full
+design — retry classification, backoff shape, cancellation, and the current
+limitation that a supervised session doesn't yet expose a control handle for
+movement/chat.
+
+## Honest limitations
+
+- This is alpha software from an actively changing codebase; expect breaking
+  API changes between versions.
+- Only Minecraft 1.21.4 (protocol 769) is supported today.
+- No performance claims (bots/core, RAM/bot, "N bots on a machine") are made
+  in this README; aspirational targets and any measured numbers that do
+  exist live in `docs/engineering_review.md` and are explicitly labeled as
+  goals, not guarantees, unless backed by a benchmark in this repository.
+- See the "Partial or unverified" and "Not implemented" sections above for
+  the concrete gaps, and `docs/progress.md` for the full history.
 
 ## History
 
@@ -81,6 +225,31 @@ MineRider supersedes BAC, a LuaJIT prototype that proved the concept and was
 retired. Everything worth keeping from it is documented in
 [docs/bac_analysis.md](docs/bac_analysis.md); no BAC code survives.
 
+## Documentation index
+
+- [docs/architecture.md](docs/architecture.md) — crate/module design, wire
+  pipeline, benchmarks.
+- [docs/codegen.md](docs/codegen.md) — the minecraft-data → Rust generator.
+- [docs/progress.md](docs/progress.md) — chronological development log.
+- [docs/vanilla_conformance_1_21_4.md](docs/vanilla_conformance_1_21_4.md) —
+  generated packet coverage/obligation matrix.
+- [docs/real_server_validation.md](docs/real_server_validation.md) and
+  [docs/paper_1_21_4_validation_report.md](docs/paper_1_21_4_validation_report.md)
+  — real-server validation evidence.
+- [docs/vanilla_capture.md](docs/vanilla_capture.md) — the manual procedure
+  for a real vanilla-client reference capture (not yet performed).
+- [docs/engineering_review.md](docs/engineering_review.md) — architecture,
+  security and performance audit, and the longer-term roadmap.
+- [docs/lua_design.md](docs/lua_design.md) — design for the planned Lua
+  scripting layer (not implemented yet; see "Not implemented" above).
+- [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) — reporting
+  vulnerabilities, contribution and codegen rules.
+
 ## License
 
-MIT OR Apache-2.0
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
+[MIT license](LICENSE-MIT) at your option.
+
+Vendored `minecraft-data` (used only at build time by the protocol
+generator) is upstream-licensed separately; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

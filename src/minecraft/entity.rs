@@ -51,7 +51,7 @@ pub struct Entity {
 }
 
 /// Table of tracked entities keyed by entity id.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EntityStore {
     entities: HashMap<i32, Entity>,
 }

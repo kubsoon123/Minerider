@@ -205,7 +205,15 @@ impl World {
             .get((local_y * 16 + local_z) * 16 + local_x)
     }
 
-    pub fn collision_boxes(&self, area: Aabb, out: &mut Vec<Aabb>) -> Result<()> {
+    /// Collects the collision boxes touching `area`. Returns `Ok(true)` when
+    /// every touched block was loaded; `Ok(false)` when the query reached
+    /// terrain we have no chunk for yet (a live server can legitimately have
+    /// a momentary streaming gap at the edge of view distance, or right after
+    /// a server-driven teleport) — `out` should be discarded and the caller
+    /// should skip this physics step rather than treat it as fatal. An
+    /// unrecognized block-state id is a genuine data bug in our generated
+    /// collision tables, so that case stays a hard error.
+    pub fn collision_boxes(&self, area: Aabb, out: &mut Vec<Aabb>) -> Result<bool> {
         let min_x = area.min_x.floor() as i32;
         let max_x = area.max_x.ceil() as i32;
         let min_y = area.min_y.floor() as i32;
@@ -215,11 +223,9 @@ impl World {
         for y in min_y..max_y {
             for z in min_z..max_z {
                 for x in min_x..max_x {
-                    let state = self.block_state(x, y, z).ok_or_else(|| {
-                        protocol(format!(
-                            "collision query crosses unloaded block {x},{y},{z}"
-                        ))
-                    })?;
+                    let Some(state) = self.block_state(x, y, z) else {
+                        return Ok(false);
+                    };
                     let shapes = collision_boxes(state)
                         .ok_or_else(|| protocol(format!("unknown block state id {state}")))?;
                     out.extend(
@@ -230,7 +236,7 @@ impl World {
                 }
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     pub fn apply_block_change(&mut self, packet: &PacketBlockChange) -> Result<()> {
@@ -416,5 +422,35 @@ mod tests {
         world.set_block_state(-1, 64, 32, 42).unwrap();
         assert_eq!(world.block_state(-1, 64, 32), Some(42));
         assert_eq!(world.block_state(-2, 64, 32), Some(0));
+    }
+
+    #[test]
+    fn collision_boxes_reports_incomplete_for_unloaded_terrain() {
+        // No chunk inserted at all: any query into it is unloaded terrain,
+        // not a fatal error — the caller decides to skip the physics tick.
+        let world = World::new(dimension());
+        let mut out = Vec::new();
+        let complete = world
+            .collision_boxes(Aabb::new(0.0, 60.0, 0.0, 1.0, 61.0, 1.0), &mut out)
+            .expect("unloaded terrain is not an error");
+        assert!(!complete);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn collision_boxes_reports_complete_for_loaded_terrain() {
+        // packet() places its chunk at (-1, 2): blocks x in [-16,-1], z in [32,47].
+        let mut data = Vec::new();
+        for section in 0..24 {
+            data.extend(single_section(if section == 7 { 1 } else { 0 }, 0));
+        }
+        let mut world = World::new(dimension());
+        world.insert_chunk(&packet(data)).unwrap();
+        let mut out = Vec::new();
+        let complete = world
+            .collision_boxes(Aabb::new(-8.8, 63.0, 32.2, -8.2, 65.0, 32.8), &mut out)
+            .expect("loaded terrain succeeds");
+        assert!(complete);
+        assert!(!out.is_empty(), "the stone floor at y=63 contributed a box");
     }
 }

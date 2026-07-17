@@ -1,5 +1,32 @@
 //! Vanilla-aligned player AABB collision primitives.
 
+use std::sync::OnceLock;
+
+/// Vanilla `Mth` sine lookup table: 65536 entries over a full turn. The client
+/// and server both drive movement through this table rather than `Math.sin`,
+/// so reproducing it bit-for-bit is what lets a server's movement re-simulation
+/// agree with ours for any non-cardinal facing.
+fn sin_table() -> &'static [f32; 65536] {
+    static TABLE: OnceLock<Box<[f32; 65536]>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table = Box::new([0.0f32; 65536]);
+        for (i, slot) in table.iter_mut().enumerate() {
+            *slot = (i as f64 * std::f64::consts::PI * 2.0 / 65536.0).sin() as f32;
+        }
+        table
+    })
+}
+
+/// `Mth.sin`: table index `(int)(radians * 10430.378F) & 65535`.
+pub fn mc_sin(radians: f32) -> f32 {
+    sin_table()[((radians * 10430.378_f32) as i32 & 0xffff) as usize]
+}
+
+/// `Mth.cos`: the sine table offset by a quarter turn (16384 entries).
+pub fn mc_cos(radians: f32) -> f32 {
+    sin_table()[((radians * 10430.378_f32 + 16384.0_f32) as i32 & 0xffff) as usize]
+}
+
 /// Axis-aligned bounding box in world or block-local coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Aabb {
@@ -78,11 +105,11 @@ pub struct CollisionResult {
     pub on_ground: bool,
 }
 
-/// Clips requested movement against the supplied world-space voxel boxes.
-/// Vanilla resolves Y first, then one horizontal axis followed by the other;
-/// the longer requested horizontal component is resolved first.
-pub fn collide(aabb: Aabb, movement: Vec3, boxes: &[Aabb]) -> CollisionResult {
-    let requested = movement;
+/// Clips a requested movement vector against the supplied world-space voxel
+/// boxes, returning the actual displacement. Vanilla resolves Y first, then one
+/// horizontal axis followed by the other; the longer requested horizontal
+/// component is resolved first. This is vanilla's `collideBoundingBox`.
+pub fn clip_movement(aabb: Aabb, movement: Vec3, boxes: &[Aabb]) -> Vec3 {
     let mut moved = aabb;
 
     let mut y = movement.y;
@@ -109,13 +136,125 @@ pub fn collide(aabb: Aabb, movement: Vec3, boxes: &[Aabb]) -> CollisionResult {
         (x, z)
     };
 
-    let vertical_collision = y != requested.y;
+    Vec3 { x, y, z }
+}
+
+/// Builds a [`CollisionResult`] from an actual displacement and the requested
+/// one. A step-up leaves `movement.y` positive against a negative request, so
+/// the same `vertical_collision && requested.y < 0` rule keeps the entity
+/// grounded exactly as vanilla's `setOnGroundWithMovement` does.
+fn collision_result(movement: Vec3, requested: Vec3) -> CollisionResult {
+    let vertical_collision = movement.y != requested.y;
     CollisionResult {
-        movement: Vec3 { x, y, z },
-        horizontal_collision: x != requested.x || z != requested.z,
+        movement,
+        horizontal_collision: movement.x != requested.x || movement.z != requested.z,
         vertical_collision,
         on_ground: vertical_collision && requested.y < 0.0,
     }
+}
+
+/// Clips movement with no step-up assist (the plain collision case).
+pub fn collide(aabb: Aabb, movement: Vec3, boxes: &[Aabb]) -> CollisionResult {
+    collision_result(clip_movement(aabb, movement, boxes), movement)
+}
+
+/// Clips movement with vanilla's auto step-up (`Entity.collide`): when a
+/// grounded entity's horizontal move is blocked, it retries lifted by up to
+/// `step_height` (0.6 for a player) and keeps the variant that travels farther
+/// horizontally, then settles back down. This is what lets a walking bot climb
+/// slabs, paths and single steps without jumping.
+pub fn collide_with_step(
+    aabb: Aabb,
+    movement: Vec3,
+    step_height: f64,
+    on_ground: bool,
+    boxes: &[Aabb],
+) -> CollisionResult {
+    let base = clip_movement(aabb, movement, boxes);
+    let blocked_horizontally = base.x != movement.x || base.z != movement.z;
+    let vertical_below = base.y != movement.y && movement.y < 0.0;
+    let can_step = on_ground || vertical_below;
+
+    let mut chosen = base;
+    if step_height > 0.0 && can_step && blocked_horizontally {
+        // Probe 1: the whole move, lifted by the full step height.
+        let mut stepped = clip_movement(
+            aabb,
+            Vec3 {
+                x: movement.x,
+                y: step_height,
+                z: movement.z,
+            },
+            boxes,
+        );
+        // Probe 2: lift first (over the box expanded toward the move), then
+        // move horizontally from there — reaches steps the combined probe skims.
+        let lift = clip_movement(
+            expand_towards(aabb, movement.x, 0.0, movement.z),
+            Vec3 {
+                x: 0.0,
+                y: step_height,
+                z: 0.0,
+            },
+            boxes,
+        );
+        if lift.y < step_height {
+            let after_lift = vec_add(
+                clip_movement(
+                    aabb.moved(lift.x, lift.y, lift.z),
+                    Vec3 {
+                        x: movement.x,
+                        y: 0.0,
+                        z: movement.z,
+                    },
+                    boxes,
+                ),
+                lift,
+            );
+            if horizontal_sqr(after_lift) > horizontal_sqr(stepped) {
+                stepped = after_lift;
+            }
+        }
+        if horizontal_sqr(stepped) > horizontal_sqr(base) {
+            // Settle back down onto the stepped-up surface.
+            let settle = clip_movement(
+                aabb.moved(stepped.x, stepped.y, stepped.z),
+                Vec3 {
+                    x: 0.0,
+                    y: -stepped.y + movement.y,
+                    z: 0.0,
+                },
+                boxes,
+            );
+            chosen = vec_add(stepped, settle);
+        }
+    }
+
+    collision_result(chosen, movement)
+}
+
+fn vec_add(a: Vec3, b: Vec3) -> Vec3 {
+    Vec3 {
+        x: a.x + b.x,
+        y: a.y + b.y,
+        z: a.z + b.z,
+    }
+}
+
+fn horizontal_sqr(v: Vec3) -> f64 {
+    v.x * v.x + v.z * v.z
+}
+
+/// Grows an AABB in the direction of `(dx, dy, dz)` (vanilla `expandTowards`).
+fn expand_towards(aabb: Aabb, dx: f64, dy: f64, dz: f64) -> Aabb {
+    Aabb::new(
+        aabb.min_x + dx.min(0.0),
+        aabb.min_y + dy.min(0.0),
+        aabb.min_z + dz.min(0.0),
+        aabb.max_x + dx.max(0.0),
+        aabb.max_y + dy.max(0.0),
+        aabb.max_z + dz.max(0.0),
+    )
 }
 
 fn clip_x(aabb: Aabb, mut movement: f64, boxes: &[Aabb]) -> f64 {
@@ -142,6 +281,21 @@ fn clip_z(aabb: Aabb, mut movement: f64, boxes: &[Aabb]) -> f64 {
         }
     }
     movement
+}
+
+/// The default block friction shared by nearly every block (stone, dirt, …).
+pub const DEFAULT_FRICTION: f64 = 0.6;
+
+/// Vanilla `Block.getFriction()` for a 1.21.4 global state id: the default
+/// `0.6` except for the ice family, blue ice and slime, whose overrides are
+/// generated into [`collision_data::FRICTION_OVERRIDES`].
+pub fn block_friction(state_id: u32) -> f64 {
+    for &(lo, hi, friction) in super::collision_data::FRICTION_OVERRIDES {
+        if state_id >= lo && state_id <= hi {
+            return f64::from(friction);
+        }
+    }
+    DEFAULT_FRICTION
 }
 
 /// Returns the exact block-local collision boxes for a 1.21.4 global state id.
@@ -187,6 +341,115 @@ mod tests {
         assert!((result.movement.y + 0.1).abs() < 1.0e-12);
         assert!(result.vertical_collision);
         assert!(result.on_ground);
+    }
+
+    #[test]
+    fn block_friction_matches_vanilla_overrides() {
+        // Overrides come from f32 literals, so compare within f32 granularity.
+        let approx = |got: f64, want: f64| (got - want).abs() < 1.0e-6;
+        assert_eq!(block_friction(0), DEFAULT_FRICTION); // air
+        assert_eq!(block_friction(1), DEFAULT_FRICTION); // stone
+        assert!(approx(block_friction(5949), 0.98)); // ice
+        assert!(approx(block_friction(11243), 0.8)); // slime block
+        assert!(approx(block_friction(11625), 0.98)); // packed ice
+        assert!(approx(block_friction(13554), 0.98)); // frosted ice (mid-range)
+        assert!(approx(block_friction(13954), 0.989)); // blue ice
+    }
+
+    #[test]
+    fn mth_trig_matches_vanilla_table_and_cardinals() {
+        // Cardinal yaws used by moveRelative: exact table entries.
+        assert!((mc_sin(0.0)).abs() < 1.0e-6);
+        assert!((mc_cos(0.0) - 1.0).abs() < 1.0e-6);
+        let half_pi = std::f32::consts::FRAC_PI_2;
+        assert!((mc_sin(half_pi) - 1.0).abs() < 1.0e-4);
+        assert!((mc_cos(half_pi)).abs() < 1.0e-4);
+        // The table approximation stays within its ~1e-4 granularity of the
+        // true trig functions across arbitrary angles.
+        for step in -8..=8 {
+            let r = step as f32 * 0.37;
+            assert!((mc_sin(r) - r.sin()).abs() < 1.0e-3, "sin at {r}");
+            assert!((mc_cos(r) - r.cos()).abs() < 1.0e-3, "cos at {r}");
+        }
+    }
+
+    #[test]
+    fn step_up_climbs_a_half_block_step() {
+        // Feet at y=1 on a floor; a 0.5-high slab at x=1 blocks the path.
+        let player = Aabb::new(0.2, 1.0, 0.2, 0.8, 2.8, 0.8);
+        let boxes = [
+            Aabb::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), // floor
+            Aabb::new(1.0, 1.0, 0.0, 2.0, 1.5, 1.0), // 0.5 slab step
+        ];
+        let result = collide_with_step(
+            player,
+            Vec3 {
+                x: 0.4,
+                y: -0.08,
+                z: 0.0,
+            },
+            0.6,
+            true,
+            &boxes,
+        );
+        // Advanced in x and rose onto the slab top (feet 1.0 -> 1.5).
+        assert!(
+            result.movement.x > 0.39,
+            "advanced past the step: {:?}",
+            result.movement
+        );
+        assert!(
+            (result.movement.y - 0.5).abs() < 1.0e-9,
+            "stepped up 0.5: {:?}",
+            result.movement
+        );
+        assert!(result.on_ground);
+    }
+
+    #[test]
+    fn step_up_does_not_climb_a_full_block() {
+        // A 1.0-high block exceeds the 0.6 step height, so the move is blocked.
+        let player = Aabb::new(0.2, 1.0, 0.2, 0.8, 2.8, 0.8);
+        let boxes = [
+            Aabb::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), // floor
+            Aabb::new(1.0, 1.0, 0.0, 2.0, 2.0, 1.0), // full block wall
+        ];
+        let result = collide_with_step(
+            player,
+            Vec3 {
+                x: 0.4,
+                y: -0.08,
+                z: 0.0,
+            },
+            0.6,
+            true,
+            &boxes,
+        );
+        assert!(
+            result.movement.x.abs() < 0.21,
+            "blocked by full block: {:?}",
+            result.movement
+        );
+        assert!(result.horizontal_collision);
+    }
+
+    #[test]
+    fn step_up_is_skipped_when_airborne() {
+        // Not grounded and not landing: no step assist, the slab blocks the move.
+        let player = Aabb::new(0.2, 1.0, 0.2, 0.8, 2.8, 0.8);
+        let boxes = [Aabb::new(1.0, 1.0, 0.0, 2.0, 1.5, 1.0)];
+        let result = collide_with_step(
+            player,
+            Vec3 {
+                x: 0.4,
+                y: 0.1, // rising, so `can_step` is false
+                z: 0.0,
+            },
+            0.6,
+            false,
+            &boxes,
+        );
+        assert!(result.movement.x.abs() < 0.21, "no step while airborne");
     }
 
     #[test]

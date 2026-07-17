@@ -24,6 +24,7 @@
 //! the standalone [`minerider_protocol`] crate; this crate adds the async
 //! network layer and the game-state machines on top of it.
 
+pub mod auth;
 pub mod core;
 pub mod minecraft;
 pub mod network;

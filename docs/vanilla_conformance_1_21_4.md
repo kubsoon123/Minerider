@@ -34,8 +34,8 @@ or lose an id.
 | 5 | ping | handled | pong | strict | none | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 6 | reset_chat | ignored | — | — | none | NOT APPLICABLE |  | none |
 | 7 | registry_data | handled | — | — | store dimension types for chunk decode and world physics | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 8 | remove_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
-| 9 | add_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
+| 8 | remove_resource_pack | handled | — | — | no client-side pack state to remove | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 9 | add_resource_pack | handled | resource_pack_receive | strict | none | PARTIAL | resource_pack | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 10 | store_cookie | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 11 | transfer | ignored | — | strict | reconnect to another server | NOT IMPLEMENTED |  | none |
 | 12 | feature_flags | ignored | — | — | enable feature flags | NOT IMPLEMENTED |  | none |
@@ -66,10 +66,10 @@ or lose an id.
 | 15 | clear_titles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 16 | tab_complete | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 17 | declare_commands | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 18 | close_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 19 | window_items | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 20 | craft_progress_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 21 | set_slot | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 18 | close_window | handled | — | — | clear tracked open container | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 19 | window_items | handled | — | — | refresh a window's slots and the cursor item | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 20 | craft_progress_bar | handled | — | — | update a container property (furnace progress, etc.) | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 21 | set_slot | handled | — | — | update one inventory/container slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 22 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
 | 23 | set_cooldown | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 24 | chat_suggestions | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -78,7 +78,7 @@ or lose an id.
 | 27 | debug_sample | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 28 | hide_message | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 29 | kick_disconnect | handled | — | — | close connection | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
-| 30 | profileless_chat | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 30 | profileless_chat | handled | — | — | log the message | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 31 | entity_status | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 32 | sync_entity_position | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 33 | explosion | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -101,13 +101,13 @@ or lose an id.
 | 50 | entity_look | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 51 | vehicle_move | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 52 | open_book | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 53 | open_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 53 | open_window | handled | — | — | track newly opened container | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 54 | open_sign_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 55 | ping | ignored | pong | strict | none | NOT IMPLEMENTED | join_idle | none |
 | 56 | ping_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 57 | craft_recipe_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 58 | abilities | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 59 | player_chat | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 59 | player_chat | handled | — | — | log the message | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 60 | end_combat_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 61 | enter_combat_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 62 | death_combat_event | ignored | client_command | tick-bound | mark player dead; vanilla shows respawn screen | NOT IMPLEMENTED |  | none |
@@ -122,9 +122,9 @@ or lose an id.
 | 71 | entity_destroy | handled | — | — | remove entities from tracker | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 72 | remove_entity_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 73 | reset_score | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 74 | remove_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
-| 75 | add_resource_pack | ignored | resource_pack_receive | strict | download/show resource pack prompt | NOT IMPLEMENTED |  | none |
-| 76 | respawn | ignored | — | — | switch dimension; drop world cache | NOT IMPLEMENTED |  | none |
+| 74 | remove_resource_pack | handled | — | — | no client-side pack state to remove | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 75 | add_resource_pack | handled | resource_pack_receive | strict | none | PARTIAL | resource_pack | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 76 | respawn | handled | — | — | reset dimension/world and readiness gate for a new life | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 77 | entity_head_rotation | handled | — | — | update entity head yaw | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 78 | multi_block_change | handled | — | — | update cached block states in one section | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 79 | select_advancement_tab | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -138,7 +138,7 @@ or lose an id.
 | 87 | camera | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 88 | update_view_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 89 | update_view_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 90 | set_cursor_item | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 90 | set_cursor_item | handled | — | — | update the cursor item | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 91 | spawn_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 92 | scoreboard_display_objective | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 93 | entity_metadata | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -147,7 +147,7 @@ or lose an id.
 | 96 | entity_equipment | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 97 | experience | handled | — | — | update experience bar/level/total | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 98 | update_health | handled | — | — | update health/hunger/saturation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 99 | held_item_slot | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 99 | held_item_slot | handled | — | — | track the server-selected hotbar slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 100 | scoreboard_objective | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 101 | set_passengers | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 102 | set_player_inventory | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -163,7 +163,7 @@ or lose an id.
 | 112 | start_configuration | ignored | configuration_acknowledged | strict | re-enter configuration state | NOT IMPLEMENTED |  | none |
 | 113 | stop_sound | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 114 | store_cookie | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 115 | system_chat | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 115 | system_chat | handled | — | — | log the message | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 116 | playerlist_header | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 117 | nbt_query_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 118 | collect | ignored | — | — | none | NOT IMPLEMENTED |  | none |

@@ -2,8 +2,11 @@
 
 use super::physics::Aabb;
 
-#[cfg(test)] pub const STATE_COUNT: usize = 27866;
+#[cfg(test)]
+#[rustfmt::skip]
+pub const STATE_COUNT: usize = 27866;
 
+#[rustfmt::skip]
 pub static SHAPE_BOXES: &[Aabb] = &[
     Aabb::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0),
     Aabb::new(0.0, 0.0, 0.0, 0.1875, 0.5625, 0.1875),
@@ -14022,6 +14025,7 @@ pub static SHAPE_BOXES: &[Aabb] = &[
     Aabb::new(0.0, 0.0, 0.0, 1.0, 0.0625, 1.0),
 ];
 
+#[rustfmt::skip]
 pub static SHAPE_RANGES: &[(u16, u8)] = &[
     (0, 0),
     (0, 1),
@@ -19014,6 +19018,7 @@ pub static SHAPE_RANGES: &[(u16, u8)] = &[
     (14014, 1),
 ];
 
+#[rustfmt::skip]
 pub static STATE_SHAPES: &[u16] = &[
     0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -20177,4 +20182,15 @@ pub static STATE_SHAPES: &[u16] = &[
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     661, 661,
+];
+
+/// Inclusive global state-id ranges whose block overrides the
+/// default 0.6 friction, sorted by start id. Everything else is 0.6.
+#[rustfmt::skip]
+pub static FRICTION_OVERRIDES: &[(u32, u32, f32)] = &[
+    (5949, 5949, 0.98),
+    (11243, 11243, 0.8),
+    (11625, 11625, 0.98),
+    (13552, 13555, 0.98),
+    (13954, 13954, 0.989),
 ];

@@ -193,6 +193,63 @@ async fn scenario_2_join_and_idle() {
 }
 
 // ---------------------------------------------------------------------------
+// bot_state(): the read-side state channel publishes live during play
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn bot_state_reflects_readiness_during_a_real_play_session() {
+    let server = MockServer::start_join_idle().await;
+    let cfg = ClientConfig::new("127.0.0.1", server.port, "TraceBot");
+    let mut client = Client::connect(&cfg).await.expect("client connect");
+
+    // Grab a receiver before starting the play loop, exactly as external
+    // code (Client::bot_state()) is meant to.
+    let mut state = client.bot_state();
+    assert!(
+        !state.borrow().player.loaded,
+        "no snapshot has been published yet"
+    );
+
+    let run = tokio::spawn(async move {
+        let _ = tokio::time::timeout(Duration::from_secs(5), client.run()).await;
+    });
+
+    // The mock's join_idle script always reaches player_loaded; wait for a
+    // published snapshot to reflect it rather than sleeping a fixed amount.
+    let became_loaded = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if state.borrow().player.loaded {
+                return;
+            }
+            state.changed().await.expect("state channel closed early");
+        }
+    })
+    .await;
+    assert!(became_loaded.is_ok(), "bot_state() never reported loaded");
+
+    let _ = run.await;
+    server.finish().await.expect("mock server flow failed");
+}
+
+// ---------------------------------------------------------------------------
+// Resource pack: vanilla always answers add_resource_pack, offline or not
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn declines_offered_resource_pack() {
+    let server = MockServer::start_resource_pack().await;
+    let cfg = ClientConfig::new("127.0.0.1", server.port, "TraceBot");
+    let mut client = Client::connect(&cfg).await.expect("client connect");
+    let _ = tokio::time::timeout(Duration::from_secs(5), client.run()).await;
+    // The mock's own assertions (correct id, echoed uuid, declined result)
+    // surface here: a wiring mistake fails the mock, not just a silent hang.
+    server
+        .finish()
+        .await
+        .expect("mock server validated resource_pack_receive");
+}
+
+// ---------------------------------------------------------------------------
 // Scenario 3: initial chunk streaming
 // ---------------------------------------------------------------------------
 
