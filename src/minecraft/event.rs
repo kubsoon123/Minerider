@@ -9,6 +9,7 @@
 //! stalling the play loop, so slow observers can never back-pressure the
 //! network.
 
+use crate::minecraft::hud::HudEvent;
 use crate::minecraft::presentation::PresentationEvent;
 use crate::minecraft::scoreboard::ScoreboardEvent;
 
@@ -55,6 +56,9 @@ pub enum BotEvent {
     /// Ordered objective, display-slot, score, or team update. The bounded
     /// aggregate state is available in snapshots after receiver lag.
     Scoreboard(Box<ScoreboardEvent>),
+    /// Typed local-player HUD and world context update. The aggregate bounded
+    /// state is available in snapshots after receiver lag.
+    Hud(Box<HudEvent>),
 
     // ---- Supervisor lifecycle events ------------------------------------
     // Emitted by `crate::core::supervisor::ClientSupervisor` around

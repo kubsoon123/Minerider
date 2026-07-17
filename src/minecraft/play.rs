@@ -19,10 +19,11 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketEntityTeleport, PacketEntityVelocity, PacketExperience, PacketGameStateChange,
     PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk, PacketMultiBlockChange,
     PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition, PacketRelEntityMove,
-    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetSlot,
-    PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm, PacketUnloadChunk,
-    PacketUpdateHealth, PacketUpdateTime, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
-    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
+    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
+    PacketUnloadChunk, PacketUpdateHealth, PacketUpdateTime, PacketWindowItems,
+    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
+    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
@@ -31,13 +32,13 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_LOGIN_ID, CLIENTBOUND_MAP_CHUNK_ID, CLIENTBOUND_MULTI_BLOCK_CHANGE_ID,
     CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_INFO_ID, CLIENTBOUND_PLAYER_REMOVE_ID,
     CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
-    CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_SLOT_ID,
-    CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_UNLOAD_CHUNK_ID,
-    CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
-    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
-    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
-    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_POSITION_ID,
-    SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+    CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
+    CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
+    CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID,
+    CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID,
+    SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
+    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
+    SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
     SERVERBOUND_TELEPORT_CONFIRM_ID,
 };
 use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
@@ -57,6 +58,7 @@ use crate::minecraft::control::{BotCommand, Controller};
 use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::entity::EntityStore;
 use crate::minecraft::event::BotEvent;
+use crate::minecraft::hud::{decode_update as decode_hud_update, HudEvent, HudState};
 use crate::minecraft::inventory::InventoryState;
 use crate::minecraft::physics::Vec3;
 use crate::minecraft::player::{LocalPlayer, MovementPacket};
@@ -93,6 +95,8 @@ pub struct PlayState {
     pub presentation: PresentationState,
     /// Objectives, display slots, scores, teams, and team membership.
     pub scoreboard: ScoreboardState,
+    /// Local-player HUD state and world context omitted from the physics core.
+    pub hud: HudState,
     /// World time (day-time in ticks) and whether it is raining.
     pub world_time: i64,
     pub raining: bool,
@@ -131,6 +135,7 @@ impl PlayState {
             players: PlayerList::default(),
             presentation: PresentationState::default(),
             scoreboard: ScoreboardState::default(),
+            hud: HudState::default(),
             world_time: 0,
             raining: false,
             controller: Controller::default(),
@@ -189,6 +194,16 @@ impl PlayState {
         self.emit(BotEvent::Scoreboard(Box::new(event)));
     }
 
+    fn emit_hud(&self, event: HudEvent) {
+        self.emit(BotEvent::Hud(Box::new(event)));
+    }
+
+    fn apply_hud(&mut self, update: crate::minecraft::hud::HudUpdate) {
+        if let Some(event) = self.hud.apply(update) {
+            self.emit_hud(event);
+        }
+    }
+
     /// A cheap, externally-readable snapshot of the parts of play state a
     /// caller would want to observe (position, health, inventory, entities).
     /// The full `World` (block/chunk data) is intentionally excluded: cloning
@@ -203,6 +218,7 @@ impl PlayState {
             players: self.players.clone(),
             presentation: self.presentation.clone(),
             scoreboard: self.scoreboard.clone(),
+            hud: self.hud.clone(),
             world_time: self.world_time,
             raining: self.raining,
         }
@@ -225,6 +241,7 @@ pub struct StateSnapshot {
     pub players: PlayerList,
     pub presentation: PresentationState,
     pub scoreboard: ScoreboardState,
+    pub hud: HudState,
     pub world_time: i64,
     pub raining: bool,
 }
@@ -561,11 +578,17 @@ fn apply_state_packet(
         state.apply_scoreboard(update);
         return Ok(true);
     }
+    if let Some(update) = decode_hud_update(id, payload)? {
+        state.apply_hud(update);
+        return Ok(true);
+    }
     let mut r = PacketReader::new(payload);
     match id {
         CLIENTBOUND_LOGIN_ID => {
             let p = PacketLogin::decode(&mut r)?;
             state.player.on_login(&p);
+            let hud_event = state.hud.on_login(&p);
+            state.emit_hud(hud_event);
             let dimension = configuration
                 .dimension_types
                 .get(p.world_state.dimension as usize)
@@ -590,6 +613,8 @@ fn apply_state_packet(
             let p = PacketRespawn::decode(&mut r)?;
             state.respawn_pending = false;
             state.player.on_respawn();
+            let hud_event = state.hud.on_respawn(&p);
+            state.emit_hud(hud_event);
             state.received_position = false;
             let dimension = configuration
                 .dimension_types
@@ -608,6 +633,8 @@ fn apply_state_packet(
         CLIENTBOUND_UPDATE_HEALTH_ID => {
             let p = PacketUpdateHealth::decode(&mut r)?;
             state.player.on_health(&p);
+            let hud_event = state.hud.on_health(&p);
+            state.emit_hud(hud_event);
             state.emit(BotEvent::Health {
                 health: p.health,
                 food: p.food,
@@ -623,6 +650,10 @@ fn apply_state_packet(
         CLIENTBOUND_EXPERIENCE_ID => {
             let p = PacketExperience::decode(&mut r)?;
             state.player.on_experience(&p);
+            let hud_event = state
+                .hud
+                .on_experience(p.experience_bar, p.level, p.total_experience);
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_SPAWN_ENTITY_ID => {
             let p = PacketSpawnEntity::decode(&mut r)?;
@@ -705,17 +736,35 @@ fn apply_state_packet(
         CLIENTBOUND_HELD_ITEM_SLOT_ID => {
             let p = PacketHeldItemSlot::decode(&mut r)?;
             state.inventory.held_item_slot(&p);
+            let hud_event = state.hud.on_selected_hotbar(&p);
+            state.emit_hud(hud_event);
+        }
+        CLIENTBOUND_SET_PLAYER_INVENTORY_ID => {
+            let p = PacketSetPlayerInventory::decode(&mut r)?;
+            let hud_event = state.hud.on_player_inventory(&p);
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_PLAYER_INFO_ID => {
             let p = PacketPlayerInfo::decode(&mut r)?;
             let changes = state.players.apply_info(&p);
+            state.emit_hud(HudEvent::PlayerListChanged {
+                updated: changes.updated.clone(),
+                removed: Vec::new(),
+                rejected: changes.rejected,
+            });
             for (uuid, name) in changes.joined {
                 state.emit(BotEvent::PlayerJoined { uuid, name });
             }
         }
         CLIENTBOUND_PLAYER_REMOVE_ID => {
             let p = PacketPlayerRemove::decode(&mut r)?;
-            for uuid in state.players.apply_remove(&p) {
+            let removed = state.players.apply_remove(&p);
+            state.emit_hud(HudEvent::PlayerListChanged {
+                updated: Vec::new(),
+                removed: removed.clone(),
+                rejected: 0,
+            });
+            for uuid in removed {
                 state.emit(BotEvent::PlayerLeft { uuid });
             }
         }
@@ -726,10 +775,15 @@ fn apply_state_packet(
             // time), so normalise into 0..24000.
             let time_of_day = p.time.rem_euclid(24_000);
             state.world_time = time_of_day;
+            let hud_event = state.hud.on_time(&p);
+            state.emit_hud(hud_event);
             state.emit(BotEvent::Time { time_of_day });
         }
         CLIENTBOUND_GAME_STATE_CHANGE_ID => {
             let p = PacketGameStateChange::decode(&mut r)?;
+            if let Some(hud_event) = state.hud.on_game_state(&p) {
+                state.emit_hud(hud_event);
+            }
             match p.reason {
                 GAME_STATE_BEGIN_RAINING => {
                     state.raining = true;
@@ -806,6 +860,7 @@ mod tests {
                 number_format: None,
             },
         );
+        state.hud.cooldowns.insert("before".into(), 4);
         let snap = state.snapshot(42);
 
         assert_eq!(snap.tick, 42);
@@ -817,6 +872,7 @@ mod tests {
         state.presentation.action_bar =
             Some(crate::minecraft::text::TextComponent::literal("after"));
         state.scoreboard.objectives.clear();
+        state.hud.cooldowns.clear();
         assert_eq!(
             snap.player.health, 7.5,
             "snapshot is independent of live state"
@@ -830,5 +886,6 @@ mod tests {
             "before"
         );
         assert!(snap.scoreboard.objectives.contains_key("before"));
+        assert_eq!(snap.hud.cooldowns.get("before"), Some(&4));
     }
 }
