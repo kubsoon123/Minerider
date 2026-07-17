@@ -66,10 +66,10 @@ or lose an id.
 | 15 | clear_titles | handled | — | — | clear title/subtitle; reset default timings only when requested | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 16 | tab_complete | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 17 | declare_commands | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 18 | close_window | handled | — | — | clear tracked open container | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 19 | window_items | handled | — | — | refresh a window's slots and the cursor item | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 20 | craft_progress_bar | handled | — | — | update a container property (furnace progress, etc.) | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 21 | set_slot | handled | — | — | update one inventory/container slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 18 | close_window | handled | — | — | close matching container, cancel transactions and emit inventory events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 19 | window_items | handled | — | — | apply bounded full slot/cursor correction and resolve transactions | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 20 | craft_progress_bar | handled | — | — | update bounded deterministic window property state and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 21 | set_slot | handled | — | — | apply bounded slot update and confirm newer-state transactions | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 22 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
 | 23 | set_cooldown | handled | — | — | apply bounded cooldown group lifecycle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 24 | chat_suggestions | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -101,7 +101,7 @@ or lose an id.
 | 50 | entity_look | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 51 | vehicle_move | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 52 | open_book | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 53 | open_window | handled | — | — | track newly opened container | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 53 | open_window | handled | — | — | replace open container, cancel stale transactions and emit inventory events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 54 | open_sign_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 55 | ping | ignored | pong | strict | none | NOT IMPLEMENTED | join_idle | none |
 | 56 | ping_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -138,7 +138,7 @@ or lose an id.
 | 87 | camera | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 88 | update_view_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 89 | update_view_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 90 | set_cursor_item | handled | — | — | update the cursor item | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 90 | set_cursor_item | handled | — | — | update authoritative cursor item and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 91 | spawn_position | handled | — | — | store global spawn block position and angle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 92 | scoreboard_display_objective | handled | — | — | attach/detach bounded display slot by stable objective name and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 93 | entity_metadata | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -147,10 +147,10 @@ or lose an id.
 | 96 | entity_equipment | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 97 | experience | handled | — | — | update experience bar/level/total | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 98 | update_health | handled | — | — | update health/hunger/saturation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 99 | held_item_slot | handled | — | — | track the server-selected hotbar slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 99 | held_item_slot | handled | — | — | validate and track the selected hotbar slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 100 | scoreboard_objective | handled | — | — | create/update/remove bounded objective; detach slots/scores on removal; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 101 | set_passengers | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 102 | set_player_inventory | handled | — | — | update bounded hotbar item and held-item projection; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 102 | set_player_inventory | handled | — | — | update bounded player inventory plus hotbar/held-item projections; emit events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 103 | teams | handled | — | — | apply bounded team lifecycle/options/membership by stable name and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 104 | scoreboard_score | handled | — | — | create/update bounded score with display/number formatting and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 105 | simulation_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
