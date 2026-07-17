@@ -345,7 +345,33 @@ fn play_coverage(id: i32) -> CoverageEntry {
         }
         play::CLIENTBOUND_ENTITY_VELOCITY_ID => handled(state_only("update entity velocity")),
         play::CLIENTBOUND_ENTITY_HEAD_ROTATION_ID => handled(state_only("update entity head yaw")),
+        play::CLIENTBOUND_ABILITIES_ID => handled(state_only(
+            "store player ability flags and flying/walking speeds; emit HUD event",
+        )),
+        play::CLIENTBOUND_SET_COOLDOWN_ID => handled(state_only(
+            "apply bounded cooldown group lifecycle; emit HUD event",
+        )),
+        play::CLIENTBOUND_ENTITY_EFFECT_ID | play::CLIENTBOUND_REMOVE_ENTITY_EFFECT_ID => handled(
+            state_only("apply bounded local-player status-effect lifecycle; emit HUD event"),
+        ),
+        play::CLIENTBOUND_ENTITY_UPDATE_ATTRIBUTES_ID => handled(state_only(
+            "replace bounded local-player attributes/modifiers; emit HUD event",
+        )),
         play::CLIENTBOUND_EXPERIENCE_ID => handled(state_only("update experience bar/level/total")),
+        play::CLIENTBOUND_DIFFICULTY_ID => handled(state_only(
+            "store difficulty and server lock state; emit HUD event",
+        )),
+        play::CLIENTBOUND_SPAWN_POSITION_ID => handled(state_only(
+            "store global spawn block position and angle; emit HUD event",
+        )),
+        play::CLIENTBOUND_INITIALIZE_WORLD_BORDER_ID
+        | play::CLIENTBOUND_WORLD_BORDER_CENTER_ID
+        | play::CLIENTBOUND_WORLD_BORDER_LERP_SIZE_ID
+        | play::CLIENTBOUND_WORLD_BORDER_SIZE_ID
+        | play::CLIENTBOUND_WORLD_BORDER_WARNING_DELAY_ID
+        | play::CLIENTBOUND_WORLD_BORDER_WARNING_REACH_ID => handled(state_only(
+            "apply bounded world-border lifecycle safely out of order; emit HUD event",
+        )),
         play::CLIENTBOUND_POSITION_ID => handled(Obligation {
             responds_with: Some("teleport_confirm"),
             timing: TimingClass::Strict,
@@ -391,11 +417,8 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "none",
             "join_idle",
         )),
-        play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => ignored(not_implemented(
-            Some("client_command"),
-            TimingClass::TickBound,
-            "mark player dead; vanilla shows respawn screen",
-            "",
+        play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => handled(state_only(
+            "store structured local-player death information; emit HUD event",
         )),
         play::CLIENTBOUND_UPDATE_HEALTH_ID => {
             handled(state_only("update health/hunger/saturation"))
@@ -416,6 +439,21 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_HELD_ITEM_SLOT_ID => {
             handled(state_only("track the server-selected hotbar slot"))
         }
+        play::CLIENTBOUND_SET_PLAYER_INVENTORY_ID => handled(state_only(
+            "update bounded hotbar item and held-item projection; emit HUD event",
+        )),
+        play::CLIENTBOUND_PLAYER_INFO_ID => handled(state_only(
+            "apply bounded deterministic player-list fields and emit join/HUD events",
+        )),
+        play::CLIENTBOUND_PLAYER_REMOVE_ID => handled(state_only(
+            "remove deterministic player-list entries and emit leave/HUD events",
+        )),
+        play::CLIENTBOUND_UPDATE_TIME_ID => handled(state_only(
+            "store world age, day time and ticking flag; emit time/HUD events",
+        )),
+        play::CLIENTBOUND_GAME_STATE_CHANGE_ID => handled(state_only(
+            "store game mode and rain/thunder state; emit weather/HUD events",
+        )),
         play::CLIENTBOUND_PLAYER_CHAT_ID => handled(state_only(
             "store safe display text plus unverified raw signed-chat data; emit event",
         )),
