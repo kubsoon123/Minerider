@@ -21,6 +21,7 @@ pub mod physics;
 pub mod play;
 pub mod player;
 pub mod players;
+pub mod text;
 pub mod world;
 
 /// The client brand a vanilla client reports on the `minecraft:brand`
@@ -77,139 +78,13 @@ pub fn brand_payload() -> Result<Vec<u8>> {
 }
 
 /// Renders an NBT text component (disconnect reason, chat message, ...) as
-/// plain readable text, recursively resolving `text`, `translate` (+`with`
-/// argument substitution) and `extra` child components. Formatting/color
-/// fields are dropped — this is for logging, not display.
+/// plain readable text — a thin wrapper over [`text::TextComponent`], the
+/// shared model every text-bearing packet (chat, titles, boss bars,
+/// scoreboards, tab-list header/footer) is built on. Kept here since
+/// existing call sites (`login`, `configuration`, `play`) already import it
+/// from this module.
 pub(crate) fn nbt_reason_text(component: &Nbt) -> String {
-    let mut out = String::new();
-    render_component(component, &mut out);
-    out
-}
-
-fn render_component(component: &Nbt, out: &mut String) {
-    match component {
-        // A bare string is a literal text component.
-        Nbt::String(text) => out.push_str(text),
-        // A list is a component array: the first is the base, the rest are
-        // appended (some servers send chat this way).
-        Nbt::List(list) => {
-            for item in &list.items {
-                render_component(item, out);
-            }
-        }
-        Nbt::Compound(_) => {
-            if let Some(Nbt::String(text)) = component.get("text") {
-                out.push_str(text);
-            } else if let Some(Nbt::String(key)) = component.get("translate") {
-                let args = translate_args(component);
-                render_translation(key, &args, out);
-            }
-            // Any component can carry `extra` children, appended in order.
-            if let Some(Nbt::List(extra)) = component.get("extra") {
-                for child in &extra.items {
-                    render_component(child, out);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Collects the already-rendered `with` argument components of a `translate`
-/// component, in order.
-fn translate_args(component: &Nbt) -> Vec<String> {
-    match component.get("with") {
-        Some(Nbt::List(list)) => list
-            .items
-            .iter()
-            .map(|arg| {
-                let mut s = String::new();
-                render_component(arg, &mut s);
-                s
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Renders a `translate` key by substituting `%s` / `%N$s` placeholders in
-/// the known template, or falling back to the key plus its args when the
-/// template is not one MineRider ships (we don't bundle the full lang file).
-fn render_translation(key: &str, args: &[String], out: &mut String) {
-    if let Some(template) = translation_template(key) {
-        substitute_placeholders(template, args, out);
-    } else if args.is_empty() {
-        out.push_str(key);
-    } else {
-        // Best effort for an unknown key: e.g. "key{a, b}".
-        out.push_str(key);
-        out.push('{');
-        out.push_str(&args.join(", "));
-        out.push('}');
-    }
-}
-
-/// A small table of the translation keys a bot most often sees in chat/system
-/// messages. Not the full vanilla lang file — unknown keys fall back to
-/// showing the key and its args.
-fn translation_template(key: &str) -> Option<&'static str> {
-    Some(match key {
-        "chat.type.text" => "<%s> %s",
-        "chat.type.announcement" => "[%s] %s",
-        "chat.type.emote" => "* %s %s",
-        "chat.type.team.text" => "%s <%s> %s",
-        "multiplayer.player.joined" => "%s joined the game",
-        "multiplayer.player.joined.renamed" => "%s (formerly known as %s) joined the game",
-        "multiplayer.player.left" => "%s left the game",
-        "commands.message.display.incoming" => "%s whispers to you: %s",
-        "commands.message.display.outgoing" => "You whisper to %s: %s",
-        _ => return None,
-    })
-}
-
-/// Substitutes `%s` (sequential) and `%N$s` (indexed) placeholders in a
-/// vanilla translation template with the supplied arguments.
-fn substitute_placeholders(template: &str, args: &[String], out: &mut String) {
-    let mut chars = template.chars().peekable();
-    let mut next_seq = 0usize;
-    while let Some(c) = chars.next() {
-        if c != '%' {
-            out.push(c);
-            continue;
-        }
-        match chars.peek() {
-            Some('%') => {
-                chars.next();
-                out.push('%');
-            }
-            Some('s') => {
-                chars.next();
-                if let Some(arg) = args.get(next_seq) {
-                    out.push_str(arg);
-                }
-                next_seq += 1;
-            }
-            Some(d) if d.is_ascii_digit() => {
-                // Indexed form: %N$s.
-                let mut index = 0usize;
-                while let Some(d) = chars.peek().filter(|c| c.is_ascii_digit()) {
-                    index = index * 10 + (*d as usize - '0' as usize);
-                    chars.next();
-                }
-                // Consume the "$s" tail if present.
-                if chars.peek() == Some(&'$') {
-                    chars.next();
-                    if chars.peek() == Some(&'s') {
-                        chars.next();
-                    }
-                }
-                if let Some(arg) = index.checked_sub(1).and_then(|i| args.get(i)) {
-                    out.push_str(arg);
-                }
-            }
-            _ => out.push('%'),
-        }
-    }
+    text::TextComponent::from_nbt(component).plain_text()
 }
 
 #[cfg(test)]
@@ -293,17 +168,5 @@ mod tests {
             ("with".into(), list(vec![text("x")])),
         ]);
         assert_eq!(nbt_reason_text(&component), "some.unknown.key{x}");
-    }
-
-    #[test]
-    fn substitutes_indexed_placeholders() {
-        // Death messages use indexed args like "%1$s was slain by %2$s".
-        let mut out = String::new();
-        substitute_placeholders(
-            "%1$s was slain by %2$s",
-            &["Steve".into(), "Zombie".into()],
-            &mut out,
-        );
-        assert_eq!(out, "Steve was slain by Zombie");
     }
 }

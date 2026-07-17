@@ -1243,8 +1243,108 @@ writer).
 `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D
 warnings`, and `cargo run -p minerider-codegen -- --check` all clean.
 
-**Next unfinished phase:** text component foundation (Phase 4c) — a shared
-`TextComponent` model for chat/system messages/titles/boss bars/scoreboards,
-which every later phase in this milestone depends on. Not started this
-session; see the final report for why the remaining phases (4c through 4k)
-were not attempted given their combined scope.
+**Next unfinished phase (at the time):** text component foundation
+(Phase 4c) — a shared `TextComponent` model for chat/system messages/
+titles/boss bars/scoreboards, which every later phase in this milestone
+depends on. Not started in that session; see below for its completion.
+
+---
+
+## Phase 4c — TextComponent foundation (autonomous)
+
+One shared, typed text-component model (`src/minecraft/text.rs`) instead of
+five separate ad-hoc parsers for chat, titles, boss bars, scoreboards and
+tab-list header/footer — the explicit prerequisite for Phase 4d onward.
+
+**Inspected before designing anything:** the generated 1.21.4 struct
+definitions (not old wiki packet layouts) for every text-bearing packet —
+`PacketSetTitleText`/`Subtitle` (`crate::nbt::Nbt`), `PacketActionBar`
+(`Nbt`), `PacketBossBar` (`title: PacketBossBarTitle` — a switch-on-action
+enum, still `Nbt` per variant), `PacketSystemChat`/`PacketProfilelessChat`/
+`PacketKickDisconnect`/`PacketPlayerlistHeader` (all `Nbt`), and
+`PacketPlayerChat` (`network_name`/`network_target_name`: `Nbt`;
+`plain_message`: plain `String`; `unsigned_chat_content`: `Option<Nbt>`) —
+versus the login-state `PacketDisconnect.reason`, which is
+`super::types::String` (a plain wire string whose *content* is
+JSON-encoded, predating 1.20.3's switch to network NBT for every other text
+field). This confirmed the three input encodings the module needed to
+support, and that everything in Play state is network NBT — no packet uses
+the old bare-JSON-string chat encoding.
+
+**Completed:**
+- `TextComponent { content: Content, style: Style, extra: Vec<TextComponent> }`
+  with `Content::{Literal, Translate{key, args: Vec<TextComponent>},
+  Unknown{raw: Nbt}}` (score/selector/keybind/nbt-value components and
+  anything else not specifically interpreted are preserved, not dropped)
+  and a `Style` covering color (named or `#RRGGBB` hex, distinguished),
+  bold/italic/underlined/strikethrough/obfuscated, insertion, font, and
+  preserved click/hover events.
+- **Two parsers, one output model**: `TextComponent::from_nbt` (network
+  NBT — every play-state field) and `TextComponent::from_json_str` (the
+  login-Disconnect JSON-in-a-string case), both infallible — malformed
+  input degrades to best-effort text (worst case an empty or literal-raw
+  component) rather than an `Err`, since a garbled component is a display
+  concern, not a protocol violation the caller should have to handle.
+- **Bounded parsing**: recursion depth (64), total node count (4,096) and
+  total literal-text bytes (256 KiB) are all enforced — including through a
+  hover event's nested `show_text` component, which shares the same budget
+  rather than getting a fresh one (closing what would otherwise be a budget
+  bypass). A test deliberately caught the first version of this being
+  wrong: an oversized sibling list initially only degraded each excess
+  item's *content* to empty while still allocating one `TextComponent` per
+  input item — the `Vec` itself wasn't length-bounded. Fixed by checking
+  the budget *before* attempting each list item, not just inside the
+  recursive parse call.
+- **Translation table reused, not duplicated**: `nbt_reason_text`
+  (`src/minecraft/mod.rs`, used by `login`/`configuration`/`play` for
+  disconnect reasons) is now a one-line wrapper over
+  `TextComponent::from_nbt(...).plain_text()`. The old copy of the
+  translation-key table and `%s`/`%N$s` placeholder substitution logic that
+  used to live in `mod.rs` was deleted, not kept as a parallel
+  implementation — `text.rs` is the only place that logic exists now, and
+  it's strictly more capable than the old version (translation arguments
+  are kept as full structured `TextComponent`s and rendered lazily, instead
+  of being pre-flattened to strings before substitution).
+- **Honest, documented uncertainty**: click/hover event NBT key casing
+  (`clickEvent`/`hoverEvent` vs `click_event`/`hover_event`) has not been
+  independently verified against a live 1.21.4 capture, so both spellings
+  are checked defensively; an absent/misspelled event is simply not
+  populated, never a parse failure. Flagged in the module doc comment
+  rather than asserted as fact.
+
+**Tests added** (`src/minecraft/text.rs`, +18 over the removed/superseded
+mod.rs test): literal (bare string and `{text:...}`), fully-styled
+(color/bold/italic/obfuscated/insertion/click/hover, including a nested
+`show_text` hover body), hex vs named color, nested `extra` siblings in
+order, a bare-list component-array root, translated components with
+structured args (both a known template and an unknown-key fallback),
+unknown content kind preserved rather than dropped, malformed `extra` type
+ignored without panicking, deeply nested `extra` (4× the depth cap) not
+overflowing the stack, an oversized sibling list truncated by the node
+budget, oversized literal text truncated by the text budget, the JSON
+equivalents of literal/styled/translated/array-root, malformed JSON
+degrading to a literal of the raw string, `Display` matching `plain_text`,
+and indexed-placeholder substitution directly.
+
+**Verification:** 297 workspace tests pass, 0 failed (was 276; net +21:
++18 new in `text.rs`, −1 test moved/superseded, plus the removed duplicate
+logic in `mod.rs`). `cargo fmt --all --check`, `cargo clippy --workspace
+--all-targets -D warnings`, and `cargo run -p minerider-codegen -- --check`
+all clean.
+
+**Honest limitations:**
+- Not a full vanilla lang file: `plain_text()`'s translation table covers
+  only the handful of keys a bot most often sees in chat (join/leave, chat
+  formats, whispers); everything else falls back to `key{arg, arg}` rather
+  than claiming a translation MineRider doesn't have.
+- Click/hover event key casing is unverified against a live capture (see
+  above) — functionally safe (defensive dual-spelling lookup, never
+  panics), but not proven correct against real server traffic yet.
+- `hover_event`'s `show_item`/`show_entity` payloads are preserved as raw
+  NBT/JSON (`RawEvent`), not structurally parsed into item/entity data —
+  out of scope for this phase; only `show_text` is interpreted into a
+  nested `TextComponent`.
+
+**Next unfinished phase:** Phase 4d — inbound chat/system/action-bar/title/
+boss-bar/tab-header-footer state built on this model, plus outbound
+chat/commands (folded in from the original Phase 4g).
