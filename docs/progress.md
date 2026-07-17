@@ -1639,3 +1639,49 @@ inventory obligations as `PARTIAL` pending a vanilla-client trace.
 
 **Next unfinished work:** build menu-specific interaction semantics and
 higher-level inventory workflows on this bounded transaction foundation.
+
+---
+
+## Phase 4i — bounded immutable shared chunk payloads
+
+Audited the complete map-chunk ownership path before changing it. The prior
+model retained one deep `Chunk` copy per client while public snapshots,
+events and physics only borrowed world data. A deterministic release harness
+now runs per-client and shared models in fresh child processes across 1, 10
+and 100 clients, reduced/full views, approximately 98%-identical and fully
+personalized content, updates, and unload/reload churn.
+
+**Measured decision:** on the paired Ubuntu release run, 100 clients retaining
+49 identical chunks fell from 472,192,000 to 4,950,400 logical bytes and from
+474,244 to 16,548 KiB absolute retained RSS. The approximately 98%-identical
+case retained 14,870,400 logical bytes. The full 100 × 441 logical estimate
+fell from 3.96 GiB to 42.4 MiB. The personalized control showed the bounded
+cost when nothing can be shared: +2.96% logical memory, +4.1% RSS and +78.5%
+construction time. Hash/equality and copy-on-write also increase synthetic
+construction/update/lifecycle CPU, documented without hiding it in
+`docs/shared_world_benchmark.md`; configuration-level opt-out remains public.
+
+**Production ownership model:** each `World` still owns an independent chunk
+position map, now pointing to immutable `Arc<ChunkSnapshot>` payloads. A
+process-wide 16-shard store retains only bounded `Weak` lookup entries. Keys
+include normalized endpoint, authoritative world name/hashed seed, all typed
+dimension properties, position and deterministic full-content fingerprint;
+full equality is mandatory before reuse. Fingerprints include block/biome
+sections, heightmaps, block entities and every light mask/array. Collision
+buckets and keys are capped, eviction drops only weak lookup metadata, and
+unload remains constant-time.
+
+**Per-client correctness:** block updates clone only the touched section and
+replace only the receiving client's map entry. Light and block-entity updates
+replace their own immutable sub-payload. Login, respawn and reconnect always
+start with an empty client position map, so no chunk becomes visible without
+a newly received authoritative packet. `ClientConfig::share_chunk_payloads`
+defaults to strict sharing; `with_chunk_sharing(false)` restores isolated
+allocation.
+
+**Coverage added:** canonical reuse; server/world/dimension/content isolation;
+forced fingerprint collisions; weak reclamation and hard bounds; concurrent
+publication; two-client copy-on-write; client-local light/block-entity
+updates; paired memory/CPU benchmarks; and conformance classification for the
+two newly retained packet families. Real vanilla-client trace comparison is
+still pending, so wire conformance remains `PARTIAL`.

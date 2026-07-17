@@ -154,7 +154,7 @@ payload ownership:
 
 \`\`\`text
 SharedChunkStore
-  (server identity, world generation, dimension identity, position, fingerprint)
+  (server endpoint, world name/hashed seed, dimension identity, position, fingerprint)
       -> bounded collision bucket of Weak<Chunk>
 
 World (one per client)
@@ -165,8 +165,8 @@ World (one per client)
   chunk or world alive after every client unloads it.
 - The store is sharded across fixed-size mutexes. No lock is held across an
   await, and a slow key does not serialize the whole world.
-- The key contains the configured server host/port, typed dimension
-  properties, a monotonically changing session/respawn generation, chunk
+- The key contains the normalized configured server host/port, authoritative
+  world name and hashed seed, all retained typed dimension properties, chunk
   position and a deterministic content fingerprint.
 - Fingerprints cover sections, biomes, heightmaps, block entities, light
   masks and light arrays. A matching fingerprint is only a lookup hint:
@@ -179,9 +179,9 @@ World (one per client)
   entity updates replace only their immutable sub-payload.
 - A receiving client's map is atomically replaced after the new version is
   complete. Other clients retain the prior \`Arc\`.
-- Login, respawn and reconnect create a fresh world generation and empty
-  per-client index. No stale coordinate is visible without a new authoritative
-  packet.
+- Login, respawn and reconnect create a fresh empty per-client index. A
+  reconnect may reuse an equal immutable payload only after receiving and
+  fully decoding the new authoritative packet; it never reuses visibility.
 - Cache keys and forced-collision buckets are bounded. Deterministic eviction
   drops only weak lookup entries, never a client's strong reference.
 - Sharing can be disabled in \`ClientConfig\`; strict content interning is the
@@ -190,3 +190,69 @@ World (one per client)
 This design deliberately does not add a “trusted shared-authoritative world”
 mode. Coordinates alone are never evidence that another client received the
 same content.
+
+## S4 — implemented model and comparative results
+
+The production path now stores `Arc<ChunkSnapshot>` values in each client's
+independent position map. A process-wide, 16-shard interner holds only bounded
+`Weak` lookup entries (at most 4,096 keys per shard and eight collision
+payloads per key). It normalizes host casing/trailing dots, scopes by port,
+world name/hashed seed and the complete retained dimension definition, and
+always verifies full equality after fingerprint lookup. Poisoned shard locks
+recover without discarding client-owned payloads.
+
+`ClientConfig::share_chunk_payloads` defaults to `true`;
+`with_chunk_sharing(false)` restores isolated per-client allocation. The
+default is safe because clients never share maps or visibility. Map-chunk
+decode now retains heightmaps, block entities and all light arrays. Block,
+light and block-entity updates create a new snapshot for only the receiving
+client; block changes clone only the touched section. Unload is constant-time:
+dead weak entries are removed opportunistically on lookup or explicit pruning,
+and the hard key bound prevents metadata growth.
+
+The paired release results below are from CI
+[run #52](https://github.com/kubsoon123/Minerider/actions/runs/29597650951)
+on the same Ubuntu x86_64 / Rust 1.97.1 environment and in fresh child
+processes. Absolute RSS includes allocator state after the exact-case warm-up;
+the deterministic logical values are the primary ownership comparison.
+
+| Scenario | Model | Unique retained payloads | Logical retained | Retained RSS | Median construction | Lookup | Mutation/churn |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 100 × 49 identical | per-client | 49 contents / 4,900 copies | 472,192,000 B | 474,244 KiB | 253,608 µs | 10,203 µs | — |
+| 100 × 49 identical | shared | 49 | 4,950,400 B | 16,548 KiB | 659,582 µs | 3,684 µs | — |
+| 100 × 49, ~98% identical | per-client | 149 contents / 4,900 copies | 472,192,000 B | 474,180 KiB | 250,761 µs | 10,000 µs | — |
+| 100 × 49, ~98% identical | shared | 149 | 14,870,400 B | 26,380 KiB | 669,217 µs | 4,089 µs | — |
+| 100 × 49 personalized | per-client | 4,900 | 472,192,000 B | 474,736 KiB | 605,096 µs | 12,022 µs | — |
+| 100 × 49 personalized | shared | 4,900 | 486,169,600 B | 494,412 KiB | 1,080,293 µs | 15,064 µs | — |
+| 100 × 49 update churn | per-client | 49 before updates | 472,192,000 B | 474,192 KiB | 247,510 µs | 10,198 µs | 21,098 µs / 800 updates |
+| 100 × 49 update churn | shared | 49 before updates | 4,950,400 B | 16,432 KiB | 660,614 µs | 3,955 µs | 125,422 µs / 800 updates |
+| 100 × 49 lifecycle churn | per-client | 49 before churn | 472,192,000 B | 474,240 KiB | 247,314 µs | 10,234 µs | 148,182 µs / 4 rounds |
+| 100 × 49 lifecycle churn | shared | 49 before churn | 4,950,400 B | 16,480 KiB | 667,619 µs | 3,980 µs | 1,291,153 µs / 4 rounds |
+
+For the target identical workload, logical retained memory falls 98.95% and
+absolute retained RSS falls about 96.5%. The 100-client full 21 × 21 logical
+estimate falls from 4,249,504,000 bytes (3.96 GiB) to 44,464,000 bytes
+(42.4 MiB). With approximately 2% personalized chunks, logical retained
+memory still falls 96.85%.
+
+The trade-off is explicit. Hashing, equality and `Arc` construction make the
+100-client identical fixture about 2.6× slower to build, update copy-on-write
+about 5.9× slower, and the synthetic repeated lifecycle workload about 8.7×
+slower; shared lookups are faster in this fixture because the retained working
+set is much smaller. In the no-sharing personalized control, logical memory
+rises 2.96%, RSS 4.1%, and construction time 78.5%. Those regressions are
+bounded, do not change correctness, and can be avoided per configuration with
+the opt-out. For MineRider's stated many-client/same-server target, the nearly
+100× payload-memory reduction justifies the implementation.
+
+## S5 — correctness and lifecycle coverage
+
+Unit tests prove canonical reuse in one scope; isolation across content,
+server, world and dimension scopes; full equality under forced fingerprint
+collision; weak reclamation; key/collision bounds; concurrent publication;
+two-client copy-on-write section isolation; and client-local light/block
+entity updates. Existing negative-coordinate, collision, unload, respawn and
+world-physics tests continue to run against the new storage type. The
+conformance matrix now classifies standalone light and block-entity updates as
+implemented state projections. Real vanilla-client trace comparison remains
+pending, so these obligations remain `PARTIAL` rather than `PASS`.
