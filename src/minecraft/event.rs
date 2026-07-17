@@ -9,6 +9,8 @@
 //! stalling the play loop, so slow observers can never back-pressure the
 //! network.
 
+use crate::minecraft::presentation::PresentationEvent;
+
 /// The buffer depth of the event broadcast channel. Deep enough that a
 /// consumer polling at a human or per-tick cadence never lags on a normal
 /// packet burst, small enough to bound memory.
@@ -45,6 +47,10 @@ pub enum BotEvent {
     Weather { raining: bool },
     /// The server kicked the bot; the play loop ends after this.
     Kicked { reason: String },
+    /// Structured chat/title/action-bar/tab-list/boss-bar/disconnect update.
+    /// These events are emitted in packet order and the corresponding state
+    /// is available in a fresh snapshot after a lagged receiver recovers.
+    Presentation(PresentationEvent),
 
     // ---- Supervisor lifecycle events ------------------------------------
     // Emitted by `crate::core::supervisor::ClientSupervisor` around
