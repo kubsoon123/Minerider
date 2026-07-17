@@ -40,7 +40,7 @@ pub const MAX_CHAT_TYPE_PARAMETERS: usize = 16;
 
 /// All headless-readable presentation state. A clone is included in every
 /// play-state snapshot.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PresentationState {
     pub chat: VecDeque<ChatMessage>,
     pub action_bar: Option<TextComponent>,
@@ -52,32 +52,19 @@ pub struct PresentationState {
     next_chat_sequence: u64,
 }
 
-impl Default for PresentationState {
-    fn default() -> Self {
-        Self {
-            chat: VecDeque::new(),
-            action_bar: None,
-            titles: TitleState::default(),
-            tab_list: TabListPresentation::default(),
-            boss_bars: BTreeMap::new(),
-            disconnect_reason: None,
-            next_chat_sequence: 0,
-        }
-    }
-}
-
 impl PresentationState {
     /// Applies one decoded update and returns its ordered public event.
     pub(crate) fn apply(&mut self, update: PresentationUpdate) -> PresentationEvent {
         match update {
-            PresentationUpdate::Chat(mut message) => {
+            PresentationUpdate::Chat(message) => {
+                let mut message = *message;
                 message.sequence = self.next_chat_sequence;
                 self.next_chat_sequence = self.next_chat_sequence.saturating_add(1);
                 if self.chat.len() == MAX_CHAT_HISTORY {
                     self.chat.pop_front();
                 }
                 self.chat.push_back(message.clone());
-                PresentationEvent::Chat(message)
+                PresentationEvent::Chat(Box::new(message))
             }
             PresentationUpdate::ActionBar(text) => {
                 self.action_bar = Some(text.clone());
@@ -164,21 +151,11 @@ impl PresentationState {
 }
 
 /// Current title/subtitle and vanilla timing values, measured in ticks.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct TitleState {
     pub title: Option<TextComponent>,
     pub subtitle: Option<TextComponent>,
     pub timing: TitleTiming,
-}
-
-impl Default for TitleState {
-    fn default() -> Self {
-        Self {
-            title: None,
-            subtitle: None,
-            timing: TitleTiming::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -385,7 +362,7 @@ pub enum ChatTypeParameter {
 /// Ordered presentation event carried by the bot event stream.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PresentationEvent {
-    Chat(ChatMessage),
+    Chat(Box<ChatMessage>),
     ActionBarChanged {
         text: TextComponent,
     },
@@ -420,7 +397,7 @@ pub enum PresentationEvent {
 
 #[derive(Debug, Clone)]
 pub(crate) enum PresentationUpdate {
-    Chat(ChatMessage),
+    Chat(Box<ChatMessage>),
     ActionBar(TextComponent),
     Title(TextComponent),
     Subtitle(TextComponent),
@@ -502,7 +479,7 @@ pub(crate) fn decode_update(id: i32, payload: &[u8]) -> Result<Option<Presentati
             if packet.is_action_bar {
                 PresentationUpdate::ActionBar(content)
             } else {
-                PresentationUpdate::Chat(ChatMessage {
+                PresentationUpdate::Chat(Box::new(ChatMessage {
                     sequence: 0,
                     kind: ChatKind::System,
                     content,
@@ -510,16 +487,16 @@ pub(crate) fn decode_update(id: i32, payload: &[u8]) -> Result<Option<Presentati
                     target: None,
                     chat_type: None,
                     signed: None,
-                })
+                }))
             }
         }
         CLIENTBOUND_PLAYER_CHAT_ID => {
             let packet = PacketPlayerChat::decode(&mut input)?;
-            PresentationUpdate::Chat(player_chat(packet))
+            PresentationUpdate::Chat(Box::new(player_chat(packet)))
         }
         CLIENTBOUND_PROFILELESS_CHAT_ID => {
             let packet = PacketProfilelessChat::decode(&mut input)?;
-            PresentationUpdate::Chat(ChatMessage {
+            PresentationUpdate::Chat(Box::new(ChatMessage {
                 sequence: 0,
                 kind: ChatKind::Disguised,
                 content: TextComponent::from_nbt(&packet.message),
@@ -527,7 +504,7 @@ pub(crate) fn decode_update(id: i32, payload: &[u8]) -> Result<Option<Presentati
                 target: packet.target.as_ref().map(TextComponent::from_nbt),
                 chat_type: Some(chat_type_reference(packet.r#type)),
                 signed: None,
-            })
+            }))
         }
         CLIENTBOUND_ACTION_BAR_ID => {
             let packet = PacketActionBar::decode(&mut input)?;
@@ -1033,7 +1010,7 @@ mod tests {
     fn collections_are_bounded() {
         let mut state = PresentationState::default();
         for index in 0..(MAX_CHAT_HISTORY + 5) {
-            state.apply(PresentationUpdate::Chat(ChatMessage {
+            state.apply(PresentationUpdate::Chat(Box::new(ChatMessage {
                 sequence: 0,
                 kind: ChatKind::System,
                 content: TextComponent::literal(index.to_string()),
@@ -1041,7 +1018,7 @@ mod tests {
                 target: None,
                 chat_type: None,
                 signed: None,
-            }));
+            })));
         }
         assert_eq!(state.chat.len(), MAX_CHAT_HISTORY);
         assert_eq!(state.chat.front().unwrap().sequence, 5);
