@@ -20,6 +20,7 @@ use crate::minecraft::configuration::ConfigurationData;
 use crate::minecraft::control::{channel, BotCommand, ControlHandle};
 use crate::minecraft::event::{BotEvent, EVENT_CHANNEL_CAPACITY};
 use crate::minecraft::play::StateSnapshot;
+use crate::minecraft::shared_world::{ServerIdentity, SharedWorldContext};
 use crate::minecraft::{configuration, handshake, login, play};
 use crate::network::connection::{Connection, ConnectionTimeouts};
 use crate::network::socks5::Socks5ProxyConfig;
@@ -108,6 +109,10 @@ pub struct ClientConfig {
     /// `port` above, never the proxy's endpoint; see
     /// [`crate::network::connection::Connection::connect_via_proxy`].
     pub proxy: Option<Arc<Socks5ProxyConfig>>,
+    /// Share fully decoded, immutable chunk payloads with other clients in
+    /// this process when server, world, dimension, position, and content all
+    /// match. Each client still owns its position visibility and updates.
+    pub share_chunk_payloads: bool,
 }
 
 impl ClientConfig {
@@ -125,6 +130,7 @@ impl ClientConfig {
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             connect_deadline: DEFAULT_CONNECT_DEADLINE,
             proxy: None,
+            share_chunk_payloads: true,
         }
     }
 
@@ -164,6 +170,12 @@ impl ClientConfig {
         self.proxy = Some(proxy);
         self
     }
+
+    /// Enables or disables strict process-wide chunk-payload sharing.
+    pub fn with_chunk_sharing(mut self, enabled: bool) -> Self {
+        self.share_chunk_payloads = enabled;
+        self
+    }
 }
 
 /// A connected Minecraft client in [`ConnectionState::Play`].
@@ -182,6 +194,7 @@ pub struct Client {
     /// [`run`](Self::run) call, kept here so [`events`](Self::events) can
     /// hand out new subscriptions (including before `run` has ever started).
     event_tx: broadcast::Sender<BotEvent>,
+    world_sharing: Option<SharedWorldContext>,
 }
 
 impl Client {
@@ -267,6 +280,9 @@ impl Client {
         let (control_tx, control_rx) = channel();
         let (state_tx, state_rx) = watch::channel(StateSnapshot::default());
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let world_sharing = cfg
+            .share_chunk_payloads
+            .then(|| SharedWorldContext::process(ServerIdentity::new(&cfg.host, cfg.port)));
         Ok(Client {
             conn,
             uuid: success.uuid,
@@ -277,6 +293,7 @@ impl Client {
             state_tx: Some(state_tx),
             state_rx,
             event_tx,
+            world_sharing,
         })
     }
 
@@ -324,6 +341,7 @@ impl Client {
             control_rx,
             state_tx,
             self.event_tx.clone(),
+            self.world_sharing.clone(),
         )
         .await
     }

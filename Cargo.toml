@@ -48,9 +48,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tokio = { version = "1", features = ["full", "test-util"] }
 rsa = { workspace = true }
 
-# Only used by `src/bin/socks5_benchmark.rs` to read this process's own
-# working-set size; Linux reads /proc/self/status instead (no dependency
-# needed there).
+# Only used by `src/bin/socks5_benchmark.rs` and `src/bin/full_runtime_benchmark.rs`
+# to read this process's own working-set size for their memory benchmarks;
+# Linux reads /proc/self/status instead (no dependency needed there).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
