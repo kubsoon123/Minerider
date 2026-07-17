@@ -334,9 +334,7 @@ impl World {
         let local_z = packet.location.z.rem_euclid(16) as u8;
         let mut entities = (*next.block_entities).clone();
         let existing = entities.iter().position(|entity| {
-            entity.local_x == local_x
-                && entity.local_z == local_z
-                && entity.y == packet.location.y
+            entity.local_x == local_x && entity.local_z == local_z && entity.y == packet.location.y
         });
         match (&packet.nbt_data, existing) {
             (Some(nbt), Some(index)) => {
