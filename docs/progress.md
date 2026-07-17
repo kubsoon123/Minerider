@@ -1326,11 +1326,11 @@ equivalents of literal/styled/translated/array-root, malformed JSON
 degrading to a literal of the raw string, `Display` matching `plain_text`,
 and indexed-placeholder substitution directly.
 
-**Verification:** 297 workspace tests pass, 0 failed (was 276; net +21:
-+18 new in `text.rs`, −1 test moved/superseded, plus the removed duplicate
-logic in `mod.rs`). `cargo fmt --all --check`, `cargo clippy --workspace
---all-targets -D warnings`, and `cargo run -p minerider-codegen -- --check`
-all clean.
+**Verification correction (established by the Phase 4d baseline audit):**
+the exact Phase 4c baseline at commit `026c815` is 293 workspace tests, not
+297 as this entry originally reported. Phase 4d adds exactly nine tests and
+the full workspace then reports 302, which exposed the earlier arithmetic/
+reporting error. The Phase 4c format, Clippy, and codegen checks remain clean.
 
 **Honest limitations:**
 - Not a full vanilla lang file: `plain_text()`'s translation table covers
@@ -1348,3 +1348,69 @@ all clean.
 **Next unfinished phase:** Phase 4d — inbound chat/system/action-bar/title/
 boss-bar/tab-header-footer state built on this model, plus outbound
 chat/commands (folded in from the original Phase 4g).
+
+---
+
+## Phase 4d — inbound presentation and chat state
+
+Built one bounded, snapshot-readable `PresentationState`
+(`src/minecraft/presentation.rs`) on the shared Phase 4c text component.
+Generated protocol-769 packet structs and ids remain the wire source of
+truth; the module projects them into stable public Rust models before state
+mutation or event delivery.
+
+**Packet coverage completed:**
+- `player_chat`: structured sender/target/display component, registry or
+  inline chat decoration, filter status, and raw signature/timestamp/salt/
+  previous-message data. Raw signed material is retained but explicitly not
+  described as verified.
+- `profileless_chat` (disguised chat) and `system_chat`, including the
+  system-chat action-bar flag.
+- dedicated `action_bar`, `set_title_text`, `set_title_subtitle`,
+  `set_title_time`, and `clear_titles`. Clear removes title/subtitle but
+  preserves timing; reset also restores vanilla 10/70/20 timing defaults.
+- `playerlist_header` updates header/footer atomically.
+- all `boss_bar` actions: add, remove, progress, title, style, and flags,
+  keyed by stable UUID. Unknown color/overlay values and flag bits are
+  preserved; missing/out-of-order updates and removals are typed safe no-ops.
+- `kick_disconnect`: the structured reason is stored and published before
+  the terminal disconnect error leaves the play loop.
+
+**Architecture and resource bounds:**
+- Every play snapshot now includes an independent clone of presentation
+  state. A lagged broadcast consumer can therefore recover from the current
+  snapshot instead of relying on replay.
+- Each applied update emits one ordered `PresentationEvent`; existing
+  `Chat`, `SystemChat`, and `Kicked` events remain as compatibility
+  projections.
+- Chat history is capped at 512 entries and boss bars at 256. Previous
+  signed-message references, filter masks, and inline decoration parameters
+  have explicit copy bounds with truncation recorded in the public model.
+- Event/update payloads use indirection for large text-bearing variants so
+  the bounded broadcast channel does not inflate every event allocation.
+
+**Tests added (9):** system/action-bar routing; player-chat raw signature,
+unsigned display, target and filter preservation; disguised-chat safety;
+title clear versus reset; atomic tab header/footer; complete boss-bar
+lifecycle including unknown values; out-of-order boss-bar no-ops; hostile
+collection bounds; and structured disconnect state/event.
+
+**Verification:** 302 workspace tests pass, 0 failed (exact baseline 293;
++9). GitHub CI passes `cargo fmt --all --check`,
+`cargo test --workspace --locked` on Linux and Windows,
+`cargo clippy --workspace --all-targets -- -D warnings`, and
+`cargo run -p minerider-codegen -- --check`.
+
+**Honest limitations:**
+- Signed-chat cryptographic verification and acknowledgement state are not
+  implemented; signatures are raw untrusted bytes.
+- Registry-referenced chat types are retained by id because configuration
+  registry resolution for chat decorations is not implemented yet. Inline
+  decorations are fully projected.
+- Presentation state is headless data only. It does not implement visual
+  expiry/animation, execute click/hover actions, or claim renderer parity.
+- Compatibility chat events intentionally flatten structured components;
+  new consumers should use `PresentationEvent` and the snapshot.
+
+**Next unfinished phase:** Phase 4e — complete scoreboard objectives,
+display slots, scores, and teams on the shared text/presentation foundation.
