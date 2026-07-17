@@ -59,7 +59,7 @@ or lose an id.
 | 8 | block_action | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 9 | block_change | handled | — | — | update one cached block state | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 10 | boss_bar | handled | — | — | apply bounded add/update/remove state by stable uuid and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 11 | difficulty | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 11 | difficulty | handled | — | — | store difficulty and server lock state; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 13 | chunk_batch_start | ignored | — | — | begin chunk batch | NOT IMPLEMENTED | initial_chunks | none |
 | 14 | chunk_biomes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -71,7 +71,7 @@ or lose an id.
 | 20 | craft_progress_bar | handled | — | — | update a container property (furnace progress, etc.) | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 21 | set_slot | handled | — | — | update one inventory/container slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 22 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
-| 23 | set_cooldown | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 23 | set_cooldown | handled | — | — | apply bounded cooldown group lifecycle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 24 | chat_suggestions | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 25 | custom_payload | ignored | — | — | vanilla answers known plugin channels; brand sent voluntarily | NOT IMPLEMENTED |  | none |
 | 26 | damage_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -83,10 +83,10 @@ or lose an id.
 | 32 | sync_entity_position | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 33 | explosion | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 34 | unload_chunk | handled | — | — | drop chunk from world cache | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 35 | game_state_change | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 35 | game_state_change | handled | — | — | store game mode and rain/thunder state; emit weather/HUD events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 36 | open_horse_window | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 37 | hurt_animation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 38 | initialize_world_border | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 38 | initialize_world_border | handled | — | — | apply bounded world-border lifecycle safely out of order; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 39 | keep_alive | handled | keep_alive | strict | none | PARTIAL | join_idle | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 40 | map_chunk | handled | — | — | decode and store all block-state/biome chunk sections | PARTIAL | join_idle, initial_chunks | unit-tested state projection; mock/vanilla capture pending |
 | 41 | world_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -106,13 +106,13 @@ or lose an id.
 | 55 | ping | ignored | pong | strict | none | NOT IMPLEMENTED | join_idle | none |
 | 56 | ping_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 57 | craft_recipe_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 58 | abilities | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 58 | abilities | handled | — | — | store player ability flags and flying/walking speeds; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 59 | player_chat | handled | — | — | store safe display text plus unverified raw signed-chat data; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 60 | end_combat_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 61 | enter_combat_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 62 | death_combat_event | ignored | client_command | tick-bound | mark player dead; vanilla shows respawn screen | NOT IMPLEMENTED |  | none |
-| 63 | player_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 64 | player_info | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 62 | death_combat_event | handled | — | — | store structured local-player death information; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 63 | player_remove | handled | — | — | remove deterministic player-list entries and emit leave/HUD events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 64 | player_info | handled | — | — | apply bounded deterministic player-list fields and emit join/HUD events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 65 | face_player | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 66 | position | handled | teleport_confirm | strict | update position/rotation (relative flags applied) | PARTIAL | teleport_correction | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 67 | player_rotation | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -120,7 +120,7 @@ or lose an id.
 | 69 | recipe_book_remove | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 70 | recipe_book_settings | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 71 | entity_destroy | handled | — | — | remove entities from tracker | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 72 | remove_entity_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 72 | remove_entity_effect | handled | — | — | apply bounded local-player status-effect lifecycle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 73 | reset_score | handled | — | — | remove one/all bounded scores for an owner and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 74 | remove_resource_pack | handled | — | — | no client-side pack state to remove | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 75 | add_resource_pack | handled | resource_pack_receive | strict | none | PARTIAL | resource_pack | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
@@ -130,16 +130,16 @@ or lose an id.
 | 79 | select_advancement_tab | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 80 | server_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 81 | action_bar | handled | — | — | replace structured action-bar state and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 82 | world_border_center | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 83 | world_border_lerp_size | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 84 | world_border_size | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 85 | world_border_warning_delay | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 86 | world_border_warning_reach | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 82 | world_border_center | handled | — | — | apply bounded world-border lifecycle safely out of order; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 83 | world_border_lerp_size | handled | — | — | apply bounded world-border lifecycle safely out of order; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 84 | world_border_size | handled | — | — | apply bounded world-border lifecycle safely out of order; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 85 | world_border_warning_delay | handled | — | — | apply bounded world-border lifecycle safely out of order; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 86 | world_border_warning_reach | handled | — | — | apply bounded world-border lifecycle safely out of order; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 87 | camera | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 88 | update_view_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 89 | update_view_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 90 | set_cursor_item | handled | — | — | update the cursor item | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 91 | spawn_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 91 | spawn_position | handled | — | — | store global spawn block position and angle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 92 | scoreboard_display_objective | handled | — | — | attach/detach bounded display slot by stable objective name and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 93 | entity_metadata | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 94 | attach_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -150,12 +150,12 @@ or lose an id.
 | 99 | held_item_slot | handled | — | — | track the server-selected hotbar slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 100 | scoreboard_objective | handled | — | — | create/update/remove bounded objective; detach slots/scores on removal; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 101 | set_passengers | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 102 | set_player_inventory | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 102 | set_player_inventory | handled | — | — | update bounded hotbar item and held-item projection; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 103 | teams | handled | — | — | apply bounded team lifecycle/options/membership by stable name and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 104 | scoreboard_score | handled | — | — | create/update bounded score with display/number formatting and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 105 | simulation_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 106 | set_title_subtitle | handled | — | — | replace structured subtitle and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 107 | update_time | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 107 | update_time | handled | — | — | store world age, day time and ticking flag; emit time/HUD events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 108 | set_title_text | handled | — | — | replace structured title and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 109 | set_title_time | handled | — | — | replace title timing values and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 110 | entity_sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -172,8 +172,8 @@ or lose an id.
 | 121 | step_tick | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 122 | transfer | ignored | — | strict | reconnect to another server | NOT IMPLEMENTED |  | none |
 | 123 | advancements | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 124 | entity_update_attributes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 125 | entity_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 124 | entity_update_attributes | handled | — | — | replace bounded local-player attributes/modifiers; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 125 | entity_effect | handled | — | — | apply bounded local-player status-effect lifecycle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 126 | declare_recipes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 127 | tags | stored | — | — | store tags | NOT IMPLEMENTED |  | none |
 | 128 | set_projectile_power | ignored | — | — | none | NOT IMPLEMENTED |  | none |
