@@ -79,6 +79,15 @@ feature):
   or a permanent auth/protocol error unless explicitly configured to; see
   the example below and
   [`core::supervisor`](src/core/supervisor.rs) for the full policy surface.
+- Optional SOCKS5 transport (`ClientConfig::proxy`,
+  [`network::socks5`](src/network/socks5.rs)) for the Minecraft connection
+  itself: no-auth or username/password authentication, domain (proxy-side
+  DNS)/IPv4/IPv6 targets, per-client or shared proxy configuration,
+  redacted credentials, and reconnect through the same configured route.
+  Direct connection remains the default; there is no proxy rotation or pool
+  (a single, explicitly configured proxy only — see "Acceptable use" above).
+  Microsoft/Xbox/Mojang authentication is unaffected and stays direct. See
+  [docs/socks5_benchmark.md](docs/socks5_benchmark.md).
 - Offline-mode (cracked-server) login.
 - Microsoft/Xbox Live/Minecraft Services (premium) login — implemented and
   unit-tested against realistic fixtures and a local mock session server;
@@ -160,7 +169,8 @@ src/
                 player/entity/inventory/player-list state, control, events
   auth/         Microsoft/Xbox Live/Minecraft Services premium login
   trace/        packet capture, normalization and semantic diffing
-  bin/          conformance_matrix (docs generator), swarm (many-bots demo)
+  bin/          conformance_matrix (docs generator), swarm (many-bots demo),
+                socks5_benchmark (local proxy transport benchmark)
 tests/          integration tests (mock server, conformance scenarios,
                 raw-socket stream edge cases)
 docs/           architecture, codegen pipeline, progress log, validation
@@ -268,6 +278,9 @@ retired. Everything worth keeping from it is documented in
   for a real vanilla-client reference capture (not yet performed).
 - [docs/engineering_review.md](docs/engineering_review.md) — architecture,
   security and performance audit, and the longer-term roadmap.
+- [docs/socks5_benchmark.md](docs/socks5_benchmark.md) — SOCKS5 transport
+  architecture, secret handling, test inventory and local performance
+  report.
 - [docs/lua_design.md](docs/lua_design.md) — design for the planned Lua
   scripting layer (not implemented yet; see "Not implemented" above).
 - [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) — reporting
