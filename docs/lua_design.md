@@ -6,12 +6,13 @@ section). This document exists so a later, bounded session can implement
 Phase 5a without re-deriving these decisions, and so nothing here is
 mistaken for a shipped feature.
 
-This design is grounded in the actual Rust APIs as of Phase 3l/4a:
+This design is grounded in the actual Rust APIs as of Phase 4h:
 `core::client::Client`, `core::supervisor::ClientSupervisor`,
 `minecraft::control::{ControlHandle, BotCommand}`,
 `minecraft::event::BotEvent`, `minecraft::play::StateSnapshot`, and the
 state types it aggregates (`LocalPlayer`, `EntityStore`, `InventoryState`,
-`PlayerList`). Field names below are copied from those types, not guessed.
+`PlayerList`, `PresentationState`, `ScoreboardState`, `HudState`). Field
+names below are copied from those types, not guessed.
 
 ## Why Lua sits where it does
 
@@ -187,6 +188,9 @@ bot:on("player_left", function(e) end)         -- BotEvent::PlayerLeft { uuid }
 bot:on("time", function(e) end)                -- BotEvent::Time { time_of_day }
 bot:on("weather", function(e) end)             -- BotEvent::Weather { raining }
 bot:on("kicked", function(e) end)              -- BotEvent::Kicked { reason }
+bot:on("scoreboard", function(e) end)          -- BotEvent::Scoreboard(ScoreboardEvent)
+bot:on("hud", function(e) end)                 -- BotEvent::Hud(HudEvent)
+bot:on("inventory", function(e) end)           -- BotEvent::Inventory(InventoryEvent)
 -- Supervisor lifecycle (only fire when run under a ClientSupervisor):
 bot:on("connecting", function() end)
 bot:on("connected", function() end)
@@ -205,8 +209,15 @@ s.player.yaw, s.player.pitch
 s.player.health, s.player.food, s.player.saturation
 s.world_time, s.raining
 -- s.entities: array of { id, uuid, kind, x, y, z, yaw, pitch, head_yaw }  (from EntityStore/Entity)
--- s.inventory.player_inventory.slots, s.inventory.open_window, s.inventory.cursor  (from InventoryState/Window)
--- s.players: array of { uuid, name, gamemode, latency, listed }           (from PlayerList/PlayerEntry)
+-- s.inventory: bounded windows/slots/properties/cursor plus queued and
+--              completed server-authoritative transactions
+-- s.players: bounded uuid-ordered entries with profile, chat-session,
+--            display-name, list priority and hat metadata
+-- s.presentation: bounded structured chat, action bar, titles, tab-list
+--                 header/footer, boss bars, and disconnect reason
+-- s.scoreboard: bounded objectives, display slots, scores, teams and members
+-- s.hud: vitals/xp, game mode/abilities/hotbar, cooldowns/effects/attributes,
+--        death/respawn, border, time/weather, difficulty and spawn
 
 -- Persistent controls (map directly to BotCommand via ControlHandle; all
 -- fire-and-forget, never block):
@@ -218,6 +229,12 @@ bot:sneak(on)              -- BotCommand::Sneak
 bot:jump(on)               -- BotCommand::Jump
 bot:stop()                 -- BotCommand::Stop
 bot:chat(message)          -- BotCommand::Chat
+bot:command(command)       -- BotCommand::Command; no leading slash
+
+-- A later async/coroutine Lua phase may wrap
+-- SupervisorHandle::inventory_click(window_id, InventoryClick) and await its
+-- Sent/Confirmed/Corrected/TimedOut/WindowClosed result. Phase 5a only exposes
+-- inventory snapshots/events; it must not turn queueing into a success claim.
 
 -- Supervisor control, if running under one:
 bot:disconnect()           -- SupervisorHandle::stop()
@@ -300,11 +317,10 @@ A later, bounded session could implement exactly this, no more:
   a control command issued from a script reaching the same `Controller`
   state a direct Rust test already asserts against.
 
-**Explicitly out of scope for 5a** (per this session's instructions, and
-because the underlying Rust capability doesn't exist yet either):
-pathfinding/obstacle avoidance, inventory automation (`window_click`
-doesn't exist at the Rust level yet — see README's "Partial or
-unverified"), any form of networking from Lua, async/coroutine bot actions,
+**Explicitly out of scope for 5a** (per this session's instructions):
+pathfinding/obstacle avoidance, inventory action submission/awaiting (the
+typed Rust transaction API exists, but Phase 5a has no async/coroutine action
+model), any form of networking from Lua, async/coroutine bot actions,
 hot reload, multi-file scripts/`require`, and any thread-pool-sharing
 optimization for many bots' Lua VMs (the single-thread-per-bot-task model
 above is the Phase 5a baseline; revisit only if profiling shows it matters).

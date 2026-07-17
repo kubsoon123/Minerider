@@ -12,6 +12,8 @@
 //! or a permanent authentication/protocol error unless the policy is
 //! explicitly configured to do so, and never fakes activity of any kind.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
@@ -19,8 +21,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::core::client::{Client, ClientConfig};
 use crate::core::error::{MineRiderError, RetryClass};
-use crate::minecraft::control::BotCommand;
+use crate::minecraft::control::{ActionValidationError, BotCommand};
 use crate::minecraft::event::{BotEvent, EVENT_CHANNEL_CAPACITY};
+use crate::minecraft::inventory::{
+    InventoryClick, InventoryClickRequest, InventoryError, InventoryOutcome,
+};
 use crate::minecraft::play::StateSnapshot;
 use crate::minecraft::player::MovementInput;
 
@@ -32,6 +37,7 @@ use crate::minecraft::player::MovementInput;
 /// [`ControlError::NotConnected`] — so under normal operation this rarely
 /// holds more than one or two in-flight commands anyway).
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
+pub const DEFAULT_INVENTORY_TRANSACTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How many times to retry, if at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,6 +256,14 @@ pub enum SupervisorOutcome {
 /// layer) can match on exactly what happened instead of guessing from text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ControlError {
+    /// The action was rejected before queueing because its text cannot be
+    /// represented as a valid protocol-769 chat/command action.
+    #[error(transparent)]
+    InvalidAction(ActionValidationError),
+    /// The bounded supervisor queue is at capacity. The action was not
+    /// queued and may be retried deliberately by the caller.
+    #[error("the supervised command queue is full")]
+    QueueFull,
     /// No session is currently connected (never connected yet, mid-backoff,
     /// or mid-connect-attempt). The command was rejected immediately, not
     /// queued for whenever a session eventually appears.
@@ -273,11 +287,26 @@ pub enum ControlError {
     SupervisorStopped,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum InventoryActionError {
+    #[error(transparent)]
+    Control(ControlError),
+    #[error(transparent)]
+    Invalid(InventoryError),
+    #[error("inventory transaction timed out")]
+    TimedOut,
+    #[error("disconnected during the inventory transaction")]
+    Disconnected,
+    #[error("inventory transaction targeted generation {expected}, current is {current}")]
+    StaleGeneration { expected: u64, current: u64 },
+}
+
 /// One command in flight from a [`SupervisorHandle`] to the running
 /// [`ClientSupervisor`], paired with a one-shot reply so the caller learns
 /// whether it actually reached a live session.
 struct QueuedCommand {
     command: BotCommand,
+    generation: u64,
     respond: oneshot::Sender<Result<(), ControlError>>,
 }
 
@@ -299,6 +328,7 @@ pub struct SupervisorHandle {
     status_rx: watch::Receiver<SupervisorStatus>,
     generation_rx: watch::Receiver<u64>,
     command_tx: mpsc::Sender<QueuedCommand>,
+    next_inventory_transaction: Arc<AtomicU64>,
     cancel: CancellationToken,
 }
 
@@ -354,11 +384,31 @@ impl SupervisorHandle {
     /// resolves cleanly cancels the wait: the supervisor still processes
     /// the command exactly once and simply discards the reply.
     pub async fn send_command(&self, command: BotCommand) -> Result<(), ControlError> {
+        command.validate().map_err(ControlError::InvalidAction)?;
+        match *self.status_rx.borrow() {
+            SupervisorStatus::Connected => {}
+            SupervisorStatus::Stopped => return Err(ControlError::SupervisorStopped),
+            _ => return Err(ControlError::NotConnected),
+        }
+        let generation = self.generation();
+        if let BotCommand::InventoryClick(request) = &command {
+            if request.generation != generation {
+                return Err(ControlError::SessionReplaced);
+            }
+        }
         let (respond, receive) = oneshot::channel();
-        self.command_tx
-            .send(QueuedCommand { command, respond })
-            .await
-            .map_err(|_| ControlError::SupervisorStopped)?;
+        let queued = QueuedCommand {
+            command,
+            generation,
+            respond,
+        };
+        match self.command_tx.try_send(queued) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => return Err(ControlError::QueueFull),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                return Err(ControlError::SupervisorStopped);
+            }
+        }
         receive.await.map_err(|_| ControlError::SupervisorStopped)?
     }
 
@@ -393,9 +443,131 @@ impl SupervisorHandle {
         self.send_command(BotCommand::Jump(on)).await
     }
 
-    /// Sends a chat message, or runs it as a command if it starts with `/`.
+    /// Sends an ordinary chat message. Commands are never inferred from `/`.
     pub async fn chat(&self, message: impl Into<String>) -> Result<(), ControlError> {
         self.send_command(BotCommand::Chat(message.into())).await
+    }
+
+    /// Runs a command using the protocol's dedicated command packet. The
+    /// text excludes the leading slash.
+    pub async fn command(&self, command: impl Into<String>) -> Result<(), ControlError> {
+        self.send_command(BotCommand::Command(command.into())).await
+    }
+
+    pub async fn inventory_click(
+        &self,
+        window_id: i32,
+        click: InventoryClick,
+    ) -> Result<InventoryOutcome, InventoryActionError> {
+        self.inventory_click_in_generation(
+            self.generation(),
+            window_id,
+            click,
+            DEFAULT_INVENTORY_TRANSACTION_TIMEOUT,
+        )
+        .await
+    }
+
+    /// Submits and observes one server-authoritative inventory transaction in
+    /// an explicitly selected session generation. This is the building block
+    /// for multi-step workflows that must never cross a reconnect.
+    pub async fn inventory_click_in_generation(
+        &self,
+        expected_generation: u64,
+        window_id: i32,
+        click: InventoryClick,
+        timeout: Duration,
+    ) -> Result<InventoryOutcome, InventoryActionError> {
+        let current = self.generation();
+        if current != expected_generation {
+            return Err(InventoryActionError::StaleGeneration {
+                expected: expected_generation,
+                current,
+            });
+        }
+        let state_id = self
+            .state_rx
+            .borrow()
+            .inventory
+            .window(window_id)
+            .ok_or(InventoryActionError::Invalid(
+                InventoryError::UnknownWindow { window_id },
+            ))?
+            .state_id;
+        let transaction_id = self
+            .next_inventory_transaction
+            .fetch_add(1, Ordering::Relaxed);
+        let request = InventoryClickRequest {
+            transaction_id,
+            generation: expected_generation,
+            window_id,
+            state_id,
+            click,
+        };
+        self.send_command(BotCommand::InventoryClick(request))
+            .await
+            .map_err(InventoryActionError::Control)?;
+        self.wait_for_inventory_outcome(transaction_id, expected_generation, timeout)
+            .await
+    }
+
+    async fn wait_for_inventory_outcome(
+        &self,
+        transaction_id: u64,
+        expected_generation: u64,
+        timeout: Duration,
+    ) -> Result<InventoryOutcome, InventoryActionError> {
+        let mut state = self.state_rx.clone();
+        let mut status = self.status_rx.clone();
+        let mut generation = self.generation_rx.clone();
+        let wait = async {
+            loop {
+                if let Some(outcome) = state
+                    .borrow()
+                    .inventory
+                    .completed_transactions
+                    .get(&transaction_id)
+                    .copied()
+                {
+                    return match outcome {
+                        InventoryOutcome::Rejected(error) => {
+                            Err(InventoryActionError::Invalid(error))
+                        }
+                        other => Ok(other),
+                    };
+                }
+                let current = *generation.borrow();
+                if current != expected_generation {
+                    return Err(InventoryActionError::StaleGeneration {
+                        expected: expected_generation,
+                        current,
+                    });
+                }
+                if *status.borrow() != SupervisorStatus::Connected {
+                    return Err(InventoryActionError::Disconnected);
+                }
+                tokio::select! {
+                    changed = state.changed() => {
+                        if changed.is_err() {
+                            return Err(InventoryActionError::Disconnected);
+                        }
+                    }
+                    changed = status.changed() => {
+                        if changed.is_err() {
+                            return Err(InventoryActionError::Disconnected);
+                        }
+                    }
+                    changed = generation.changed() => {
+                        if changed.is_err() {
+                            return Err(InventoryActionError::Disconnected);
+                        }
+                    }
+                }
+            }
+        };
+        tokio::time::timeout(timeout, wait)
+            .await
+            .map_err(|_| InventoryActionError::TimedOut)?
     }
 
     /// Clears the walk goal and stops all movement — named `stop_movement`
@@ -459,6 +631,7 @@ impl ClientSupervisor {
             status_rx,
             generation_rx,
             command_tx,
+            next_inventory_transaction: Arc::new(AtomicU64::new(1)),
             cancel,
         };
         (supervisor, handle)
@@ -646,9 +819,13 @@ impl ClientSupervisor {
                     return SessionEnd::Error(result.err().unwrap_or(MineRiderError::ConnectionClosed));
                 }
                 Some(cmd) = self.command_rx.recv() => {
-                    let outcome = control
-                        .send(cmd.command)
-                        .map_err(|_| ControlError::Disconnected);
+                    let outcome = if cmd.generation != self.generation {
+                        Err(ControlError::SessionReplaced)
+                    } else {
+                        control
+                            .send(cmd.command)
+                            .map_err(|_| ControlError::Disconnected)
+                    };
                     let _ = cmd.respond.send(outcome);
                 }
                 event = events_rx.recv() => {
@@ -672,6 +849,56 @@ impl ClientSupervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn handle_for_queue_test(
+        status: SupervisorStatus,
+        generation: u64,
+    ) -> (SupervisorHandle, mpsc::Receiver<QueuedCommand>) {
+        let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let (_, state_rx) = watch::channel(StateSnapshot::default());
+        let (_, status_rx) = watch::channel(status);
+        let (_, generation_rx) = watch::channel(generation);
+        let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        (
+            SupervisorHandle {
+                event_tx,
+                state_rx,
+                status_rx,
+                generation_rx,
+                command_tx,
+                next_inventory_transaction: Arc::new(AtomicU64::new(1)),
+                cancel: CancellationToken::new(),
+            },
+            command_rx,
+        )
+    }
+
+    fn handle_for_inventory_wait_test() -> (
+        SupervisorHandle,
+        watch::Sender<StateSnapshot>,
+        watch::Sender<SupervisorStatus>,
+        watch::Sender<u64>,
+    ) {
+        let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let (state_tx, state_rx) = watch::channel(StateSnapshot::default());
+        let (status_tx, status_rx) = watch::channel(SupervisorStatus::Connected);
+        let (generation_tx, generation_rx) = watch::channel(7);
+        let (command_tx, _command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        (
+            SupervisorHandle {
+                event_tx,
+                state_rx,
+                status_rx,
+                generation_rx,
+                command_tx,
+                next_inventory_transaction: Arc::new(AtomicU64::new(1)),
+                cancel: CancellationToken::new(),
+            },
+            state_tx,
+            status_tx,
+            generation_tx,
+        )
+    }
 
     fn policy() -> ReconnectPolicy {
         ReconnectPolicy::enabled()
@@ -760,5 +987,204 @@ mod tests {
 
         let unlimited = ReconnectPolicy::enabled().with_max_retries(RetryLimit::Unlimited);
         assert!(!unlimited.retries_exhausted(u32::MAX));
+    }
+
+    #[tokio::test]
+    async fn invalid_actions_are_typed_before_connectivity_checks() {
+        let (handle, _rx) = handle_for_queue_test(SupervisorStatus::Disconnected, 0);
+        assert_eq!(
+            handle.chat("").await,
+            Err(ControlError::InvalidAction(
+                ActionValidationError::EmptyChat
+            ))
+        );
+        assert_eq!(handle.chat("hello").await, Err(ControlError::NotConnected));
+    }
+
+    #[tokio::test]
+    async fn queue_capacity_returns_typed_error_without_waiting() {
+        let (handle, _rx) = handle_for_queue_test(SupervisorStatus::Connected, 7);
+        let mut pending_replies = Vec::new();
+        for _ in 0..COMMAND_CHANNEL_CAPACITY {
+            let (respond, receive) = oneshot::channel();
+            let queued = handle.command_tx.try_send(QueuedCommand {
+                command: BotCommand::Stop,
+                generation: 7,
+                respond,
+            });
+            assert!(queued.is_ok(), "fill bounded queue");
+            pending_replies.push(receive);
+        }
+        assert_eq!(handle.chat("hello").await, Err(ControlError::QueueFull));
+    }
+
+    #[tokio::test]
+    async fn queued_action_captures_current_generation() {
+        let (handle, mut rx) = handle_for_queue_test(SupervisorStatus::Connected, 7);
+        let task = tokio::spawn(async move { handle.command("say hello").await });
+        let queued = rx.recv().await.expect("queued action");
+        assert_eq!(queued.generation, 7);
+        assert_eq!(queued.command, BotCommand::Command("say hello".into()));
+        queued.respond.send(Ok(())).unwrap();
+        assert_eq!(task.await.unwrap(), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn inventory_wait_observes_confirmation_disconnect_and_timeout() {
+        let (handle, state_tx, status_tx, _generation_tx) = handle_for_inventory_wait_test();
+        let confirmed = {
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                handle
+                    .wait_for_inventory_outcome(1, 7, Duration::from_secs(1))
+                    .await
+            })
+        };
+        let mut snapshot = StateSnapshot::default();
+        snapshot
+            .inventory
+            .completed_transactions
+            .insert(1, InventoryOutcome::Confirmed { state_id: 2 });
+        state_tx.send(snapshot).unwrap();
+        assert_eq!(
+            confirmed.await.unwrap(),
+            Ok(InventoryOutcome::Confirmed { state_id: 2 })
+        );
+
+        let disconnected = {
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                handle
+                    .wait_for_inventory_outcome(2, 7, Duration::from_secs(1))
+                    .await
+            })
+        };
+        status_tx.send(SupervisorStatus::Disconnected).unwrap();
+        assert_eq!(
+            disconnected.await.unwrap(),
+            Err(InventoryActionError::Disconnected)
+        );
+
+        assert_eq!(
+            handle
+                .wait_for_inventory_outcome(3, 7, Duration::from_millis(1))
+                .await,
+            Err(InventoryActionError::Disconnected),
+            "disconnected status wins before timeout"
+        );
+    }
+
+    #[tokio::test]
+    async fn inventory_wait_rejects_stale_and_changed_generation() {
+        let (handle, _state_tx, _status_tx, generation_tx) = handle_for_inventory_wait_test();
+        assert_eq!(
+            handle
+                .inventory_click_in_generation(
+                    6,
+                    0,
+                    InventoryClick::PickupAll { slot: 0 },
+                    Duration::from_secs(1),
+                )
+                .await,
+            Err(InventoryActionError::StaleGeneration {
+                expected: 6,
+                current: 7,
+            })
+        );
+
+        assert_eq!(
+            handle
+                .send_command(BotCommand::InventoryClick(InventoryClickRequest {
+                    transaction_id: 99,
+                    generation: 6,
+                    window_id: 0,
+                    state_id: 0,
+                    click: InventoryClick::PickupAll { slot: 0 },
+                }))
+                .await,
+            Err(ControlError::SessionReplaced)
+        );
+
+        let changed = {
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                handle
+                    .wait_for_inventory_outcome(4, 7, Duration::from_secs(1))
+                    .await
+            })
+        };
+        generation_tx.send(8).unwrap();
+        assert_eq!(
+            changed.await.unwrap(),
+            Err(InventoryActionError::StaleGeneration {
+                expected: 7,
+                current: 8,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn inventory_wait_times_out_while_session_stays_connected() {
+        let (handle, _state_tx, _status_tx, _generation_tx) = handle_for_inventory_wait_test();
+        assert_eq!(
+            handle
+                .wait_for_inventory_outcome(5, 7, Duration::from_millis(1))
+                .await,
+            Err(InventoryActionError::TimedOut)
+        );
+    }
+
+    #[tokio::test]
+    async fn inventory_api_queues_state_and_generation_bound_request() {
+        let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let mut snapshot = StateSnapshot::default();
+        snapshot.inventory.player_inventory.state_id = 7;
+        let (state_tx, state_rx) = watch::channel(snapshot);
+        let (_, status_rx) = watch::channel(SupervisorStatus::Connected);
+        let (_, generation_rx) = watch::channel(3);
+        let (command_tx, mut command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        let handle = SupervisorHandle {
+            event_tx,
+            state_rx,
+            status_rx,
+            generation_rx,
+            command_tx,
+            next_inventory_transaction: Arc::new(AtomicU64::new(1)),
+            cancel: CancellationToken::new(),
+        };
+        let task = {
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                handle
+                    .inventory_click_in_generation(
+                        3,
+                        0,
+                        InventoryClick::QuickMove { slot: 0 },
+                        Duration::from_secs(1),
+                    )
+                    .await
+            })
+        };
+        let queued = command_rx.recv().await.expect("queued inventory command");
+        let request = match queued.command {
+            BotCommand::InventoryClick(request) => request,
+            other => panic!("expected inventory click, got {other:?}"),
+        };
+        assert_eq!(request.transaction_id, 1);
+        assert_eq!(request.generation, 3);
+        assert_eq!(request.window_id, 0);
+        assert_eq!(request.state_id, 7);
+        queued.respond.send(Ok(())).unwrap();
+
+        let mut completed = state_tx.borrow().clone();
+        completed
+            .inventory
+            .completed_transactions
+            .insert(1, InventoryOutcome::Confirmed { state_id: 8 });
+        state_tx.send(completed).unwrap();
+        assert_eq!(
+            task.await.unwrap(),
+            Ok(InventoryOutcome::Confirmed { state_id: 8 })
+        );
     }
 }

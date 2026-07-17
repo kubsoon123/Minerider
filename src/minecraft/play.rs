@@ -17,11 +17,10 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow, PacketCraftProgressBar,
     PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook, PacketEntityMoveLook,
     PacketEntityTeleport, PacketEntityVelocity, PacketExperience, PacketGameStateChange,
-    PacketHeldItemSlot, PacketKeepAlive, PacketKickDisconnect, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPlayerChat, PacketPlayerInfo,
-    PacketPlayerRemove, PacketPosition, PacketProfilelessChat, PacketRelEntityMove,
-    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetSlot,
-    PacketSpawnEntity, PacketSyncEntityPosition, PacketSystemChat, PacketTeleportConfirm,
+    PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk, PacketMultiBlockChange,
+    PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition, PacketRelEntityMove,
+    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
+    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
     PacketUnloadChunk, PacketUpdateHealth, PacketUpdateTime, PacketWindowItems,
     CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
     CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
@@ -31,22 +30,21 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
     CLIENTBOUND_HELD_ITEM_SLOT_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
     CLIENTBOUND_LOGIN_ID, CLIENTBOUND_MAP_CHUNK_ID, CLIENTBOUND_MULTI_BLOCK_CHANGE_ID,
-    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_CHAT_ID, CLIENTBOUND_PLAYER_INFO_ID,
-    CLIENTBOUND_PLAYER_REMOVE_ID, CLIENTBOUND_POSITION_ID, CLIENTBOUND_PROFILELESS_CHAT_ID,
-    CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID, CLIENTBOUND_RESPAWN_ID,
-    CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID,
-    CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_SYSTEM_CHAT_ID, CLIENTBOUND_UNLOAD_CHUNK_ID,
-    CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
-    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
-    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
-    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_POSITION_ID,
-    SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
-    SERVERBOUND_TELEPORT_CONFIRM_ID,
+    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_INFO_ID, CLIENTBOUND_PLAYER_REMOVE_ID,
+    CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
+    CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
+    CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
+    CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_TIME_ID,
+    CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID,
+    SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
+    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
+    SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
 use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
 use minerider_protocol::packet::RawPacket;
 use minerider_protocol::traits::{Decode, Encode};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -60,11 +58,15 @@ use crate::minecraft::control::{BotCommand, Controller};
 use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::entity::EntityStore;
 use crate::minecraft::event::BotEvent;
-use crate::minecraft::inventory::InventoryState;
-use crate::minecraft::nbt_reason_text;
+use crate::minecraft::hud::{decode_update as decode_hud_update, GameMode, HudEvent, HudState};
+use crate::minecraft::inventory::{InventoryClickRequest, InventoryEvent, InventoryState};
 use crate::minecraft::physics::Vec3;
 use crate::minecraft::player::{LocalPlayer, MovementPacket};
 use crate::minecraft::players::PlayerList;
+use crate::minecraft::presentation::{
+    decode_update, ChatKind, PresentationEvent, PresentationState,
+};
+use crate::minecraft::scoreboard::{decode_update as decode_scoreboard_update, ScoreboardState};
 use crate::minecraft::world::World;
 use crate::minecraft::RESOURCE_PACK_STATUS_DECLINED;
 
@@ -89,6 +91,12 @@ pub struct PlayState {
     pub inventory: InventoryState,
     /// Tab-list players, keyed by uuid.
     pub players: PlayerList,
+    /// Chat, titles, action bar, tab-list header/footer, and boss bars.
+    pub presentation: PresentationState,
+    /// Objectives, display slots, scores, teams, and team membership.
+    pub scoreboard: ScoreboardState,
+    /// Local-player HUD state and world context omitted from the physics core.
+    pub hud: HudState,
     /// World time (day-time in ticks) and whether it is raining.
     pub world_time: i64,
     pub raining: bool,
@@ -125,6 +133,9 @@ impl PlayState {
             entities: EntityStore::default(),
             inventory: InventoryState::default(),
             players: PlayerList::default(),
+            presentation: PresentationState::default(),
+            scoreboard: ScoreboardState::default(),
+            hud: HudState::default(),
             world_time: 0,
             raining: false,
             controller: Controller::default(),
@@ -144,6 +155,65 @@ impl PlayState {
         let _ = self.event_tx.send(event);
     }
 
+    fn apply_presentation(&mut self, update: crate::minecraft::presentation::PresentationUpdate) {
+        let event = self.presentation.apply(update);
+        self.emit(BotEvent::Presentation(Box::new(event.clone())));
+        match event {
+            PresentationEvent::Chat(message) => match message.kind {
+                ChatKind::Player | ChatKind::Disguised => {
+                    let sender = message
+                        .sender
+                        .as_ref()
+                        .map(|value| value.plain_text())
+                        .filter(|value| !value.is_empty())
+                        .or_else(|| {
+                            message
+                                .signed
+                                .as_ref()
+                                .map(|signed| signed.sender_uuid.to_string())
+                        })
+                        .unwrap_or_default();
+                    self.emit(BotEvent::Chat {
+                        sender,
+                        message: message.content.plain_text(),
+                    });
+                }
+                ChatKind::System => self.emit(BotEvent::SystemChat {
+                    message: message.content.plain_text(),
+                }),
+            },
+            PresentationEvent::Disconnected { reason } => self.emit(BotEvent::Kicked {
+                reason: reason.plain_text(),
+            }),
+            _ => {}
+        }
+    }
+
+    fn apply_scoreboard(&mut self, update: crate::minecraft::scoreboard::ScoreboardUpdate) {
+        let event = self.scoreboard.apply(update);
+        self.emit(BotEvent::Scoreboard(Box::new(event)));
+    }
+
+    fn emit_hud(&self, event: HudEvent) {
+        self.emit(BotEvent::Hud(Box::new(event)));
+    }
+
+    fn apply_hud(&mut self, update: crate::minecraft::hud::HudUpdate) {
+        if let Some(event) = self.hud.apply(update) {
+            self.emit_hud(event);
+        }
+    }
+
+    fn emit_inventory(&self, event: InventoryEvent) {
+        self.emit(BotEvent::Inventory(Box::new(event)));
+    }
+
+    fn emit_inventory_events(&self, events: impl IntoIterator<Item = InventoryEvent>) {
+        for event in events {
+            self.emit_inventory(event);
+        }
+    }
+
     /// A cheap, externally-readable snapshot of the parts of play state a
     /// caller would want to observe (position, health, inventory, entities).
     /// The full `World` (block/chunk data) is intentionally excluded: cloning
@@ -156,6 +226,9 @@ impl PlayState {
             entities: self.entities.clone(),
             inventory: self.inventory.clone(),
             players: self.players.clone(),
+            presentation: self.presentation.clone(),
+            scoreboard: self.scoreboard.clone(),
+            hud: self.hud.clone(),
             world_time: self.world_time,
             raining: self.raining,
         }
@@ -176,6 +249,9 @@ pub struct StateSnapshot {
     pub entities: EntityStore,
     pub inventory: InventoryState,
     pub players: PlayerList,
+    pub presentation: PresentationState,
+    pub scoreboard: ScoreboardState,
+    pub hud: HudState,
     pub world_time: i64,
     pub raining: bool,
 }
@@ -212,25 +288,34 @@ pub async fn run_play(
             biased;
             read = conn.read_packet() => {
                 let packet = read?;
-                handle_clientbound(
+                let result = handle_clientbound(
                     conn,
                     &mut state,
                     configuration,
                     &packet,
                     &mut warned_ids,
-                ).await?;
+                ).await;
                 // Publish promptly on state-changing packets (health, death,
-                // inventory, entities) rather than waiting up to one tick.
+                // inventory, presentation, entities) rather than waiting up
+                // to one tick. Publish disconnect state before returning its
+                // terminal error as well.
                 let _ = state_tx.send(state.snapshot(state.clock.current()));
+                result?;
             }
             command = control_rx.recv(), if control_open => {
                 match command {
-                    // Chat is the one command that goes straight to the wire
-                    // rather than into the controller's local state.
-                    Some(BotCommand::Chat(text)) => send_chat(conn, &text).await?,
+                    // Outbound chat actions go straight to their distinct
+                    // protocol packets rather than into movement state.
+                    Some(action @ (BotCommand::Chat(_) | BotCommand::Command(_))) => {
+                        send_outbound_chat_action(conn, &action).await?
+                    }
+                    Some(BotCommand::InventoryClick(request)) => {
+                        send_inventory_click(conn, &mut state, request).await?
+                    }
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
+                let _ = state_tx.send(state.snapshot(state.clock.current()));
             }
             _ = ticker.tick() => {
                 state.clock.advance();
@@ -252,51 +337,101 @@ fn apply_command(state: &mut PlayState, command: BotCommand) {
     }
 }
 
-/// Sends chat: a leading `/` becomes a `chat_command`, anything else an
-/// unsigned `chat_message`.
-///
 /// The message is sent unsigned (no cryptographic signature). Offline-mode
 /// servers and servers with `enforce-secure-profile=false` accept this;
 /// servers that enforce secure chat will reject or kick unsigned messages —
 /// full message signing (a per-message ECDSA signature over the chat session
 /// key from `/player/certificates`) is a deliberate follow-up.
-async fn send_chat(conn: &mut Connection, text: &str) -> Result<()> {
-    if let Some(command) = text.strip_prefix('/') {
-        let packet = PacketChatCommand {
-            command: command.to_string(),
-        };
-        let mut w = PacketWriter::new();
-        packet.encode(&mut w)?;
-        conn.send_packet(SERVERBOUND_CHAT_COMMAND_ID, &w.freeze())
-            .await?;
-        debug!(%command, "sent command");
-        return Ok(());
-    }
-
+async fn send_outbound_chat_action(conn: &mut Connection, action: &BotCommand) -> Result<()> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let packet = PacketChatMessage {
-        message: text.to_string(),
-        timestamp,
-        salt: rand::random(),
-        signature: None,
-        // No message-chain acknowledgement is tracked, so acknowledge zero
-        // prior messages: offset 0 and an empty (all-zero) 3-byte bitset.
-        offset: 0,
-        acknowledged: vec![0u8; 3],
+    let (id, payload) = encode_outbound_chat_action(action, timestamp, rand::random())?;
+    conn.send_packet(id, &payload).await?;
+    match action {
+        BotCommand::Chat(message) => debug!(%message, "sent chat"),
+        BotCommand::Command(command) => debug!(%command, "sent command"),
+        _ => unreachable!("encoder only accepts outbound chat actions"),
+    }
+    Ok(())
+}
+
+/// Encodes exactly the packet selected by the typed action. Content never
+/// changes packet kind (in particular, there is no leading-slash inference).
+fn encode_outbound_chat_action(
+    action: &BotCommand,
+    timestamp: i64,
+    salt: i64,
+) -> Result<(i32, Vec<u8>)> {
+    action
+        .validate()
+        .map_err(|error| MineRiderError::Protocol(error.to_string()))?;
+    let mut output = PacketWriter::new();
+    let id = match action {
+        BotCommand::Chat(message) => {
+            PacketChatMessage {
+                message: message.clone(),
+                timestamp,
+                salt,
+                signature: None,
+                // No message-chain acknowledgement is tracked, so
+                // acknowledge zero prior messages: offset 0 and an empty
+                // (all-zero) 3-byte bitset.
+                offset: 0,
+                acknowledged: vec![0u8; 3],
+            }
+            .encode(&mut output)?;
+            SERVERBOUND_CHAT_MESSAGE_ID
+        }
+        BotCommand::Command(command) => {
+            PacketChatCommand {
+                command: command.clone(),
+            }
+            .encode(&mut output)?;
+            SERVERBOUND_CHAT_COMMAND_ID
+        }
+        _ => {
+            return Err(MineRiderError::Protocol(
+                "attempted to encode a non-chat control action as chat".into(),
+            ));
+        }
     };
-    let mut w = PacketWriter::new();
-    packet.encode(&mut w)?;
-    conn.send_packet(SERVERBOUND_CHAT_MESSAGE_ID, &w.freeze())
+    Ok((id, output.into_inner().to_vec()))
+}
+
+async fn send_inventory_click(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    request: InventoryClickRequest,
+) -> Result<()> {
+    let transaction_id = request.transaction_id;
+    let creative = state.hud.game_mode == GameMode::Creative;
+    let prepared = match state
+        .inventory
+        .prepare_click(request, state.clock.current(), creative)
+    {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let event = state.inventory.reject_transaction(transaction_id, error);
+            state.emit_inventory(event);
+            return Ok(());
+        }
+    };
+    state.emit_inventory(prepared.event);
+    let mut output = PacketWriter::new();
+    prepared.packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_WINDOW_CLICK_ID, &output.freeze())
         .await?;
-    debug!(message = %text, "sent chat");
+    let events = state.inventory.mark_sent(transaction_id);
+    state.emit_inventory_events(events);
     Ok(())
 }
 
 /// Runs vanilla's per-tick play-entry and movement behavior.
 async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let expired = state.inventory.expire_transactions(state.clock.current());
+    state.emit_inventory_events(expired);
     if !state.player.is_alive() {
         // No death screen to click: request respawn immediately, once, and
         // wait for the server's `respawn` packet before doing anything else
@@ -466,12 +601,18 @@ async fn handle_clientbound(
             }
         }
         CLIENTBOUND_KICK_DISCONNECT_ID => {
-            let mut r = PacketReader::new(&packet.payload);
-            let disconnect = PacketKickDisconnect::decode(&mut r)?;
-            let reason = nbt_reason_text(&disconnect.reason);
-            state.emit(BotEvent::Kicked {
-                reason: reason.clone(),
-            });
+            let Some(update) = decode_update(packet.id, &packet.payload)? else {
+                return Err(MineRiderError::Protocol(
+                    "kick_disconnect was not decoded as presentation state".to_string(),
+                ));
+            };
+            state.apply_presentation(update);
+            let reason = state
+                .presentation
+                .disconnect_reason
+                .as_ref()
+                .map(|reason| reason.plain_text())
+                .unwrap_or_default();
             return Err(MineRiderError::Disconnected(reason));
         }
         other => {
@@ -495,11 +636,24 @@ fn apply_state_packet(
     id: i32,
     payload: &[u8],
 ) -> Result<bool> {
+    if let Some(update) = decode_update(id, payload)? {
+        state.apply_presentation(update);
+        return Ok(true);
+    }
+    if let Some(update) = decode_scoreboard_update(id, payload)? {
+        state.apply_scoreboard(update);
+        return Ok(true);
+    }
+    if let Some(update) = decode_hud_update(id, payload)? {
+        state.apply_hud(update);
+        return Ok(true);
+    }
     let mut r = PacketReader::new(payload);
     match id {
         CLIENTBOUND_LOGIN_ID => {
             let p = PacketLogin::decode(&mut r)?;
             state.player.on_login(&p);
+            state.hud.on_login(&p);
             let dimension = configuration
                 .dimension_types
                 .get(p.world_state.dimension as usize)
@@ -524,6 +678,8 @@ fn apply_state_packet(
             let p = PacketRespawn::decode(&mut r)?;
             state.respawn_pending = false;
             state.player.on_respawn();
+            let hud_event = state.hud.on_respawn(&p);
+            state.emit_hud(hud_event);
             state.received_position = false;
             let dimension = configuration
                 .dimension_types
@@ -542,6 +698,7 @@ fn apply_state_packet(
         CLIENTBOUND_UPDATE_HEALTH_ID => {
             let p = PacketUpdateHealth::decode(&mut r)?;
             state.player.on_health(&p);
+            let hud_event = state.hud.on_health(&p);
             state.emit(BotEvent::Health {
                 health: p.health,
                 food: p.food,
@@ -553,10 +710,15 @@ fn apply_state_packet(
                 state.emit(BotEvent::Death);
             }
             state.was_alive = alive;
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_EXPERIENCE_ID => {
             let p = PacketExperience::decode(&mut r)?;
             state.player.on_experience(&p);
+            let hud_event = state
+                .hud
+                .on_experience(p.experience_bar, p.level, p.total_experience);
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_SPAWN_ENTITY_ID => {
             let p = PacketSpawnEntity::decode(&mut r)?;
@@ -613,63 +775,49 @@ fn apply_state_packet(
                 kind = p.inventory_type,
                 "opened container"
             );
-            state.inventory.open_window(&p);
+            let events = state.inventory.open_window(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_CLOSE_WINDOW_ID => {
             let p = PacketCloseWindow::decode(&mut r)?;
             debug!(window_id = p.window_id, "closed container");
-            state.inventory.close_window(&p);
+            let events = state.inventory.close_window(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_WINDOW_ITEMS_ID => {
             let p = PacketWindowItems::decode(&mut r)?;
-            state.inventory.window_items(&p);
+            let events = state.inventory.window_items(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_SET_SLOT_ID => {
             let p = PacketSetSlot::decode(&mut r)?;
-            state.inventory.set_slot(&p);
+            let events = state.inventory.set_slot(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_SET_CURSOR_ITEM_ID => {
             let p = PacketSetCursorItem::decode(&mut r)?;
-            state.inventory.set_cursor_item(&p);
+            let event = state.inventory.set_cursor_item(&p);
+            state.emit_inventory(event);
         }
         CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => {
             let p = PacketCraftProgressBar::decode(&mut r)?;
-            state.inventory.craft_progress_bar(&p);
+            if let Some(event) = state.inventory.craft_progress_bar(&p) {
+                state.emit_inventory(event);
+            }
         }
         CLIENTBOUND_HELD_ITEM_SLOT_ID => {
             let p = PacketHeldItemSlot::decode(&mut r)?;
-            state.inventory.held_item_slot(&p);
+            let inventory_event = state.inventory.held_item_slot(&p);
+            state.emit_inventory(inventory_event);
+            let hud_event = state.hud.on_selected_hotbar(&p);
+            state.emit_hud(hud_event);
         }
-        CLIENTBOUND_PLAYER_CHAT_ID => {
-            let p = PacketPlayerChat::decode(&mut r)?;
-            // `network_name` is the sender's rendered display name; fall back
-            // to the raw uuid only if it renders empty.
-            let sender = nbt_reason_text(&p.network_name);
-            let sender = if sender.is_empty() {
-                p.sender_uuid.to_string()
-            } else {
-                sender
-            };
-            info!(%sender, message = %p.plain_message, "chat");
-            state.emit(BotEvent::Chat {
-                sender,
-                message: p.plain_message,
-            });
-        }
-        CLIENTBOUND_SYSTEM_CHAT_ID => {
-            let p = PacketSystemChat::decode(&mut r)?;
-            if !p.is_action_bar {
-                let message = nbt_reason_text(&p.content);
-                info!(%message, "chat (system)");
-                state.emit(BotEvent::SystemChat { message });
-            }
-        }
-        CLIENTBOUND_PROFILELESS_CHAT_ID => {
-            let p = PacketProfilelessChat::decode(&mut r)?;
-            let sender = nbt_reason_text(&p.name);
-            let message = nbt_reason_text(&p.message);
-            info!(%sender, %message, "chat (profileless)");
-            state.emit(BotEvent::Chat { sender, message });
+        CLIENTBOUND_SET_PLAYER_INVENTORY_ID => {
+            let p = PacketSetPlayerInventory::decode(&mut r)?;
+            let inventory_events = state.inventory.set_player_inventory(&p);
+            state.emit_inventory_events(inventory_events);
+            let hud_event = state.hud.on_player_inventory(&p);
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_PLAYER_INFO_ID => {
             let p = PacketPlayerInfo::decode(&mut r)?;
@@ -677,12 +825,23 @@ fn apply_state_packet(
             for (uuid, name) in changes.joined {
                 state.emit(BotEvent::PlayerJoined { uuid, name });
             }
+            state.emit_hud(HudEvent::PlayerListChanged {
+                updated: changes.updated,
+                removed: Vec::new(),
+                rejected: changes.rejected,
+            });
         }
         CLIENTBOUND_PLAYER_REMOVE_ID => {
             let p = PacketPlayerRemove::decode(&mut r)?;
-            for uuid in state.players.apply_remove(&p) {
+            let removed = state.players.apply_remove(&p);
+            for &uuid in &removed {
                 state.emit(BotEvent::PlayerLeft { uuid });
             }
+            state.emit_hud(HudEvent::PlayerListChanged {
+                updated: Vec::new(),
+                removed,
+                rejected: 0,
+            });
         }
         CLIENTBOUND_UPDATE_TIME_ID => {
             let p = PacketUpdateTime::decode(&mut r)?;
@@ -691,10 +850,13 @@ fn apply_state_packet(
             // time), so normalise into 0..24000.
             let time_of_day = p.time.rem_euclid(24_000);
             state.world_time = time_of_day;
+            let hud_event = state.hud.on_time(&p);
             state.emit(BotEvent::Time { time_of_day });
+            state.emit_hud(hud_event);
         }
         CLIENTBOUND_GAME_STATE_CHANGE_ID => {
             let p = PacketGameStateChange::decode(&mut r)?;
+            let hud_event = state.hud.on_game_state(&p);
             match p.reason {
                 GAME_STATE_BEGIN_RAINING => {
                     state.raining = true;
@@ -708,6 +870,9 @@ fn apply_state_packet(
                     debug!(gamemode = p.game_mode, "gamemode changed");
                 }
                 _ => {}
+            }
+            if let Some(hud_event) = hud_event {
+                state.emit_hud(hud_event);
             }
         }
         _ => return Ok(false),
@@ -760,6 +925,18 @@ mod tests {
             broadcast::channel(crate::minecraft::event::EVENT_CHANNEL_CAPACITY);
         let mut state = PlayState::new(event_tx);
         state.player.health = 7.5;
+        state.presentation.action_bar =
+            Some(crate::minecraft::text::TextComponent::literal("before"));
+        state.scoreboard.objectives.insert(
+            "before".into(),
+            crate::minecraft::scoreboard::Objective {
+                name: "before".into(),
+                display_name: crate::minecraft::text::TextComponent::literal("Before"),
+                render_type: crate::minecraft::scoreboard::ObjectiveRenderType::Integer,
+                number_format: None,
+            },
+        );
+        state.hud.cooldowns.insert("before".into(), 4);
         let snap = state.snapshot(42);
 
         assert_eq!(snap.tick, 42);
@@ -768,9 +945,49 @@ mod tests {
         // Mutating the source afterward must not affect an already-taken
         // snapshot: it's a real clone, not a shared reference.
         state.player.health = 20.0;
+        state.presentation.action_bar =
+            Some(crate::minecraft::text::TextComponent::literal("after"));
+        state.scoreboard.objectives.clear();
+        state.hud.cooldowns.clear();
         assert_eq!(
             snap.player.health, 7.5,
             "snapshot is independent of live state"
         );
+        assert_eq!(
+            snap.presentation
+                .action_bar
+                .as_ref()
+                .expect("snapshot action bar")
+                .plain_text(),
+            "before"
+        );
+        assert!(snap.scoreboard.objectives.contains_key("before"));
+        assert_eq!(snap.hud.cooldowns.get("before"), Some(&4));
+    }
+
+    #[test]
+    fn outbound_chat_and_commands_use_distinct_protocol_packets() {
+        let (chat_id, chat_payload) =
+            encode_outbound_chat_action(&BotCommand::Chat("hello".into()), 123, 456).unwrap();
+        assert_eq!(chat_id, SERVERBOUND_CHAT_MESSAGE_ID);
+        let chat = PacketChatMessage::decode(&mut PacketReader::new(&chat_payload)).unwrap();
+        assert_eq!(chat.message, "hello");
+        assert_eq!(chat.timestamp, 123);
+        assert_eq!(chat.salt, 456);
+        assert!(chat.signature.is_none());
+        assert_eq!(chat.acknowledged, vec![0, 0, 0]);
+
+        let (command_id, command_payload) =
+            encode_outbound_chat_action(&BotCommand::Command("say hello".into()), 999, 999)
+                .unwrap();
+        assert_eq!(command_id, SERVERBOUND_CHAT_COMMAND_ID);
+        let command = PacketChatCommand::decode(&mut PacketReader::new(&command_payload)).unwrap();
+        assert_eq!(command.command, "say hello");
+    }
+
+    #[test]
+    fn slash_content_is_rejected_instead_of_changing_packet_kind() {
+        assert!(encode_outbound_chat_action(&BotCommand::Chat("/help".into()), 0, 0).is_err());
+        assert!(encode_outbound_chat_action(&BotCommand::Command("/help".into()), 0, 0).is_err());
     }
 }

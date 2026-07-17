@@ -24,7 +24,9 @@ fn generated_files_are_up_to_date() {
     for f in &files {
         let path = out.join(&f.path);
         match std::fs::read_to_string(&path) {
-            Ok(existing) if existing == f.contents => {}
+            // A Windows checkout may materialize committed text as CRLF,
+            // while the deterministic generator deliberately emits LF.
+            Ok(existing) if existing.replace("\r\n", "\n") == f.contents => {}
             Ok(_) => drift.push(f.path.clone()),
             Err(_) => drift.push(format!("{} (missing)", f.path)),
         }

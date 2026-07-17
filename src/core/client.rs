@@ -253,7 +253,8 @@ impl Client {
     }
 
     /// Returns a cloneable, always-current view of play state (position,
-    /// health, inventory, tracked entities), the read-side counterpart to
+    /// health, inventory, tracked entities, and presentation state), the
+    /// read-side counterpart to
     /// [`Client::control`]. `.borrow()` for the latest snapshot without
     /// blocking, or `.changed().await` to wait for the next update — updates
     /// are published after every clientbound packet and at the end of every

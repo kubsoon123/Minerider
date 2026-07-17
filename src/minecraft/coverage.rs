@@ -325,7 +325,7 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_KICK_DISCONNECT_ID => handled(partial(
             None,
             TimingClass::None,
-            "close connection",
+            "store structured reason, emit event, close connection",
             "join_idle",
         )),
         play::CLIENTBOUND_LOGIN_ID => handled(partial(
@@ -345,7 +345,33 @@ fn play_coverage(id: i32) -> CoverageEntry {
         }
         play::CLIENTBOUND_ENTITY_VELOCITY_ID => handled(state_only("update entity velocity")),
         play::CLIENTBOUND_ENTITY_HEAD_ROTATION_ID => handled(state_only("update entity head yaw")),
+        play::CLIENTBOUND_ABILITIES_ID => handled(state_only(
+            "store player ability flags and flying/walking speeds; emit HUD event",
+        )),
+        play::CLIENTBOUND_SET_COOLDOWN_ID => handled(state_only(
+            "apply bounded cooldown group lifecycle; emit HUD event",
+        )),
+        play::CLIENTBOUND_ENTITY_EFFECT_ID | play::CLIENTBOUND_REMOVE_ENTITY_EFFECT_ID => handled(
+            state_only("apply bounded local-player status-effect lifecycle; emit HUD event"),
+        ),
+        play::CLIENTBOUND_ENTITY_UPDATE_ATTRIBUTES_ID => handled(state_only(
+            "replace bounded local-player attributes/modifiers; emit HUD event",
+        )),
         play::CLIENTBOUND_EXPERIENCE_ID => handled(state_only("update experience bar/level/total")),
+        play::CLIENTBOUND_DIFFICULTY_ID => handled(state_only(
+            "store difficulty and server lock state; emit HUD event",
+        )),
+        play::CLIENTBOUND_SPAWN_POSITION_ID => handled(state_only(
+            "store global spawn block position and angle; emit HUD event",
+        )),
+        play::CLIENTBOUND_INITIALIZE_WORLD_BORDER_ID
+        | play::CLIENTBOUND_WORLD_BORDER_CENTER_ID
+        | play::CLIENTBOUND_WORLD_BORDER_LERP_SIZE_ID
+        | play::CLIENTBOUND_WORLD_BORDER_SIZE_ID
+        | play::CLIENTBOUND_WORLD_BORDER_WARNING_DELAY_ID
+        | play::CLIENTBOUND_WORLD_BORDER_WARNING_REACH_ID => handled(state_only(
+            "apply bounded world-border lifecycle safely out of order; emit HUD event",
+        )),
         play::CLIENTBOUND_POSITION_ID => handled(Obligation {
             responds_with: Some("teleport_confirm"),
             timing: TimingClass::Strict,
@@ -391,11 +417,8 @@ fn play_coverage(id: i32) -> CoverageEntry {
             "none",
             "join_idle",
         )),
-        play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => ignored(not_implemented(
-            Some("client_command"),
-            TimingClass::TickBound,
-            "mark player dead; vanilla shows respawn screen",
-            "",
+        play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => handled(state_only(
+            "store structured local-player death information; emit HUD event",
         )),
         play::CLIENTBOUND_UPDATE_HEALTH_ID => {
             handled(state_only("update health/hunger/saturation"))
@@ -403,22 +426,87 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_RESPAWN_ID => handled(state_only(
             "reset dimension/world and readiness gate for a new life",
         )),
-        play::CLIENTBOUND_OPEN_WINDOW_ID => handled(state_only("track newly opened container")),
-        play::CLIENTBOUND_CLOSE_WINDOW_ID => handled(state_only("clear tracked open container")),
-        play::CLIENTBOUND_WINDOW_ITEMS_ID => {
-            handled(state_only("refresh a window's slots and the cursor item"))
-        }
-        play::CLIENTBOUND_SET_SLOT_ID => handled(state_only("update one inventory/container slot")),
-        play::CLIENTBOUND_SET_CURSOR_ITEM_ID => handled(state_only("update the cursor item")),
+        play::CLIENTBOUND_OPEN_WINDOW_ID => handled(state_only(
+            "replace open container, cancel stale transactions and emit inventory events",
+        )),
+        play::CLIENTBOUND_CLOSE_WINDOW_ID => handled(state_only(
+            "close matching container, cancel transactions and emit inventory events",
+        )),
+        play::CLIENTBOUND_WINDOW_ITEMS_ID => handled(state_only(
+            "apply bounded full slot/cursor correction and resolve transactions",
+        )),
+        play::CLIENTBOUND_SET_SLOT_ID => handled(state_only(
+            "apply bounded slot update and confirm newer-state transactions",
+        )),
+        play::CLIENTBOUND_SET_CURSOR_ITEM_ID => handled(state_only(
+            "update authoritative cursor item and emit event",
+        )),
         play::CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => handled(state_only(
-            "update a container property (furnace progress, etc.)",
+            "update bounded deterministic window property state and emit event",
         )),
         play::CLIENTBOUND_HELD_ITEM_SLOT_ID => {
-            handled(state_only("track the server-selected hotbar slot"))
+            handled(state_only("validate and track the selected hotbar slot"))
         }
-        play::CLIENTBOUND_PLAYER_CHAT_ID => handled(state_only("log the message")),
-        play::CLIENTBOUND_SYSTEM_CHAT_ID => handled(state_only("log the message")),
-        play::CLIENTBOUND_PROFILELESS_CHAT_ID => handled(state_only("log the message")),
+        play::CLIENTBOUND_SET_PLAYER_INVENTORY_ID => handled(state_only(
+            "update bounded player inventory plus hotbar/held-item projections; emit events",
+        )),
+        play::CLIENTBOUND_PLAYER_INFO_ID => handled(state_only(
+            "apply bounded deterministic player-list fields and emit join/HUD events",
+        )),
+        play::CLIENTBOUND_PLAYER_REMOVE_ID => handled(state_only(
+            "remove deterministic player-list entries and emit leave/HUD events",
+        )),
+        play::CLIENTBOUND_UPDATE_TIME_ID => handled(state_only(
+            "store world age, day time and ticking flag; emit time/HUD events",
+        )),
+        play::CLIENTBOUND_GAME_STATE_CHANGE_ID => handled(state_only(
+            "store game mode and rain/thunder state; emit weather/HUD events",
+        )),
+        play::CLIENTBOUND_PLAYER_CHAT_ID => handled(state_only(
+            "store safe display text plus unverified raw signed-chat data; emit event",
+        )),
+        play::CLIENTBOUND_SYSTEM_CHAT_ID => handled(state_only(
+            "store system chat or action bar according to packet flag; emit event",
+        )),
+        play::CLIENTBOUND_PROFILELESS_CHAT_ID => handled(state_only(
+            "store structured disguised chat metadata and emit event",
+        )),
+        play::CLIENTBOUND_ACTION_BAR_ID => handled(state_only(
+            "replace structured action-bar state and emit event",
+        )),
+        play::CLIENTBOUND_SET_TITLE_TEXT_ID => {
+            handled(state_only("replace structured title and emit event"))
+        }
+        play::CLIENTBOUND_SET_TITLE_SUBTITLE_ID => {
+            handled(state_only("replace structured subtitle and emit event"))
+        }
+        play::CLIENTBOUND_SET_TITLE_TIME_ID => {
+            handled(state_only("replace title timing values and emit event"))
+        }
+        play::CLIENTBOUND_CLEAR_TITLES_ID => handled(state_only(
+            "clear title/subtitle; reset default timings only when requested",
+        )),
+        play::CLIENTBOUND_PLAYERLIST_HEADER_ID => handled(state_only(
+            "replace structured tab-list header/footer and emit event",
+        )),
+        play::CLIENTBOUND_BOSS_BAR_ID => handled(state_only(
+            "apply bounded add/update/remove state by stable uuid and emit event",
+        )),
+        play::CLIENTBOUND_RESET_SCORE_ID => handled(state_only(
+            "remove one/all bounded scores for an owner and emit event",
+        )),
+        play::CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID => handled(state_only(
+            "attach/detach bounded display slot by stable objective name and emit event",
+        )),
+        play::CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID => handled(state_only(
+            "create/update/remove bounded objective; detach slots/scores on removal; emit event",
+        )),
+        play::CLIENTBOUND_TEAMS_ID => handled(state_only(
+            "apply bounded team lifecycle/options/membership by stable name and emit event",
+        )),
+        play::CLIENTBOUND_SCOREBOARD_SCORE_ID => handled(state_only(
+            "create/update bounded score with display/number formatting and emit event",
+        )),
         play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
             Some("configuration_acknowledged"),
             TimingClass::Strict,

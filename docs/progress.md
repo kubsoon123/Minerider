@@ -1326,11 +1326,11 @@ equivalents of literal/styled/translated/array-root, malformed JSON
 degrading to a literal of the raw string, `Display` matching `plain_text`,
 and indexed-placeholder substitution directly.
 
-**Verification:** 297 workspace tests pass, 0 failed (was 276; net +21:
-+18 new in `text.rs`, −1 test moved/superseded, plus the removed duplicate
-logic in `mod.rs`). `cargo fmt --all --check`, `cargo clippy --workspace
---all-targets -D warnings`, and `cargo run -p minerider-codegen -- --check`
-all clean.
+**Verification correction (established by the Phase 4d baseline audit):**
+the exact Phase 4c baseline at commit `026c815` is 293 workspace tests, not
+297 as this entry originally reported. Phase 4d adds exactly nine tests and
+the full workspace then reports 302, which exposed the earlier arithmetic/
+reporting error. The Phase 4c format, Clippy, and codegen checks remain clean.
 
 **Honest limitations:**
 - Not a full vanilla lang file: `plain_text()`'s translation table covers
@@ -1348,3 +1348,294 @@ all clean.
 **Next unfinished phase:** Phase 4d — inbound chat/system/action-bar/title/
 boss-bar/tab-header-footer state built on this model, plus outbound
 chat/commands (folded in from the original Phase 4g).
+
+---
+
+## Phase 4d — inbound presentation and chat state
+
+Built one bounded, snapshot-readable `PresentationState`
+(`src/minecraft/presentation.rs`) on the shared Phase 4c text component.
+Generated protocol-769 packet structs and ids remain the wire source of
+truth; the module projects them into stable public Rust models before state
+mutation or event delivery.
+
+**Packet coverage completed:**
+- `player_chat`: structured sender/target/display component, registry or
+  inline chat decoration, filter status, and raw signature/timestamp/salt/
+  previous-message data. Raw signed material is retained but explicitly not
+  described as verified.
+- `profileless_chat` (disguised chat) and `system_chat`, including the
+  system-chat action-bar flag.
+- dedicated `action_bar`, `set_title_text`, `set_title_subtitle`,
+  `set_title_time`, and `clear_titles`. Clear removes title/subtitle but
+  preserves timing; reset also restores vanilla 10/70/20 timing defaults.
+- `playerlist_header` updates header/footer atomically.
+- all `boss_bar` actions: add, remove, progress, title, style, and flags,
+  keyed by stable UUID. Unknown color/overlay values and flag bits are
+  preserved; missing/out-of-order updates and removals are typed safe no-ops.
+- `kick_disconnect`: the structured reason is stored and published before
+  the terminal disconnect error leaves the play loop.
+
+**Architecture and resource bounds:**
+- Every play snapshot now includes an independent clone of presentation
+  state. A lagged broadcast consumer can therefore recover from the current
+  snapshot instead of relying on replay.
+- Each applied update emits one ordered `PresentationEvent`; existing
+  `Chat`, `SystemChat`, and `Kicked` events remain as compatibility
+  projections.
+- Chat history is capped at 512 entries and boss bars at 256. Previous
+  signed-message references, filter masks, and inline decoration parameters
+  have explicit copy bounds with truncation recorded in the public model.
+- Event/update payloads use indirection for large text-bearing variants so
+  the bounded broadcast channel does not inflate every event allocation.
+
+**Tests added (9):** system/action-bar routing; player-chat raw signature,
+unsigned display, target and filter preservation; disguised-chat safety;
+title clear versus reset; atomic tab header/footer; complete boss-bar
+lifecycle including unknown values; out-of-order boss-bar no-ops; hostile
+collection bounds; and structured disconnect state/event.
+
+**Verification:** 302 workspace tests pass, 0 failed (exact baseline 293;
++9). GitHub CI passes `cargo fmt --all --check`,
+`cargo test --workspace --locked` on Linux and Windows,
+`cargo clippy --workspace --all-targets -- -D warnings`, and
+`cargo run -p minerider-codegen -- --check`.
+The conformance-document and generated-file drift tests now normalize
+checkout CRLF to LF before comparison; their previous byte-for-byte newline
+comparisons failed on Windows despite identical generated content.
+
+**Honest limitations:**
+- Signed-chat cryptographic verification and acknowledgement state are not
+  implemented; signatures are raw untrusted bytes.
+- Registry-referenced chat types are retained by id because configuration
+  registry resolution for chat decorations is not implemented yet. Inline
+  decorations are fully projected.
+- Presentation state is headless data only. It does not implement visual
+  expiry/animation, execute click/hover actions, or claim renderer parity.
+- Compatibility chat events intentionally flatten structured components;
+  new consumers should use `PresentationEvent` and the snapshot.
+
+**Next unfinished phase:** Phase 4e — complete scoreboard objectives,
+display slots, scores, and teams on the shared text/presentation foundation.
+
+---
+
+## Phase 4e — complete scoreboards and teams
+
+Implemented one bounded, snapshot-readable `ScoreboardState`
+(`src/minecraft/scoreboard.rs`) directly from the generated protocol-769
+packet definitions. Generated switch enums are projected into stable public
+models before state mutation or event delivery.
+
+**Packet coverage completed:**
+- `scoreboard_objective`: create, update and remove by stable objective name,
+  including structured display text, integer/hearts render type, default,
+  blank, styled, fixed and unknown number formats.
+- `scoreboard_display_objective`: list/sidebar/below-name/team-color slots,
+  explicit empty-name detach and safely preserved unknown slot ids.
+- `scoreboard_score` and `reset_score`: create/update, display name, per-score
+  number-format override, one-objective removal and all-objectives reset for
+  an owner.
+- `teams`: create, update and remove; member add/remove and atomic movement
+  between teams; display name, prefix, suffix, color, friendly-fire and
+  friendly-invisibility bits, name-tag visibility and collision rule.
+
+**Lifecycle, ordering and bounds:**
+- Objectives, display slots, scores and teams are `BTreeMap`/`BTreeSet`
+  backed for deterministic snapshots. Member-to-team ownership is indexed
+  explicitly, so one entry cannot remain in two teams.
+- Removing an objective also detaches every referencing display slot and
+  removes every score for that objective. Events report the detached/removed
+  counts.
+- Missing/out-of-order updates, removals and unknown actions are typed safe
+  no-ops. Unknown render types, team colors, visibility/collision strings,
+  display slots and number-format ids remain inspectable.
+- Server-controlled state is capped at 256 objectives, 64 display slots,
+  16,384 scores, 1,024 teams and 16,384 unique team members. Capacity rejects
+  are observable in ordered `ScoreboardEvent`s.
+- Every play snapshot carries an independent scoreboard clone; lagged event
+  consumers recover through the snapshot exactly like presentation state.
+
+**Tests added (8):** objective/display/score lifecycle and cascading removal;
+scoped/all-objective score reset; complete team/options/member lifecycle;
+out-of-order and unknown-action no-ops; unknown number-format preservation;
+deterministic ordering and objective/display/score bounds; team/member bounds;
+and malformed payload rejection. The lifecycle assertions cover explicit
+display detach, styled/fixed formats, shared text components, every team text
+field, color, visibility/collision rules and both flag bits.
+
+**Verification:** 310 workspace tests pass, 0 failed (Phase 4d baseline 302;
++8). GitHub CI passes `cargo fmt --all --check`,
+`cargo test --workspace --locked` on Linux and Windows,
+`cargo clippy --workspace --all-targets -- -D warnings`, and
+`cargo run -p minerider-codegen -- --check`.
+
+**Honest limitations:**
+- State is headless data: there is no scoreboard/HUD renderer and no claim of
+  pixel or animation parity with vanilla.
+- Semantics are unit-tested against generated protocol-769 layouts; a real
+  vanilla-client trace diff for these five packets is still pending, so the
+  conformance matrix reports `PARTIAL`, not `PASS`.
+- Styled number-format NBT is retained raw for a future renderer; fixed text
+  uses the shared `TextComponent` model immediately.
+
+**Next unfinished phase:** Phase 4f — remaining typed HUD and player-facing
+state (abilities, effects, attributes, cooldowns, border, difficulty, spawn
+and the gaps in existing health/experience/time/weather/player-list state).
+
+---
+
+## Phase 4f — typed HUD and player-facing state
+
+Added a bounded, snapshot-readable `HudState` and ordered `HudEvent` stream
+for protocol-769 player-facing data that previously lived only in partial
+compatibility fields or was ignored.
+
+**Packet/state coverage completed:**
+- Health, hunger, saturation, experience, game mode, hardcore/previous mode,
+  ability flags and flying/walking speeds.
+- Selected hotbar slot and held-item projection from direct player-inventory
+  updates; bounded cooldown and local-player effect lifecycles.
+- Local-player attributes with typed keys/operations and a per-attribute
+  modifier bound; structured local death and respawn/dimension context.
+- Full world-border initialization and partial updates, safe before initial
+  state; world age/day time/ticking, rain/thunder levels, difficulty/lock and
+  global spawn position/angle.
+- Modern `player_info` fields: account name, game mode, listed state, latency,
+  display name, list priority, hat flag and bounded signed-chat-session
+  metadata. Player entries are now capped and UUID-ordered.
+
+**Lifecycle, ordering and bounds:** cooldowns, effects, attributes and player
+entries use deterministic maps with defensive limits; attribute modifier
+vectors are truncated observably. Entity-scoped effects, attributes and death
+packets only mutate HUD state when addressed to the local entity. Unknown
+game modes, difficulty values and attribute operations remain inspectable;
+malformed payloads return protocol errors.
+
+**Tests added (13):** abilities; cooldown/effect add-remove and local-entity
+filtering; attribute projection/modifier truncation; structured death; full
+and out-of-order world-border updates; difficulty/spawn unknown preservation;
+hotbar/held item tracking; typed vitals/experience/time/weather/game mode;
+malformed payload rejection; modern player-list fields and clearing; player
+bound behavior; and deterministic UUID iteration.
+
+**Verification:** GitHub CI runs format, clippy, generated-protocol drift and
+workspace tests on Linux and Windows. Vanilla-client trace capture remains
+pending, so these state-only obligations are `PARTIAL`, not `PASS`.
+
+**Honest limitations:**
+- HUD state is headless; it does not render, animate or claim pixel parity.
+- Status-effect and attribute state is retained for observation but is not
+  yet folded into movement physics.
+- The direct player-inventory packet currently projects only hotbar/held-item
+  HUD data; the complete transactional inventory model belongs to Phase 4h.
+- Signed player chat sessions retain only bounded metadata; cryptographic
+  chat verification remains unimplemented.
+
+**Next unfinished phase:** Phase 4g — supervised outbound chat and command
+actions with explicit packet semantics, validation and typed responses.
+
+---
+
+## Phase 4g — outbound chat and command API
+
+Replaced leading-slash inference with two explicit control actions:
+`BotCommand::Chat` always targets protocol 769 `chat_message`, while
+`BotCommand::Command` always targets `chat_command` and stores command text
+without `/`.
+
+**Validation and packet semantics:**
+- Empty chat/command text, command text with a leading slash, chat text that
+  looks like a command, and overlength text are rejected before queueing.
+- The 256-character protocol limit is measured as Java-compatible UTF-16
+  code units, not UTF-8 bytes or Rust scalar values.
+- Chat encoding preserves timestamp/salt, an absent signature and the
+  protocol-769 three-byte empty acknowledgement window. Command encoding uses
+  the dedicated packet and never receives chat-only fields.
+
+**Supervisor behavior:**
+- The existing 64-entry bounded queue now uses `try_send`: capacity returns
+  typed `ControlError::QueueFull` immediately instead of awaiting space.
+- `ControlError::InvalidAction` carries the typed validation reason; offline
+  and stopped states still return `NotConnected`/`SupervisorStopped`.
+- Every queued action captures the active session generation. `run_session`
+  compares it before forwarding, so an old action cannot execute after a
+  reconnect even across a narrow status/queue race.
+
+**Tests added (7):** UTF-16/empty/slash/maximum validation; distinct typed
+actions; exact chat and command packet encoding; slash rejection without
+packet-kind inference; typed validation before connectivity checks; queue
+capacity; and captured generation. Existing integration coverage continues
+to exercise disconnected sessions, concurrent serialization and successful
+commands after a generation-changing reconnect.
+
+**Honest limitations:** outbound player chat is unsigned and carries no
+cryptographic message-chain acknowledgement state; secure-chat-enforcing
+servers may reject it. This phase does not claim signed-chat conformance.
+
+**Next unfinished phase:** Phase 4h — correct bounded inventory/window
+transactions with typed click modes, confirmations and generation safety.
+
+---
+
+## Phase 4h — bounded server-authoritative inventory transactions
+
+Implemented the smallest coherent green Phase 4h slice: protocol-769 generic
+container clicks can now be validated, sent and observed through both a live
+`ControlHandle` and a reconnecting `SupervisorHandle`, without optimistic
+slot mutation or a false success result at queue time.
+
+**State and packet model:**
+- `InventoryState` now keeps deterministic bounded window properties, caps a
+  window at 1024 slots with an observable truncation flag, and applies direct
+  player-inventory updates to the same authoritative state used by snapshots.
+- `InventoryClick` models normal pickup/outside clicks, shift-click,
+  hotbar/offhand swap, creative middle-click clone, drop, all drag phases and
+  double-click. Slot/button/hotbar rules, creative-only modes, drag lifecycle,
+  current window id and state id are checked before encoding.
+- A validated request encodes the generated `PacketWindowClick` and generated
+  serverbound packet id. Every mode has deterministic encode/decode coverage;
+  generated protocol files remain untouched.
+
+**Transaction lifecycle and safety:**
+- Pending transactions are capped at 64; completed outcomes are retained in a
+  deterministic capped map of 128 entries. The model distinguishes queued,
+  sent, confirmed by a newer incremental state, corrected by a full sync,
+  timed out, window closed and rejected outcomes.
+- Clientbound open/close, full-window, slot, cursor, property, selected-hotbar
+  and direct-player-inventory packets update snapshots and emit ordered
+  `BotEvent::Inventory` events. Closing or replacing a window cancels its
+  pending transactions; tick expiry prevents an unbounded wait.
+- Click packets intentionally carry an empty `changed_slots` prediction and
+  the current authoritative cursor. No local slot is mutated optimistically:
+  the next server update is the confirmation or correction source of truth.
+- `SupervisorHandle::inventory_click` allocates a transaction id, captures the
+  current session generation and state id, submits through the existing
+  bounded command queue, then waits for a terminal authoritative outcome.
+  `inventory_click_in_generation` lets a multi-step workflow pin an explicit
+  generation and timeout. Disconnects, replacements and stale generations
+  return typed `InventoryActionError` values and never replay on a new session.
+
+**Tests added (10):** every typed click mode and exact packet fields; generated
+packet encode/decode; malformed slot/state/creative requests; drag ordering;
+incremental confirmation versus full correction; transaction capacity and
+timeout; close cancellation; supervisor confirmation/disconnect/timeout;
+stale and changed generation; and the public supervised request lifecycle.
+GitHub CI runs format, clippy, codegen drift and workspace tests on Linux and
+Windows. The conformance generator classifies the eight strengthened inbound
+inventory obligations as `PARTIAL` pending a vanilla-client trace.
+
+**Honest limitations:**
+- This slice is generic container transaction plumbing, not a complete
+  vanilla screen/menu engine. It does not calculate predicted changed slots,
+  recipes, crafting outputs, anvils, merchants or other menu-specific rules.
+- An empty `changed_slots` map favors safety and server correction over
+  latency; servers or anti-cheat plugins that require exact client prediction
+  may reject or resynchronize a click.
+- The direct `ControlHandle` is fire-and-observe through snapshots/events;
+  only the supervisor convenience API waits and returns a terminal outcome.
+- Real vanilla-client trace comparison remains pending, so this phase makes no
+  byte/timing parity claim beyond generated layouts and deterministic tests.
+
+**Next unfinished work:** build menu-specific interaction semantics and
+higher-level inventory workflows on this bounded transaction foundation.

@@ -15,12 +15,15 @@ pub mod coverage;
 pub mod entity;
 pub mod event;
 pub mod handshake;
+pub mod hud;
 pub mod inventory;
 pub mod login;
 pub mod physics;
 pub mod play;
 pub mod player;
 pub mod players;
+pub mod presentation;
+pub mod scoreboard;
 pub mod text;
 pub mod world;
 
