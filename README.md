@@ -49,6 +49,10 @@ feature):
   friction-aware ground movement, step-up, knockback, auto-respawn.
 - Entity tracking, inventory/container state tracking, tab-list (player
   info) tracking.
+- Headless presentation state: structured chat/system/disguised messages,
+  action bar, titles and timings, tab-list header/footer, bounded boss bars,
+  and structured disconnect reasons. Signed-chat wire data is retained for
+  future verification; signatures are not currently verified.
 - A push-based bot event stream (`Client::events`) and a pull-based state
   snapshot (`Client::bot_state`), plus a command-based control API
   (`Client::control`) for movement, look and chat.
