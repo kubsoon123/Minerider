@@ -1400,9 +1400,9 @@ collection bounds; and structured disconnect state/event.
 `cargo test --workspace --locked` on Linux and Windows,
 `cargo clippy --workspace --all-targets -- -D warnings`, and
 `cargo run -p minerider-codegen -- --check`.
-The conformance-document drift test now normalizes checkout CRLF to LF before
-comparison; its previous byte-for-byte newline comparison failed on Windows
-despite identical generated content.
+The conformance-document and generated-file drift tests now normalize
+checkout CRLF to LF before comparison; their previous byte-for-byte newline
+comparisons failed on Windows despite identical generated content.
 
 **Honest limitations:**
 - Signed-chat cryptographic verification and acknowledgement state are not
