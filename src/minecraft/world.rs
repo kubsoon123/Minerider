@@ -448,7 +448,10 @@ fn protocol(message: impl Into<String>) -> MineRiderError {
 #[cfg(test)]
 mod tests {
     use minerider_protocol::buffer::PacketWriter;
-    use minerider_protocol::generated::v1_21_4::play::PacketMapChunk;
+    use minerider_protocol::generated::v1_21_4::play::{
+        PacketMapChunk, PacketTileEntityData, PacketUpdateLight,
+    };
+    use minerider_protocol::generated::v1_21_4::types::Position;
     use minerider_protocol::nbt::Nbt;
 
     use super::*;
@@ -493,6 +496,17 @@ mod tests {
         }
     }
 
+    fn shared_world(store: Arc<SharedChunkStore>) -> World {
+        let dimension = dimension();
+        let scope = WorldScope::new(
+            crate::minecraft::shared_world::ServerIdentity::new("example.test", 25_565),
+            "minecraft:overworld",
+            7,
+            &dimension,
+        );
+        World::with_shared_store(dimension, store, scope)
+    }
+
     #[test]
     fn decodes_dimension_number_of_single_value_sections() {
         let mut data = Vec::new();
@@ -535,6 +549,90 @@ mod tests {
         world.set_block_state(-1, 64, 32, 42).unwrap();
         assert_eq!(world.block_state(-1, 64, 32), Some(42));
         assert_eq!(world.block_state(-2, 64, 32), Some(0));
+    }
+
+    #[test]
+    fn identical_clients_share_payload_until_one_updates() {
+        let store = Arc::new(SharedChunkStore::new());
+        let mut first = shared_world(store.clone());
+        let mut second = shared_world(store);
+        let mut data = Vec::new();
+        for _ in 0..24 {
+            data.extend(single_section(0, 0));
+        }
+        let packet = packet(data);
+        first.insert_chunk(&packet).unwrap();
+        second.insert_chunk(&packet).unwrap();
+
+        let position = (-1, 2);
+        assert!(Arc::ptr_eq(
+            first.chunks.get(&position).unwrap(),
+            second.chunks.get(&position).unwrap()
+        ));
+
+        first.set_block_state(-1, 64, 32, 42).unwrap();
+        let first_chunk = first.chunks.get(&position).unwrap();
+        let second_chunk = second.chunks.get(&position).unwrap();
+        assert!(!Arc::ptr_eq(first_chunk, second_chunk));
+        assert!(Arc::ptr_eq(
+            &first_chunk.sections[0],
+            &second_chunk.sections[0]
+        ));
+        assert!(!Arc::ptr_eq(
+            &first_chunk.sections[8],
+            &second_chunk.sections[8]
+        ));
+        assert_eq!(first.block_state(-1, 64, 32), Some(42));
+        assert_eq!(second.block_state(-1, 64, 32), Some(0));
+    }
+
+    #[test]
+    fn light_and_block_entity_updates_remain_client_local() {
+        let store = Arc::new(SharedChunkStore::new());
+        let mut first = shared_world(store.clone());
+        let mut second = shared_world(store);
+        let mut data = Vec::new();
+        for _ in 0..24 {
+            data.extend(single_section(0, 0));
+        }
+        let packet = packet(data);
+        first.insert_chunk(&packet).unwrap();
+        second.insert_chunk(&packet).unwrap();
+
+        first
+            .apply_light_update(&PacketUpdateLight {
+                chunk_x: -1,
+                chunk_z: 2,
+                sky_light_mask: vec![1],
+                block_light_mask: vec![2],
+                empty_sky_light_mask: vec![3],
+                empty_block_light_mask: vec![4],
+                sky_light: vec![vec![15; 16]],
+                block_light: vec![vec![7; 16]],
+            })
+            .unwrap();
+        first
+            .apply_block_entity_update(&PacketTileEntityData {
+                location: Position {
+                    x: -1,
+                    z: 32,
+                    y: 64,
+                },
+                action: 5,
+                nbt_data: Some(Nbt::Compound(vec![])),
+            })
+            .unwrap();
+
+        let first_chunk = first.chunks.get(&(-1, 2)).unwrap();
+        let second_chunk = second.chunks.get(&(-1, 2)).unwrap();
+        assert_eq!(first_chunk.light.sky_mask, vec![1]);
+        assert!(second_chunk.light.sky_mask.is_empty());
+        assert_eq!(first_chunk.block_entities.len(), 1);
+        assert!(second_chunk.block_entities.is_empty());
+        assert!(Arc::ptr_eq(
+            &first_chunk.sections[0],
+            &second_chunk.sections[0]
+        ));
     }
 
     #[test]

@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use minerider_protocol::buffer::PacketWriter;
 use minerider_protocol::generated::v1_21_4::play::PacketMapChunk;
@@ -16,7 +16,7 @@ use minerider_protocol::traits::Encode;
 
 use crate::core::error::Result;
 use crate::minecraft::configuration::DimensionType;
-use crate::minecraft::world::{Chunk, ChunkSection, PalettedContainer};
+use crate::minecraft::world::{Chunk, ChunkSection, PalettedContainer, World};
 
 const DEFAULT_SHARD_COUNT: usize = 16;
 const DEFAULT_KEYS_PER_SHARD: usize = 4_096;
@@ -126,12 +126,18 @@ pub struct ServerIdentity {
 }
 
 impl ServerIdentity {
-    pub fn new(host: impl Into<Arc<str>>, port: u16) -> Self {
+    pub fn new(host: impl AsRef<str>, port: u16) -> Self {
         Self {
-            host: host.into(),
+            host: Arc::from(host.as_ref().trim_end_matches('.').to_ascii_lowercase()),
             port,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct WorldIdentity {
+    name: Arc<str>,
+    hashed_seed: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -162,18 +168,66 @@ impl From<&DimensionType> for DimensionIdentity {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WorldScope {
     server: ServerIdentity,
-    generation: u64,
+    world: WorldIdentity,
     dimension: DimensionIdentity,
 }
 
 impl WorldScope {
-    pub fn new(server: ServerIdentity, generation: u64, dimension: &DimensionType) -> Self {
+    pub fn new(
+        server: ServerIdentity,
+        world_name: impl Into<Arc<str>>,
+        hashed_seed: i64,
+        dimension: &DimensionType,
+    ) -> Self {
         Self {
             server,
-            generation,
+            world: WorldIdentity {
+                name: world_name.into(),
+                hashed_seed,
+            },
             dimension: dimension.into(),
         }
     }
+}
+
+/// Process-wide strict sharing context for one configured server endpoint.
+/// It creates per-client position maps while interning only equal immutable
+/// payloads from the same server, world identity, and dimension definition.
+#[derive(Debug, Clone)]
+pub struct SharedWorldContext {
+    store: Arc<SharedChunkStore>,
+    server: ServerIdentity,
+}
+
+impl SharedWorldContext {
+    pub fn process(server: ServerIdentity) -> Self {
+        Self {
+            store: process_shared_chunk_store(),
+            server,
+        }
+    }
+
+    pub fn world(
+        &self,
+        dimension: DimensionType,
+        world_name: impl Into<Arc<str>>,
+        hashed_seed: i64,
+    ) -> World {
+        let scope = WorldScope::new(
+            self.server.clone(),
+            world_name,
+            hashed_seed,
+            &dimension,
+        );
+        World::with_shared_store(dimension, self.store.clone(), scope)
+    }
+}
+
+fn process_shared_chunk_store() -> Arc<SharedChunkStore> {
+    static STORE: OnceLock<Arc<SharedChunkStore>> = OnceLock::new();
+    STORE
+        .get_or_init(|| Arc::new(SharedChunkStore::new()))
+        .clone()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -336,7 +390,7 @@ impl SharedChunkStore {
         let mixed = key.fingerprint
             ^ (key.x as u32 as u64).rotate_left(17)
             ^ (key.z as u32 as u64).rotate_left(37)
-            ^ key.scope.generation.rotate_left(7)
+            ^ (key.scope.world.hashed_seed as u64).rotate_left(7)
             ^ u64::from(key.scope.server.port);
         mixed as usize % self.shards.len()
     }
@@ -456,7 +510,8 @@ mod tests {
     fn scope(server: &str, generation: u64, dimension_key: &str) -> WorldScope {
         WorldScope::new(
             ServerIdentity::new(server, 25_565),
-            generation,
+            "minecraft:test_world",
+            generation as i64,
             &dimension(dimension_key),
         )
     }
@@ -498,13 +553,13 @@ mod tests {
         let different_dimension = store
             .intern(&scope("server-a", 0, "minecraft:the_nether"), snapshot(1))
             .unwrap();
-        let different_generation = store
+        let different_world = store
             .intern(&scope("server-a", 1, "minecraft:overworld"), snapshot(1))
             .unwrap();
         assert!(!Arc::ptr_eq(&first, &different_content));
         assert!(!Arc::ptr_eq(&first, &different_server));
         assert!(!Arc::ptr_eq(&first, &different_dimension));
-        assert!(!Arc::ptr_eq(&first, &different_generation));
+        assert!(!Arc::ptr_eq(&first, &different_world));
     }
 
     #[test]

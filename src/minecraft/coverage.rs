@@ -402,15 +402,17 @@ fn play_coverage(id: i32) -> CoverageEntry {
             scenario: "join_idle, initial_chunks",
             evidence: EVIDENCE_UNIT,
         }),
+        play::CLIENTBOUND_TILE_ENTITY_DATA_ID => {
+            handled(state_only("update block entity in cached chunk snapshot"))
+        }
         play::CLIENTBOUND_UNLOAD_CHUNK_ID => handled(state_only("drop chunk from world cache")),
         play::CLIENTBOUND_BLOCK_CHANGE_ID => handled(state_only("update one cached block state")),
         play::CLIENTBOUND_MULTI_BLOCK_CHANGE_ID => {
             handled(state_only("update cached block states in one section"))
         }
-        play::CLIENTBOUND_UPDATE_LIGHT_ID => CoverageEntry {
-            class: CoverageClass::StoredForLater,
-            obligation: not_implemented(None, TimingClass::None, "store light data", ""),
-        },
+        play::CLIENTBOUND_UPDATE_LIGHT_ID => {
+            handled(state_only("replace light data in cached chunk snapshot"))
+        }
         play::CLIENTBOUND_PING_ID => ignored(not_implemented(
             Some("pong"),
             TimingClass::Strict,
