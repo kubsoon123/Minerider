@@ -6,12 +6,13 @@ section). This document exists so a later, bounded session can implement
 Phase 5a without re-deriving these decisions, and so nothing here is
 mistaken for a shipped feature.
 
-This design is grounded in the actual Rust APIs as of Phase 3l/4a:
+This design is grounded in the actual Rust APIs as of Phase 4d:
 `core::client::Client`, `core::supervisor::ClientSupervisor`,
 `minecraft::control::{ControlHandle, BotCommand}`,
 `minecraft::event::BotEvent`, `minecraft::play::StateSnapshot`, and the
 state types it aggregates (`LocalPlayer`, `EntityStore`, `InventoryState`,
-`PlayerList`). Field names below are copied from those types, not guessed.
+`PlayerList`, `PresentationState`). Field names below are copied from those
+types, not guessed.
 
 ## Why Lua sits where it does
 
@@ -207,6 +208,8 @@ s.world_time, s.raining
 -- s.entities: array of { id, uuid, kind, x, y, z, yaw, pitch, head_yaw }  (from EntityStore/Entity)
 -- s.inventory.player_inventory.slots, s.inventory.open_window, s.inventory.cursor  (from InventoryState/Window)
 -- s.players: array of { uuid, name, gamemode, latency, listed }           (from PlayerList/PlayerEntry)
+-- s.presentation: bounded structured chat, action bar, titles, tab-list
+--                 header/footer, boss bars, and disconnect reason
 
 -- Persistent controls (map directly to BotCommand via ControlHandle; all
 -- fire-and-forget, never block):
