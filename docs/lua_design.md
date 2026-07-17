@@ -189,6 +189,7 @@ bot:on("time", function(e) end)                -- BotEvent::Time { time_of_day }
 bot:on("weather", function(e) end)             -- BotEvent::Weather { raining }
 bot:on("kicked", function(e) end)              -- BotEvent::Kicked { reason }
 bot:on("scoreboard", function(e) end)          -- BotEvent::Scoreboard(ScoreboardEvent)
+bot:on("hud", function(e) end)                 -- BotEvent::Hud(HudEvent)
 -- Supervisor lifecycle (only fire when run under a ClientSupervisor):
 bot:on("connecting", function() end)
 bot:on("connected", function() end)
@@ -208,10 +209,13 @@ s.player.health, s.player.food, s.player.saturation
 s.world_time, s.raining
 -- s.entities: array of { id, uuid, kind, x, y, z, yaw, pitch, head_yaw }  (from EntityStore/Entity)
 -- s.inventory.player_inventory.slots, s.inventory.open_window, s.inventory.cursor  (from InventoryState/Window)
--- s.players: array of { uuid, name, gamemode, latency, listed }           (from PlayerList/PlayerEntry)
+-- s.players: bounded uuid-ordered entries with profile, chat-session,
+--            display-name, list priority and hat metadata
 -- s.presentation: bounded structured chat, action bar, titles, tab-list
 --                 header/footer, boss bars, and disconnect reason
 -- s.scoreboard: bounded objectives, display slots, scores, teams and members
+-- s.hud: vitals/xp, game mode/abilities/hotbar, cooldowns/effects/attributes,
+--        death/respawn, border, time/weather, difficulty and spawn
 
 -- Persistent controls (map directly to BotCommand via ControlHandle; all
 -- fire-and-forget, never block):

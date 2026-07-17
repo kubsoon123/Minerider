@@ -56,6 +56,10 @@ feature):
 - Headless scoreboard state: bounded, deterministically ordered objectives,
   display slots, scores and teams, including protocol-769 number formats,
   team text/options and one-team-per-member lifecycle semantics.
+- Headless HUD/player-facing state: vitals and experience, game mode and
+  abilities, selected hotbar item, cooldowns, effects, attributes, death and
+  respawn context, world border, time/weather, difficulty, spawn position,
+  and a bounded deterministic modern player list.
 - A push-based bot event stream (`Client::events`) and a pull-based state
   snapshot (`Client::bot_state`), plus a command-based control API
   (`Client::control`) for movement, look and chat.

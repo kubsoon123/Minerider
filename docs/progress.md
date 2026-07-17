@@ -1482,3 +1482,55 @@ field, color, visibility/collision rules and both flag bits.
 **Next unfinished phase:** Phase 4f — remaining typed HUD and player-facing
 state (abilities, effects, attributes, cooldowns, border, difficulty, spawn
 and the gaps in existing health/experience/time/weather/player-list state).
+
+---
+
+## Phase 4f — typed HUD and player-facing state
+
+Added a bounded, snapshot-readable `HudState` and ordered `HudEvent` stream
+for protocol-769 player-facing data that previously lived only in partial
+compatibility fields or was ignored.
+
+**Packet/state coverage completed:**
+- Health, hunger, saturation, experience, game mode, hardcore/previous mode,
+  ability flags and flying/walking speeds.
+- Selected hotbar slot and held-item projection from direct player-inventory
+  updates; bounded cooldown and local-player effect lifecycles.
+- Local-player attributes with typed keys/operations and a per-attribute
+  modifier bound; structured local death and respawn/dimension context.
+- Full world-border initialization and partial updates, safe before initial
+  state; world age/day time/ticking, rain/thunder levels, difficulty/lock and
+  global spawn position/angle.
+- Modern `player_info` fields: account name, game mode, listed state, latency,
+  display name, list priority, hat flag and bounded signed-chat-session
+  metadata. Player entries are now capped and UUID-ordered.
+
+**Lifecycle, ordering and bounds:** cooldowns, effects, attributes and player
+entries use deterministic maps with defensive limits; attribute modifier
+vectors are truncated observably. Entity-scoped effects, attributes and death
+packets only mutate HUD state when addressed to the local entity. Unknown
+game modes, difficulty values and attribute operations remain inspectable;
+malformed payloads return protocol errors.
+
+**Tests added (13):** abilities; cooldown/effect add-remove and local-entity
+filtering; attribute projection/modifier truncation; structured death; full
+and out-of-order world-border updates; difficulty/spawn unknown preservation;
+hotbar/held item tracking; typed vitals/experience/time/weather/game mode;
+malformed payload rejection; modern player-list fields and clearing; player
+bound behavior; and deterministic UUID iteration.
+
+**Verification:** GitHub CI runs format, clippy, generated-protocol drift and
+workspace tests on Linux and Windows. Vanilla-client trace capture remains
+pending, so these state-only obligations are `PARTIAL`, not `PASS`.
+
+**Honest limitations:**
+- HUD state is headless; it does not render, animate or claim pixel parity.
+- Status-effect and attribute state is retained for observation but is not
+  yet folded into movement physics.
+- The direct player-inventory packet currently projects only hotbar/held-item
+  HUD data; the complete transactional inventory model belongs to Phase 4h.
+- Signed player chat sessions retain only bounded metadata; cryptographic
+  chat verification remains unimplemented.
+
+**Next unfinished phase:** Phase 4g — supervised outbound chat and command
+actions with explicit packet semantics, validation and typed responses.
