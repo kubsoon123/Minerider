@@ -1230,10 +1230,17 @@ mod tests {
                 ..
             }
         ));
+        let mut missing_update = objective_packet("missing", 2);
+        missing_update.display_text =
+            PacketScoreboardObjectiveDisplayText::V2(text("Still missing"));
+        missing_update.r#type = PacketScoreboardObjectiveType::V2(0);
+        missing_update.number_format = PacketScoreboardObjectiveNumberFormat::V2(None);
+        missing_update.styling =
+            PacketScoreboardObjectiveStyling::V2(PacketScoreboardObjectiveStylingV2::Default);
         apply_packet(
             &mut state,
             CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID,
-            &objective_packet("missing", 2),
+            &missing_update,
         );
         apply_packet(
             &mut state,
