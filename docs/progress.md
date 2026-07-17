@@ -1575,3 +1575,67 @@ servers may reject it. This phase does not claim signed-chat conformance.
 
 **Next unfinished phase:** Phase 4h — correct bounded inventory/window
 transactions with typed click modes, confirmations and generation safety.
+
+---
+
+## Phase 4h — bounded server-authoritative inventory transactions
+
+Implemented the smallest coherent green Phase 4h slice: protocol-769 generic
+container clicks can now be validated, sent and observed through both a live
+`ControlHandle` and a reconnecting `SupervisorHandle`, without optimistic
+slot mutation or a false success result at queue time.
+
+**State and packet model:**
+- `InventoryState` now keeps deterministic bounded window properties, caps a
+  window at 1024 slots with an observable truncation flag, and applies direct
+  player-inventory updates to the same authoritative state used by snapshots.
+- `InventoryClick` models normal pickup/outside clicks, shift-click,
+  hotbar/offhand swap, creative middle-click clone, drop, all drag phases and
+  double-click. Slot/button/hotbar rules, creative-only modes, drag lifecycle,
+  current window id and state id are checked before encoding.
+- A validated request encodes the generated `PacketWindowClick` and generated
+  serverbound packet id. Every mode has deterministic encode/decode coverage;
+  generated protocol files remain untouched.
+
+**Transaction lifecycle and safety:**
+- Pending transactions are capped at 64; completed outcomes are retained in a
+  deterministic capped map of 128 entries. The model distinguishes queued,
+  sent, confirmed by a newer incremental state, corrected by a full sync,
+  timed out, window closed and rejected outcomes.
+- Clientbound open/close, full-window, slot, cursor, property, selected-hotbar
+  and direct-player-inventory packets update snapshots and emit ordered
+  `BotEvent::Inventory` events. Closing or replacing a window cancels its
+  pending transactions; tick expiry prevents an unbounded wait.
+- Click packets intentionally carry an empty `changed_slots` prediction and
+  the current authoritative cursor. No local slot is mutated optimistically:
+  the next server update is the confirmation or correction source of truth.
+- `SupervisorHandle::inventory_click` allocates a transaction id, captures the
+  current session generation and state id, submits through the existing
+  bounded command queue, then waits for a terminal authoritative outcome.
+  `inventory_click_in_generation` lets a multi-step workflow pin an explicit
+  generation and timeout. Disconnects, replacements and stale generations
+  return typed `InventoryActionError` values and never replay on a new session.
+
+**Tests added (10):** every typed click mode and exact packet fields; generated
+packet encode/decode; malformed slot/state/creative requests; drag ordering;
+incremental confirmation versus full correction; transaction capacity and
+timeout; close cancellation; supervisor confirmation/disconnect/timeout;
+stale and changed generation; and the public supervised request lifecycle.
+GitHub CI runs format, clippy, codegen drift and workspace tests on Linux and
+Windows. The conformance generator classifies the eight strengthened inbound
+inventory obligations as `PARTIAL` pending a vanilla-client trace.
+
+**Honest limitations:**
+- This slice is generic container transaction plumbing, not a complete
+  vanilla screen/menu engine. It does not calculate predicted changed slots,
+  recipes, crafting outputs, anvils, merchants or other menu-specific rules.
+- An empty `changed_slots` map favors safety and server correction over
+  latency; servers or anti-cheat plugins that require exact client prediction
+  may reject or resynchronize a click.
+- The direct `ControlHandle` is fire-and-observe through snapshots/events;
+  only the supervisor convenience API waits and returns a terminal outcome.
+- Real vanilla-client trace comparison remains pending, so this phase makes no
+  byte/timing parity claim beyond generated layouts and deterministic tests.
+
+**Next unfinished work:** build menu-specific interaction semantics and
+higher-level inventory workflows on this bounded transaction foundation.

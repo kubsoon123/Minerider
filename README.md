@@ -47,8 +47,10 @@ feature):
 - World state: chunk/section decoding, block storage, collision shapes.
 - Vanilla-shaped player physics: gravity, walking/sprinting/jumping,
   friction-aware ground movement, step-up, knockback, auto-respawn.
-- Entity tracking, inventory/container state tracking, tab-list (player
-  info) tracking.
+- Entity tracking, bounded inventory/container state and transaction
+  tracking, and tab-list (player info) tracking. Inventory clicks use typed
+  protocol-769 modes and server-authoritative confirmation/correction; the
+  supervisor rejects stale reconnect generations.
 - Headless presentation state: structured chat/system/disguised messages,
   action bar, titles and timings, tab-list header/footer, bounded boss bars,
   and structured disconnect reasons. Signed-chat wire data is retained for
@@ -98,8 +100,11 @@ feature):
 - Physics branches not yet implemented: fluids (water/lava), ladders/
   climbables, elytra, potion-effect movement modifiers, honey/soul-sand
   slowdown multipliers.
-- No sending of inventory actions (`window_click`) — containers are tracked
-  read-only.
+- Inventory interaction currently provides generic typed click transactions
+  (pickup, shift-click, hotbar/offhand swap, creative clone, drop, drag and
+  double-click). It deliberately does not simulate menu-specific client-side
+  results or crafting/anvil/merchant semantics; changed-slot prediction is
+  empty and the server's authoritative update confirms or corrects state.
 - No pathfinding/obstacle avoidance (`walk_to` is straight-line steering).
 - No chat message signing (messages are sent unsigned; servers that enforce
   secure chat will reject or kick for this).
@@ -220,10 +225,12 @@ let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
 // handle.command("say hi").await control whichever session is currently
 // active; each fails with a typed `ControlError`
 // (never silently queued) if there isn't one right now.
+// handle.inventory_click(window_id, click).await additionally waits for a
+// typed server-authoritative outcome and never crosses a reconnect generation.
 let outcome = supervisor.run().await;
 ```
 
-See [docs/progress.md](docs/progress.md) (Phase 3l/4a and 4b) for the full
+See [docs/progress.md](docs/progress.md) (Phase 3l/4a and 4b-4h) for the full
 design — retry classification, backoff shape, cancellation, and how
 commands are kept from ever executing against a session a reconnect has
 already replaced.
