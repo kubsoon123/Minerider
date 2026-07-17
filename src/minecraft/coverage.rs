@@ -446,6 +446,21 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_BOSS_BAR_ID => handled(state_only(
             "apply bounded add/update/remove state by stable uuid and emit event",
         )),
+        play::CLIENTBOUND_RESET_SCORE_ID => handled(state_only(
+            "remove one/all bounded scores for an owner and emit event",
+        )),
+        play::CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID => handled(state_only(
+            "attach/detach bounded display slot by stable objective name and emit event",
+        )),
+        play::CLIENTBOUND_SCOREBOARD_OBJECTIVE_ID => handled(state_only(
+            "create/update/remove bounded objective; detach slots/scores on removal; emit event",
+        )),
+        play::CLIENTBOUND_TEAMS_ID => handled(state_only(
+            "apply bounded team lifecycle/options/membership by stable name and emit event",
+        )),
+        play::CLIENTBOUND_SCOREBOARD_SCORE_ID => handled(state_only(
+            "create/update bounded score with display/number formatting and emit event",
+        )),
         play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
             Some("configuration_acknowledged"),
             TimingClass::Strict,

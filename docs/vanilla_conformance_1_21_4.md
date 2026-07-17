@@ -121,7 +121,7 @@ or lose an id.
 | 70 | recipe_book_settings | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 71 | entity_destroy | handled | — | — | remove entities from tracker | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 72 | remove_entity_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 73 | reset_score | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 73 | reset_score | handled | — | — | remove one/all bounded scores for an owner and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 74 | remove_resource_pack | handled | — | — | no client-side pack state to remove | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 75 | add_resource_pack | handled | resource_pack_receive | strict | none | PARTIAL | resource_pack | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
 | 76 | respawn | handled | — | — | reset dimension/world and readiness gate for a new life | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
@@ -140,7 +140,7 @@ or lose an id.
 | 89 | update_view_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 90 | set_cursor_item | handled | — | — | update the cursor item | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 91 | spawn_position | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 92 | scoreboard_display_objective | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 92 | scoreboard_display_objective | handled | — | — | attach/detach bounded display slot by stable objective name and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 93 | entity_metadata | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 94 | attach_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 95 | entity_velocity | handled | — | — | update entity velocity | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
@@ -148,11 +148,11 @@ or lose an id.
 | 97 | experience | handled | — | — | update experience bar/level/total | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 98 | update_health | handled | — | — | update health/hunger/saturation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 99 | held_item_slot | handled | — | — | track the server-selected hotbar slot | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 100 | scoreboard_objective | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 100 | scoreboard_objective | handled | — | — | create/update/remove bounded objective; detach slots/scores on removal; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 101 | set_passengers | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 102 | set_player_inventory | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 103 | teams | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 104 | scoreboard_score | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 103 | teams | handled | — | — | apply bounded team lifecycle/options/membership by stable name and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 104 | scoreboard_score | handled | — | — | create/update bounded score with display/number formatting and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 105 | simulation_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 106 | set_title_subtitle | handled | — | — | replace structured subtitle and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 107 | update_time | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -179,4 +179,3 @@ or lose an id.
 | 128 | set_projectile_power | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 129 | custom_report_details | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 130 | server_links | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-
