@@ -71,6 +71,12 @@ feature):
   (`Client::control`) for movement, look, ordinary chat and explicit commands.
   Protocol-769 chat/command actions are distinct, validated to vanilla's
   UTF-16 length bound and never inferred from a leading slash.
+- A complete practical action surface on `SupervisorHandle`: independent
+  forward/backward/strafe movement, bounded random look, held-item use and
+  arm swing, and a full GUI inspection/click API (`open_gui`/`dump_text`,
+  `click_open_gui_slot`/`click_inventory_slot`) over the unchanged
+  server-authoritative inventory transaction system — see "Core action API"
+  below and [docs/capability_matrix.md](docs/capability_matrix.md).
 - Reliability: a configurable write timeout and an overall connect-to-play
   deadline (`ClientConfig::write_timeout`/`connect_deadline`), and a
   `core::supervisor::ClientSupervisor` for long-running authorized clients
@@ -252,6 +258,115 @@ design — retry classification, backoff shape, cancellation, and how
 commands are kept from ever executing against a session a reconnect has
 already replaced.
 
+### Core action API: movement, look, hand actions, GUI
+
+**Phase 1.2** completed the practical bot-action surface on
+`SupervisorHandle` (`core::supervisor`) so an ordinary Rust caller never
+needs to reach into play-loop internals. See
+[docs/capability_matrix.md](docs/capability_matrix.md) for the full audit of
+what is and isn't exposed, and
+[docs/wrapper_api_readiness.md](docs/wrapper_api_readiness.md) for the
+module-by-module map a future scripting/application wrapper will build on —
+**that wrapper is the next phase, not this one; it is expected to cover the
+entire MineRider public API, not only what Phase 1.2 added.** None of this
+claims Mineflayer parity, full vanilla GUI/menu prediction, or pathfinding.
+
+**Movement** — independent per-key controls (opposite keys cancel, exactly
+like real vanilla input; nothing here auto-enables sprint or auto-jumps):
+
+```rust
+handle.forward(true).await?;
+handle.strafe_right(true).await?;
+// ... later:
+handle.forward(false).await?;      // only releases forward; strafe keeps going
+handle.stop_movement().await?;     // clears every directional flag and any walk_to goal
+```
+
+**Random look** — bounded, deterministic-when-seeded head rotation, driven
+by the existing per-tick controller (no separate task):
+
+```rust
+use std::time::Duration;
+use minerider::minecraft::control::RandomLookConfig;
+
+handle.set_random_look(Some(RandomLookConfig {
+    min_interval: Duration::from_millis(600),
+    max_interval: Duration::from_millis(1800),
+    max_yaw_delta: 50.0,   // bounded random walk from the *current* yaw
+    min_pitch: -25.0,
+    max_pitch: 25.0,
+    seed: None,            // Some(n) for reproducible tests
+})).await?;
+
+handle.look(90.0, 10.0).await?;  // applies immediately; random look stays
+                                  // enabled and may pick another orientation
+                                  // after its own next scheduled interval
+handle.set_random_look(None).await?; // disable
+```
+
+**Held-item use and swing** — protocol-769 `use_item`/`arm_animation`, sent
+independently (never automatically coupled):
+
+```rust
+use minerider::minecraft::control::Hand;
+
+handle.use_item(Hand::Main).await?; // Ok(()) means "sent", not "the server
+                                     // accepted the interaction" — protocol
+                                     // 769 has no dedicated ack for this packet
+handle.swing(Hand::Off).await?;
+```
+
+**GUI inspection** — raw zero-based protocol slot ordering, never remapped
+(for a chest-like window: slot `0` is upper-left, left-to-right then
+top-to-bottom, with the player's own inventory slots following later in the
+same window):
+
+```rust
+if let Some(gui) = handle.open_gui() {
+    println!("{}", gui.dump_text());
+    for slot in &gui.slots {
+        println!(
+            "slot={} empty={} item_id={:?} count={} custom_name={:?} lore={:?}",
+            slot.index, slot.empty, slot.item_id, slot.count,
+            slot.custom_name, slot.lore,
+        );
+    }
+}
+```
+
+`slot.registry_name` (e.g. `"minecraft:diamond_sword"`) is currently always
+`None` — no item-id registry is vendored in this repository yet; see
+`docs/wrapper_api_readiness.md`'s `items` row for the numeric-id limitation
+and the documented follow-up. `custom_name`/`lore`/`enchantments` are
+already decoded (best-effort, plain text) from the item's data components;
+every raw component is also preserved verbatim on `slot.components`,
+including ones not specially decoded.
+
+**GUI clicks** — a missing GUI is a typed rejection
+(`GuiActionError::NoGuiOpen`), never a silent fallback to the player's own
+inventory:
+
+```rust
+use minerider::minecraft::inventory::GuiClick;
+
+handle.click_open_gui_slot(0, GuiClick::Left).await?;
+handle.click_open_gui_slot(13, GuiClick::Right).await?;
+handle.click_open_gui_slot(22, GuiClick::ShiftLeft).await?;
+
+// Explicit player-inventory window, regardless of whatever else is open:
+handle.click_inventory_slot(36, GuiClick::Left).await?;
+```
+
+This stays on top of the existing server-authoritative transaction system —
+`GuiClick` maps onto the same typed `InventoryClick` modes the lower-level
+`inventory_click` API already used and validated; nothing here mutates a
+slot locally. A click's `Ok(outcome)` is `InventoryOutcome::{Sent, Confirmed,
+Corrected, TimedOut, WindowClosed, Rejected(..)}` — `Sent` means only "the
+packet left this process", `Confirmed`/`Corrected` mean the server's own
+next authoritative update actually agreed with it. A stale window state id
+or a session generation that changed mid-click is rejected, never silently
+retried or replayed across a reconnect.
+
 ## Honest limitations
 
 - This is alpha software from an actively changing codebase; expect breaking
@@ -263,6 +378,22 @@ already replaced.
   goals, not guarantees, unless backed by a benchmark in this repository.
 - See the "Partial or unverified" and "Not implemented" sections above for
   the concrete gaps, and `docs/progress.md` for the full history.
+- No item/block/enchantment registry names — `GuiSlotView::registry_name`
+  is currently always `None` (numeric ids only); see
+  `docs/wrapper_api_readiness.md`'s `items` row.
+- No bounded on-demand block/chunk query API yet — `World`'s own query
+  methods (`block_state`, `has_chunk`, `collision_boxes`) are `pub` but
+  unreachable from outside the crate; see `docs/wrapper_api_readiness.md`'s
+  `world` row for why and the intended fix.
+- No per-tick entity movement events (deliberate — see
+  `docs/capability_matrix.md`'s "Events" section); poll `StateSnapshot.entities`
+  instead.
+- **There is no scripting/application wrapper (Lua, Python, JavaScript,
+  HTTP, WebSocket, or otherwise) in this repository.** Bots are driven
+  directly through the Rust `SupervisorHandle`/`Client` API. A wrapper
+  covering the entire MineRider public API is planned as the next phase;
+  `docs/wrapper_api_readiness.md` tracks exactly what it will have available
+  to build on.
 
 ## History
 
@@ -285,6 +416,11 @@ retired. Everything worth keeping from it is documented in
   for a real vanilla-client reference capture (not yet performed).
 - [docs/engineering_review.md](docs/engineering_review.md) — architecture,
   security and performance audit, and the longer-term roadmap.
+- [docs/capability_matrix.md](docs/capability_matrix.md) — Phase 1.2's
+  systematic audit of every core capability against public access.
+- [docs/wrapper_api_readiness.md](docs/wrapper_api_readiness.md) — what a
+  future scripting/application wrapper will have available, module by
+  module, and what's still missing.
 - [docs/socks5_benchmark.md](docs/socks5_benchmark.md) — SOCKS5 transport
   architecture, secret handling, test inventory and local performance
   report.

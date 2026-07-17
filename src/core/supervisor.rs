@@ -21,10 +21,12 @@ use tokio_util::sync::CancellationToken;
 
 use crate::core::client::{Client, ClientConfig};
 use crate::core::error::{MineRiderError, RetryClass};
-use crate::minecraft::control::{ActionValidationError, BotCommand};
+use crate::minecraft::control::{ActionValidationError, BotCommand, Hand, RandomLookConfig};
 use crate::minecraft::event::{BotEvent, EVENT_CHANNEL_CAPACITY};
+use crate::minecraft::gui::{self, GuiView};
 use crate::minecraft::inventory::{
-    InventoryClick, InventoryClickRequest, InventoryError, InventoryOutcome,
+    GuiClick, InventoryClick, InventoryClickRequest, InventoryError, InventoryOutcome,
+    PLAYER_INVENTORY_WINDOW_ID,
 };
 use crate::minecraft::play::StateSnapshot;
 use crate::minecraft::player::MovementInput;
@@ -301,6 +303,21 @@ pub enum InventoryActionError {
     StaleGeneration { expected: u64, current: u64 },
 }
 
+/// Why [`SupervisorHandle::click_open_gui_slot`] did not complete. Distinct
+/// from [`InventoryActionError`] so "no GUI is open" and "the slot index
+/// doesn't fit the wire format" are typed separately from the underlying
+/// transaction failure modes — in particular, a missing GUI is never
+/// silently redirected to the player's own inventory window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum GuiActionError {
+    #[error("no non-player GUI is currently open")]
+    NoGuiOpen,
+    #[error("slot index {0} does not fit the protocol's 16-bit slot field")]
+    InvalidSlot(usize),
+    #[error(transparent)]
+    Action(InventoryActionError),
+}
+
 /// One command in flight from a [`SupervisorHandle`] to the running
 /// [`ClientSupervisor`], paired with a one-shot reply so the caller learns
 /// whether it actually reached a live session.
@@ -441,6 +458,108 @@ impl SupervisorHandle {
     /// Holds or releases the jump key.
     pub async fn jump(&self, on: bool) -> Result<(), ControlError> {
         self.send_command(BotCommand::Jump(on)).await
+    }
+
+    /// Holds or releases the forward key (independent of [`Self::backward`]:
+    /// holding both cancels out, exactly like vanilla W+S).
+    pub async fn forward(&self, on: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::Forward(on)).await
+    }
+
+    /// Holds or releases the backward key (independent of [`Self::forward`]).
+    pub async fn backward(&self, on: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::Backward(on)).await
+    }
+
+    /// Holds or releases the strafe-left key (independent of
+    /// [`Self::strafe_right`]).
+    pub async fn strafe_left(&self, on: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::StrafeLeft(on)).await
+    }
+
+    /// Holds or releases the strafe-right key (independent of
+    /// [`Self::strafe_left`]).
+    pub async fn strafe_right(&self, on: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::StrafeRight(on)).await
+    }
+
+    /// Enables (`Some`) or disables (`None`) bounded random head rotation
+    /// (see [`RandomLookConfig`]). An explicit [`Self::look`] call while
+    /// enabled applies immediately; random look remains enabled and may
+    /// choose another orientation after its next scheduled interval — it is
+    /// not reset or cancelled by an explicit look.
+    pub async fn set_random_look(
+        &self,
+        config: Option<RandomLookConfig>,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::SetRandomLook(config)).await
+    }
+
+    /// Uses the item held in `hand` (right-click activation). Protocol 769
+    /// has no dedicated acknowledgement for this packet, so `Ok(())` means
+    /// only "the packet was sent", not "the server accepted the
+    /// interaction".
+    pub async fn use_item(&self, hand: Hand) -> Result<(), ControlError> {
+        self.send_command(BotCommand::UseItem(hand)).await
+    }
+
+    /// Plays the arm-swing animation for `hand`. Not automatically coupled
+    /// to [`Self::use_item`] — send both explicitly if vanilla behavior for
+    /// a specific action requires it.
+    pub async fn swing(&self, hand: Hand) -> Result<(), ControlError> {
+        self.send_command(BotCommand::Swing(hand)).await
+    }
+
+    /// A read-only view of the currently open non-player window, or `None`
+    /// if none is open right now. Synchronous: reads the same cached
+    /// snapshot [`Self::state`] exposes, so it never blocks on the play
+    /// loop.
+    pub fn open_gui(&self) -> Option<GuiView> {
+        gui::open_window_view(&self.state_rx.borrow().inventory)
+    }
+
+    /// A read-only view of the player's own inventory window (always
+    /// present, unlike [`Self::open_gui`]).
+    pub fn inventory_view(&self) -> GuiView {
+        gui::player_inventory_view(&self.state_rx.borrow().inventory)
+    }
+
+    /// Clicks `slot` (raw zero-based protocol index) in the *currently
+    /// open* non-player window, using its current window id and state id
+    /// automatically. Fails with [`GuiActionError::NoGuiOpen`] if nothing is
+    /// open — never silently redirected to the player's own inventory (see
+    /// [`Self::click_inventory_slot`] for that explicitly).
+    pub async fn click_open_gui_slot(
+        &self,
+        slot: usize,
+        click: GuiClick,
+    ) -> Result<InventoryOutcome, GuiActionError> {
+        let window_id = self
+            .state_rx
+            .borrow()
+            .inventory
+            .open_window
+            .as_ref()
+            .map(|window| window.id)
+            .ok_or(GuiActionError::NoGuiOpen)?;
+        let slot = i16::try_from(slot).map_err(|_| GuiActionError::InvalidSlot(slot))?;
+        self.inventory_click(window_id, click.into_inventory_click(slot))
+            .await
+            .map_err(GuiActionError::Action)
+    }
+
+    /// Clicks `slot` (raw zero-based protocol index) in the player's own
+    /// inventory window, regardless of whatever non-player window (if any)
+    /// is also open.
+    pub async fn click_inventory_slot(
+        &self,
+        slot: usize,
+        click: GuiClick,
+    ) -> Result<InventoryOutcome, GuiActionError> {
+        let slot = i16::try_from(slot).map_err(|_| GuiActionError::InvalidSlot(slot))?;
+        self.inventory_click(PLAYER_INVENTORY_WINDOW_ID, click.into_inventory_click(slot))
+            .await
+            .map_err(GuiActionError::Action)
     }
 
     /// Sends an ordinary chat message. Commands are never inferred from `/`.
@@ -1159,7 +1278,10 @@ mod tests {
                     .inventory_click_in_generation(
                         3,
                         0,
-                        InventoryClick::QuickMove { slot: 0 },
+                        InventoryClick::QuickMove {
+                            slot: 0,
+                            button: crate::minecraft::inventory::MouseButton::Left,
+                        },
                         Duration::from_secs(1),
                     )
                     .await
@@ -1185,6 +1307,234 @@ mod tests {
         assert_eq!(
             task.await.unwrap(),
             Ok(InventoryOutcome::Confirmed { state_id: 8 })
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Mission B/C: GUI view and click convenience API.
+    // ------------------------------------------------------------------
+
+    fn handle_with_snapshot(
+        snapshot: StateSnapshot,
+        status: SupervisorStatus,
+        generation: u64,
+    ) -> (SupervisorHandle, mpsc::Receiver<QueuedCommand>) {
+        let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let (_, state_rx) = watch::channel(snapshot);
+        let (_, status_rx) = watch::channel(status);
+        let (_, generation_rx) = watch::channel(generation);
+        let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        (
+            SupervisorHandle {
+                event_tx,
+                state_rx,
+                status_rx,
+                generation_rx,
+                command_tx,
+                next_inventory_transaction: Arc::new(AtomicU64::new(1)),
+                cancel: CancellationToken::new(),
+            },
+            command_rx,
+        )
+    }
+
+    fn snapshot_with_open_window(
+        window_id: i32,
+        state_id: i32,
+        slot_count: usize,
+    ) -> StateSnapshot {
+        use crate::minecraft::inventory::empty_slot;
+        use minerider_protocol::generated::v1_21_4::play::{PacketOpenWindow, PacketWindowItems};
+        use minerider_protocol::nbt::Nbt;
+
+        let mut snapshot = StateSnapshot::default();
+        snapshot.inventory.open_window(&PacketOpenWindow {
+            window_id,
+            inventory_type: 2,
+            window_title: Nbt::Compound(vec![]),
+        });
+        snapshot.inventory.window_items(&PacketWindowItems {
+            window_id,
+            state_id,
+            items: vec![empty_slot(); slot_count],
+            carried_item: empty_slot(),
+        });
+        snapshot
+    }
+
+    #[test]
+    fn open_gui_is_none_when_nothing_is_open() {
+        let (handle, _rx) =
+            handle_with_snapshot(StateSnapshot::default(), SupervisorStatus::Connected, 1);
+        assert!(handle.open_gui().is_none());
+    }
+
+    #[test]
+    fn open_gui_reflects_the_currently_open_window() {
+        let snapshot = snapshot_with_open_window(5, 3, 27);
+        let (handle, _rx) = handle_with_snapshot(snapshot, SupervisorStatus::Connected, 1);
+        let gui = handle.open_gui().expect("window is open");
+        assert_eq!(gui.window_id, 5);
+        assert_eq!(gui.state_id, 3);
+        assert_eq!(gui.slots.len(), 27);
+    }
+
+    #[test]
+    fn inventory_view_always_uses_the_player_inventory_window_id() {
+        let (handle, _rx) =
+            handle_with_snapshot(StateSnapshot::default(), SupervisorStatus::Connected, 1);
+        assert_eq!(
+            handle.inventory_view().window_id,
+            PLAYER_INVENTORY_WINDOW_ID
+        );
+    }
+
+    #[tokio::test]
+    async fn click_open_gui_slot_rejects_when_no_gui_is_open() {
+        let (handle, _rx) =
+            handle_with_snapshot(StateSnapshot::default(), SupervisorStatus::Connected, 1);
+        assert_eq!(
+            handle.click_open_gui_slot(0, GuiClick::Left).await,
+            Err(GuiActionError::NoGuiOpen),
+            "a missing GUI must never silently redirect to the player inventory"
+        );
+    }
+
+    #[tokio::test]
+    async fn click_open_gui_slot_targets_the_open_window_not_player_inventory() {
+        let snapshot = snapshot_with_open_window(5, 3, 27);
+        let (handle, mut rx) = handle_with_snapshot(snapshot, SupervisorStatus::Connected, 1);
+        let task = {
+            let handle = handle.clone();
+            tokio::spawn(async move { handle.click_open_gui_slot(13, GuiClick::Right).await })
+        };
+        let queued = rx.recv().await.expect("queued click");
+        let request = match queued.command {
+            BotCommand::InventoryClick(request) => request,
+            other => panic!("expected inventory click, got {other:?}"),
+        };
+        assert_eq!(
+            request.window_id, 5,
+            "must target the open window, not window 0"
+        );
+        assert_eq!(request.state_id, 3);
+        assert_eq!(
+            request.click,
+            InventoryClick::Pickup {
+                slot: Some(13),
+                button: crate::minecraft::inventory::MouseButton::Right,
+            },
+            "raw slot 13 must reach the outgoing request unmodified"
+        );
+        queued.respond.send(Ok(())).unwrap();
+        // Task is left pending on the outcome wait (no completion is sent);
+        // dropping it here is fine — it only proves the request shape above.
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn click_inventory_slot_always_targets_window_zero() {
+        // Even with a non-player window open, the explicit player-inventory
+        // API must still target window 0.
+        let snapshot = snapshot_with_open_window(5, 3, 27);
+        let (handle, mut rx) = handle_with_snapshot(snapshot, SupervisorStatus::Connected, 1);
+        let task = {
+            let handle = handle.clone();
+            tokio::spawn(async move { handle.click_inventory_slot(0, GuiClick::Left).await })
+        };
+        let queued = rx.recv().await.expect("queued click");
+        let request = match queued.command {
+            BotCommand::InventoryClick(request) => request,
+            other => panic!("expected inventory click, got {other:?}"),
+        };
+        assert_eq!(request.window_id, PLAYER_INVENTORY_WINDOW_ID);
+        queued.respond.send(Ok(())).unwrap();
+        task.abort();
+    }
+
+    // ------------------------------------------------------------------
+    // Mission E/F/D: movement, random look and hand-action convenience
+    // methods queue the exact command their lower-level `ControlHandle`
+    // counterparts document — thin wrappers, proven thin.
+    // ------------------------------------------------------------------
+
+    /// Waits for the next queued command on `rx`, asserts it matches
+    /// `expected`, then answers it so the caller's `send_command` resolves.
+    async fn assert_next_queued_command_is(
+        rx: &mut mpsc::Receiver<QueuedCommand>,
+        expected: BotCommand,
+    ) {
+        let queued = rx.recv().await.expect("expected a queued command");
+        assert_eq!(queued.command, expected);
+        queued.respond.send(Ok(())).unwrap();
+    }
+
+    #[tokio::test]
+    async fn directional_and_hand_action_convenience_methods_queue_the_expected_command() {
+        let (handle, mut rx) = handle_for_queue_test(SupervisorStatus::Connected, 7);
+
+        let task = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.forward(true).await }
+        });
+        assert_next_queued_command_is(&mut rx, BotCommand::Forward(true)).await;
+        assert_eq!(task.await.unwrap(), Ok(()));
+
+        let task = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.backward(true).await }
+        });
+        assert_next_queued_command_is(&mut rx, BotCommand::Backward(true)).await;
+        assert_eq!(task.await.unwrap(), Ok(()));
+
+        let task = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.strafe_left(true).await }
+        });
+        assert_next_queued_command_is(&mut rx, BotCommand::StrafeLeft(true)).await;
+        assert_eq!(task.await.unwrap(), Ok(()));
+
+        let task = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.strafe_right(true).await }
+        });
+        assert_next_queued_command_is(&mut rx, BotCommand::StrafeRight(true)).await;
+        assert_eq!(task.await.unwrap(), Ok(()));
+
+        let task = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.use_item(Hand::Main).await }
+        });
+        assert_next_queued_command_is(&mut rx, BotCommand::UseItem(Hand::Main)).await;
+        assert_eq!(task.await.unwrap(), Ok(()));
+
+        let task = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.swing(Hand::Off).await }
+        });
+        assert_next_queued_command_is(&mut rx, BotCommand::Swing(Hand::Off)).await;
+        assert_eq!(task.await.unwrap(), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn set_random_look_validates_before_queueing() {
+        let (handle, _rx) = handle_for_queue_test(SupervisorStatus::Disconnected, 0);
+        let mut bad = RandomLookConfig {
+            min_interval: Duration::from_millis(500),
+            max_interval: Duration::from_millis(100),
+            max_yaw_delta: 10.0,
+            min_pitch: -10.0,
+            max_pitch: 10.0,
+            seed: Some(1),
+        };
+        bad.min_interval = Duration::from_secs(2);
+        bad.max_interval = Duration::from_secs(1);
+        assert_eq!(
+            handle.set_random_look(Some(bad)).await,
+            Err(ControlError::InvalidAction(
+                ActionValidationError::RandomLookIntervalOrder
+            )),
+            "invalid config must be rejected before the NotConnected connectivity check"
         );
     }
 }
