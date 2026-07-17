@@ -91,9 +91,14 @@ impl PresentationState {
                 PresentationEvent::TitlesCleared { reset }
             }
             PresentationUpdate::TabList { header, footer } => {
+                let header = *header;
+                let footer = *footer;
                 self.tab_list.header = Some(header.clone());
                 self.tab_list.footer = Some(footer.clone());
-                PresentationEvent::TabListChanged { header, footer }
+                PresentationEvent::TabListChanged {
+                    header: Box::new(header),
+                    footer: Box::new(footer),
+                }
             }
             PresentationUpdate::BossBar(update) => self.apply_boss_bar(update),
             PresentationUpdate::Disconnect(reason) => {
@@ -379,8 +384,8 @@ pub enum PresentationEvent {
         reset: bool,
     },
     TabListChanged {
-        header: TextComponent,
-        footer: TextComponent,
+        header: Box<TextComponent>,
+        footer: Box<TextComponent>,
     },
     BossBarChanged {
         id: u128,
@@ -406,8 +411,8 @@ pub(crate) enum PresentationUpdate {
         reset: bool,
     },
     TabList {
-        header: TextComponent,
-        footer: TextComponent,
+        header: Box<TextComponent>,
+        footer: Box<TextComponent>,
     },
     BossBar(BossBarUpdate),
     Disconnect(TextComponent),
@@ -535,8 +540,8 @@ pub(crate) fn decode_update(id: i32, payload: &[u8]) -> Result<Option<Presentati
         CLIENTBOUND_PLAYERLIST_HEADER_ID => {
             let packet = PacketPlayerlistHeader::decode(&mut input)?;
             PresentationUpdate::TabList {
-                header: TextComponent::from_nbt(&packet.header),
-                footer: TextComponent::from_nbt(&packet.footer),
+                header: Box::new(TextComponent::from_nbt(&packet.header)),
+                footer: Box::new(TextComponent::from_nbt(&packet.footer)),
             }
         }
         CLIENTBOUND_BOSS_BAR_ID => {
