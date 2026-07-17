@@ -1059,6 +1059,23 @@ mod tests {
         );
         apply_packet(
             &mut state,
+            CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID,
+            &PacketScoreboardDisplayObjective {
+                position: 1,
+                name: String::new(),
+            },
+        );
+        assert!(!state.display_slots.contains_key(&DisplaySlot::Sidebar));
+        apply_packet(
+            &mut state,
+            CLIENTBOUND_SCOREBOARD_DISPLAY_OBJECTIVE_ID,
+            &PacketScoreboardDisplayObjective {
+                position: 1,
+                name: "kills".into(),
+            },
+        );
+        apply_packet(
+            &mut state,
             CLIENTBOUND_SCOREBOARD_SCORE_ID,
             &PacketScoreboardScore {
                 item_name: "Alice".into(),
@@ -1077,6 +1094,27 @@ mod tests {
             score.number_format.as_ref(),
             Some(NumberFormat::Fixed(_))
         ));
+        apply_packet(
+            &mut state,
+            CLIENTBOUND_SCOREBOARD_SCORE_ID,
+            &PacketScoreboardScore {
+                item_name: "Alice".into(),
+                score_name: "kills".into(),
+                value: 8,
+                display_name: None,
+                number_format: Some(1),
+                styling: PacketScoreboardScoreStyling::V1(Nbt::Compound(vec![(
+                    "color".into(),
+                    Nbt::String("red".into()),
+                )])),
+            },
+        );
+        let score = &state.scores[&ScoreKey::new("Alice".into(), "kills".into())];
+        assert_eq!(score.value, 8);
+        assert!(matches!(
+            score.number_format.as_ref(),
+            Some(NumberFormat::Styled(_))
+        ));
 
         let mut update = objective_packet("kills", 2);
         update.display_text = PacketScoreboardObjectiveDisplayText::V2(text("Eliminations"));
@@ -1088,6 +1126,10 @@ mod tests {
         assert_eq!(
             state.objectives["kills"].render_type,
             ObjectiveRenderType::Hearts
+        );
+        assert_eq!(
+            state.objectives["kills"].display_name.plain_text(),
+            "Eliminations"
         );
         assert_eq!(
             state.objectives["kills"].number_format,
@@ -1168,6 +1210,9 @@ mod tests {
             &create_team("red", vec!["Alice".into(), "Bob".into()], 99),
         );
         let red = &state.teams["red"];
+        assert_eq!(red.display_name.plain_text(), "red");
+        assert_eq!(red.prefix.plain_text(), "[");
+        assert_eq!(red.suffix.plain_text(), "]");
         assert_eq!(red.color, TeamColor::Unknown(99));
         assert!(red.friendly_fire.allows_friendly_fire());
         assert!(red.friendly_fire.see_friendly_invisibles());
@@ -1195,6 +1240,12 @@ mod tests {
             &state.teams["red"].name_tag_visibility,
             NameTagVisibility::Unknown(_)
         ));
+        assert_eq!(state.teams["red"].display_name.plain_text(), "Updated Red");
+        assert_eq!(state.teams["red"].prefix.plain_text(), "<");
+        assert_eq!(state.teams["red"].suffix.plain_text(), ">");
+        assert_eq!(state.teams["red"].color, TeamColor::Red);
+        assert_eq!(state.teams["red"].collision_rule, CollisionRule::Never);
+        assert!(!state.teams["red"].friendly_fire.allows_friendly_fire());
         assert!(state.teams["red"].members.contains("Bob"));
 
         let mut add = team_packet("red", 3);
