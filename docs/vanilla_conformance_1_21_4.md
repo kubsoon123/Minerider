@@ -58,12 +58,12 @@ or lose an id.
 | 7 | tile_entity_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 8 | block_action | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 9 | block_change | handled | — | — | update one cached block state | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 10 | boss_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 10 | boss_bar | handled | — | — | apply bounded add/update/remove state by stable uuid and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 11 | difficulty | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
 | 13 | chunk_batch_start | ignored | — | — | begin chunk batch | NOT IMPLEMENTED | initial_chunks | none |
 | 14 | chunk_biomes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 15 | clear_titles | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 15 | clear_titles | handled | — | — | clear title/subtitle; reset default timings only when requested | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 16 | tab_complete | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 17 | declare_commands | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 18 | close_window | handled | — | — | clear tracked open container | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
@@ -77,8 +77,8 @@ or lose an id.
 | 26 | damage_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 27 | debug_sample | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 28 | hide_message | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 29 | kick_disconnect | handled | — | — | close connection | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
-| 30 | profileless_chat | handled | — | — | log the message | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 29 | kick_disconnect | handled | — | — | store structured reason, emit event, close connection | PARTIAL | join_idle | mock-server + golden tests + Paper 1.21.4 b232; vanilla capture pending |
+| 30 | profileless_chat | handled | — | — | store structured disguised chat metadata and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 31 | entity_status | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 32 | sync_entity_position | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 33 | explosion | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -107,7 +107,7 @@ or lose an id.
 | 56 | ping_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 57 | craft_recipe_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 58 | abilities | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 59 | player_chat | handled | — | — | log the message | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 59 | player_chat | handled | — | — | store safe display text plus unverified raw signed-chat data; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 60 | end_combat_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 61 | enter_combat_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 62 | death_combat_event | ignored | client_command | tick-bound | mark player dead; vanilla shows respawn screen | NOT IMPLEMENTED |  | none |
@@ -129,7 +129,7 @@ or lose an id.
 | 78 | multi_block_change | handled | — | — | update cached block states in one section | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 79 | select_advancement_tab | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 80 | server_data | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 81 | action_bar | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 81 | action_bar | handled | — | — | replace structured action-bar state and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 82 | world_border_center | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 83 | world_border_lerp_size | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 84 | world_border_size | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -154,17 +154,17 @@ or lose an id.
 | 103 | teams | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 104 | scoreboard_score | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 105 | simulation_distance | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 106 | set_title_subtitle | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 106 | set_title_subtitle | handled | — | — | replace structured subtitle and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 107 | update_time | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 108 | set_title_text | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 109 | set_title_time | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 108 | set_title_text | handled | — | — | replace structured title and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 109 | set_title_time | handled | — | — | replace title timing values and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 110 | entity_sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 111 | sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 112 | start_configuration | ignored | configuration_acknowledged | strict | re-enter configuration state | NOT IMPLEMENTED |  | none |
 | 113 | stop_sound | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 114 | store_cookie | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 115 | system_chat | handled | — | — | log the message | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
-| 116 | playerlist_header | ignored | — | — | none | NOT IMPLEMENTED |  | none |
+| 115 | system_chat | handled | — | — | store system chat or action bar according to packet flag; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
+| 116 | playerlist_header | handled | — | — | replace structured tab-list header/footer and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 117 | nbt_query_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 118 | collect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 119 | entity_teleport | handled | — | — | update entity position/rotation | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
