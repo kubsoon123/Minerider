@@ -198,14 +198,12 @@ fn run_child(args: &[String]) -> ExitCode {
     let (construction_median, construction_min, construction_max) =
         duration_summary(&mut construction);
 
-    let extrapolated_100x441 = if clients == 1
-        && chunks == 441
-        && matches!(scenario, Scenario::Identical)
-    {
-        logical_retained_bytes.saturating_mul(100)
-    } else {
-        0
-    };
+    let extrapolated_100x441 =
+        if clients == 1 && chunks == 441 && matches!(scenario, Scenario::Identical) {
+            logical_retained_bytes.saturating_mul(100)
+        } else {
+            0
+        };
 
     println!(
         "RESULT,model=per-client,scenario={},clients={clients},chunks_per_client={chunks},payload_copies={payload_copies},unique_contents={unique_contents},payload_heap_bytes={payload_heap_bytes},index_lower_bound_bytes={index_lower_bound_bytes},logical_retained_bytes={logical_retained_bytes},rss_baseline_kib={},rss_retained_kib={},rss_peak_kib={},rss_after_drop_kib={},construction_median_us={},construction_min_us={},construction_max_us={},lookup_total_us={},update_total_us={},lifecycle_total_us={},cleanup_us={},extrapolated_100x441_logical_bytes={extrapolated_100x441}",
@@ -323,9 +321,11 @@ fn pack_indices(bits: u8, values: &[u32]) -> Vec<u64> {
 }
 
 fn personalize_chunk(chunk: &mut Chunk, variant: u32) {
-    let Some(section) = chunk.sections.iter_mut().find(|section| {
-        matches!(&section.block_states, PalettedContainer::Indirect { .. })
-    }) else {
+    let Some(section) = chunk
+        .sections
+        .iter_mut()
+        .find(|section| matches!(&section.block_states, PalettedContainer::Indirect { .. }))
+    else {
         return;
     };
     if let PalettedContainer::Indirect { palette, .. } = &mut section.block_states {
@@ -339,7 +339,7 @@ fn count_unique_chunks(worlds: &[ChunkMap]) -> usize {
     for chunk in worlds.iter().flat_map(HashMap::values) {
         let fingerprint = chunk_fingerprint(chunk);
         let bucket = buckets.entry(fingerprint).or_default();
-        if !bucket.iter().any(|candidate| *candidate == chunk) {
+        if !bucket.contains(&chunk) {
             bucket.push(chunk);
             unique += 1;
         }
@@ -393,8 +393,7 @@ fn chunk_heap_bytes(chunk: &Chunk) -> usize {
             .sections
             .iter()
             .map(|section| {
-                container_heap_bytes(&section.block_states)
-                    + container_heap_bytes(&section.biomes)
+                container_heap_bytes(&section.block_states) + container_heap_bytes(&section.biomes)
             })
             .sum::<usize>()
 }
@@ -516,7 +515,7 @@ struct Fnv64(u64);
 impl Fnv64 {
     fn write(&mut self, bytes: &[u8]) {
         if self.0 == 0 {
-            self.0 = 0xcbf_29ce4_8422_2325;
+            self.0 = 0xcbf2_9ce4_8422_2325;
         }
         for byte in bytes {
             self.0 ^= u64::from(*byte);
