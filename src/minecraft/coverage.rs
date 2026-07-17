@@ -325,7 +325,7 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_KICK_DISCONNECT_ID => handled(partial(
             None,
             TimingClass::None,
-            "close connection",
+            "store structured reason, emit event, close connection",
             "join_idle",
         )),
         play::CLIENTBOUND_LOGIN_ID => handled(partial(
@@ -416,9 +416,36 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_HELD_ITEM_SLOT_ID => {
             handled(state_only("track the server-selected hotbar slot"))
         }
-        play::CLIENTBOUND_PLAYER_CHAT_ID => handled(state_only("log the message")),
-        play::CLIENTBOUND_SYSTEM_CHAT_ID => handled(state_only("log the message")),
-        play::CLIENTBOUND_PROFILELESS_CHAT_ID => handled(state_only("log the message")),
+        play::CLIENTBOUND_PLAYER_CHAT_ID => handled(state_only(
+            "store safe display text plus unverified raw signed-chat data; emit event",
+        )),
+        play::CLIENTBOUND_SYSTEM_CHAT_ID => handled(state_only(
+            "store system chat or action bar according to packet flag; emit event",
+        )),
+        play::CLIENTBOUND_PROFILELESS_CHAT_ID => handled(state_only(
+            "store structured disguised chat metadata and emit event",
+        )),
+        play::CLIENTBOUND_ACTION_BAR_ID => handled(state_only(
+            "replace structured action-bar state and emit event",
+        )),
+        play::CLIENTBOUND_SET_TITLE_TEXT_ID => {
+            handled(state_only("replace structured title and emit event"))
+        }
+        play::CLIENTBOUND_SET_TITLE_SUBTITLE_ID => {
+            handled(state_only("replace structured subtitle and emit event"))
+        }
+        play::CLIENTBOUND_SET_TITLE_TIME_ID => {
+            handled(state_only("replace title timing values and emit event"))
+        }
+        play::CLIENTBOUND_CLEAR_TITLES_ID => handled(state_only(
+            "clear title/subtitle; reset default timings only when requested",
+        )),
+        play::CLIENTBOUND_PLAYERLIST_HEADER_ID => handled(state_only(
+            "replace structured tab-list header/footer and emit event",
+        )),
+        play::CLIENTBOUND_BOSS_BAR_ID => handled(state_only(
+            "apply bounded add/update/remove state by stable uuid and emit event",
+        )),
         play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
             Some("configuration_acknowledged"),
             TimingClass::Strict,
