@@ -305,9 +305,7 @@ impl SharedChunkStore {
                 !bucket.is_empty()
             });
             let live_keys = shard.entries.keys().cloned().collect::<HashSet<_>>();
-            shard
-                .insertion_order
-                .retain(|key| live_keys.contains(key));
+            shard.insertion_order.retain(|key| live_keys.contains(key));
         }
     }
 
@@ -330,9 +328,7 @@ impl SharedChunkStore {
             weak_entries,
             live_payloads: live.len(),
             evictions: self.evictions.load(Ordering::Relaxed),
-            uncached_collision_payloads: self
-                .uncached_collision_payloads
-                .load(Ordering::Relaxed),
+            uncached_collision_payloads: self.uncached_collision_payloads.load(Ordering::Relaxed),
         }
     }
 
@@ -347,7 +343,9 @@ impl SharedChunkStore {
 }
 
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn hash_container(hash: &mut Fnv64, container: &PalettedContainer) {
@@ -495,19 +493,13 @@ mod tests {
         let first = store.intern(&base, snapshot(1)).unwrap();
         let different_content = store.intern(&base, snapshot(2)).unwrap();
         let different_server = store
-            .intern(
-                &scope("server-b", 0, "minecraft:overworld"),
-                snapshot(1),
-            )
+            .intern(&scope("server-b", 0, "minecraft:overworld"), snapshot(1))
             .unwrap();
         let different_dimension = store
             .intern(&scope("server-a", 0, "minecraft:the_nether"), snapshot(1))
             .unwrap();
         let different_generation = store
-            .intern(
-                &scope("server-a", 1, "minecraft:overworld"),
-                snapshot(1),
-            )
+            .intern(&scope("server-a", 1, "minecraft:overworld"), snapshot(1))
             .unwrap();
         assert!(!Arc::ptr_eq(&first, &different_content));
         assert!(!Arc::ptr_eq(&first, &different_server));
