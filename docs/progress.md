@@ -1160,3 +1160,91 @@ all clean.
   reads from multiple tasks.
 - No live Microsoft/Xbox/Mojang or real vanilla-server run this session
   (unchanged from prior sessions — both require human/account involvement).
+
+---
+
+## Phase 4b — supervised active-session control (autonomous)
+
+The first slice of a larger planned milestone (Lua-ready workflow/action
+layer: text/presentation state, scoreboards, inventory transactions,
+interaction primitives, navigation). This phase was called out as the
+prerequisite for all the others — a stable way to control whichever session
+`ClientSupervisor` currently owns — and is implemented and tested on its
+own; the remaining phases are unstarted and explicitly not claimed as done
+(see "Next unfinished phase" in the session's final report).
+
+**Completed:**
+- **`SupervisorHandle::send_command`** (plus `walk_to`/`look`/`set_input`/
+  `sprint`/`sneak`/`jump`/`chat`/`stop_movement` convenience wrappers
+  mirroring `ControlHandle`'s existing shape) — a bounded
+  (`tokio::sync::mpsc`, capacity 64) command channel from the handle into
+  the running supervisor, with a one-shot reply per command so the caller
+  learns whether it actually reached a live session, not just whether it
+  was accepted into a queue.
+- **Typed `ControlError`** (`NotConnected`, `SessionReplaced`,
+  `Disconnected`, `SupervisorStopped`) — centralized, not a loose string.
+- **Offline behavior**: commands are never queued across a reconnect.
+  `ClientSupervisor::run`'s connect-attempt loop and `handle_failure`'s
+  backoff sleep both now also drain and immediately reject
+  (`NotConnected`) any command received while not connected, using the
+  same pinned-future-plus-inner-`select!`-loop pattern the connect-deadline
+  work established, so a real connect attempt or backoff sleep in progress
+  is never restarted just because a command arrived mid-wait.
+- **Session generation**: `SupervisorHandle::generation()` returns a `u64`
+  that increments by one on every successful connect (published via a
+  `watch::channel<u64>`). Exposed for a future multi-step caller (an
+  inventory transaction, a workflow step) to snapshot before starting and
+  compare afterward, detecting "the session was replaced mid-operation"
+  itself — this phase's own simple fire-and-forget commands don't need
+  callers to track it themselves (see below).
+- **Reconnect safety**: the moment a session ends, anything still sitting
+  in the command queue is drained and answered `SessionReplaced` — before
+  `handle_failure` even runs — so a command queued for the old session can
+  never be silently carried over to whatever replaces it. When the
+  supervisor stops for good (cancelled, retries exhausted, or a permanent
+  error not retried), a final drain answers anything left with
+  `SupervisorStopped` instead of silently dropping the one-shot sender.
+- **Single writer**: `run_session` is the only place that ever calls
+  `client.control()` for the currently active `Client`; commands are
+  matched against the *live* session's control handle, never a stale one,
+  and concurrent callers are naturally serialized by the one bounded
+  channel feeding one consumer task.
+- **Cancellation**: dropping a `send_command` future (e.g. via
+  `tokio::time::timeout`) before it resolves cancels cleanly — the
+  supervisor still processes the command at most once and just discards a
+  reply nobody is listening for anymore; no leaked senders, no panic.
+
+**Honest, deliberately-scoped limitation from this same phase:** a command
+that reaches `run_session` right as the underlying TCP connection is dying
+can still return `Ok(())` — `ControlHandle::send` (pre-existing, unchanged
+semantics) only ever promised "accepted into the play loop's own command
+queue," not "confirmed on the wire," and detecting a dead socket is not
+instantaneous. This is not a gap introduced here: it is the existing
+`ControlHandle` contract, inherited unchanged. What *is* new and
+unconditionally guaranteed is that once the supervisor has processed a
+session ending, no further command can ever reach it — proven directly in
+tests by waiting for `ClientSupervisor::run` itself to return before
+sending.
+
+**Tests added** (`tests/supervisor.rs`, +6): commands reach the active
+session (a real chat packet observed on the wire); commands fail
+immediately (`NotConnected`) while never having connected; a command sent
+after the supervisor has fully stopped following a non-retried session end
+fails with `SupervisorStopped` (the deterministic version of "stale command
+cannot succeed", see above); reconnect increments `generation()` from 0 to
+1 to 2 across two sessions, and the *new* session's command path works
+(proving commands route to whichever session is current, not a stale
+reference); cancellation via `stop()` closes the command path cleanly
+post-hoc; 8 concurrent `send_command` calls from separate tasks all land
+intact and distinct on the wire (no interleaved/corrupted writes, one
+writer).
+
+**Verification:** 276 workspace tests pass, 0 failed (was 270; +6).
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D
+warnings`, and `cargo run -p minerider-codegen -- --check` all clean.
+
+**Next unfinished phase:** text component foundation (Phase 4c) — a shared
+`TextComponent` model for chat/system messages/titles/boss bars/scoreboards,
+which every later phase in this milestone depends on. Not started this
+session; see the final report for why the remaining phases (4c through 4k)
+were not attempted given their combined scope.

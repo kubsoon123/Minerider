@@ -15,14 +15,25 @@ use std::time::Duration;
 use minerider::core::client::ClientConfig;
 use minerider::core::error::{MineRiderError, RetryClass};
 use minerider::core::supervisor::{
-    ClientSupervisor, ReconnectPolicy, RetryLimit, SupervisorOutcome, SupervisorStatus,
+    ClientSupervisor, ControlError, ReconnectPolicy, RetryLimit, SupervisorOutcome,
+    SupervisorStatus,
 };
 use minerider::minecraft::event::BotEvent;
 use minerider::network::connection::Connection;
-use minerider_protocol::buffer::PacketWriter;
+use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::{configuration, handshaking, login, play};
-use minerider_protocol::traits::Encode;
+use minerider_protocol::traits::{Decode, Encode};
 use tokio::net::{TcpListener, TcpStream};
+
+/// Waits until `status_rx` reports `Connected`, ignoring earlier statuses.
+async fn wait_until_connected(status_rx: &mut tokio::sync::watch::Receiver<SupervisorStatus>) {
+    loop {
+        if *status_rx.borrow() == SupervisorStatus::Connected {
+            return;
+        }
+        status_rx.changed().await.expect("status channel open");
+    }
+}
 
 /// Runs the minimal exchange needed for `Client::connect` to succeed —
 /// handshake, login (no encryption/compression), then configuration
@@ -425,4 +436,260 @@ async fn protocol_incompatibility_does_not_retry_by_default() {
         }
         other => panic!("expected NotRetried, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 4b: supervised active-session control (SupervisorHandle commands).
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn commands_reach_the_active_session() {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept");
+        let mut conn = minimal_login_and_configuration(stream).await;
+        // Chat is handled directly in the play loop regardless of world
+        // readiness, so no play-login/chunk setup is needed here.
+        let chat = conn.read_packet().await.expect("read chat command");
+        assert_eq!(chat.id, play::SERVERBOUND_CHAT_MESSAGE_ID);
+        let mut r = PacketReader::new(&chat.payload);
+        let message = play::PacketChatMessage::decode(&mut r).expect("decode chat");
+        assert_eq!(message.message, "hello from the supervisor");
+    });
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "ControlBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+
+    wait_until_connected(&mut handle.status()).await;
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        handle.chat("hello from the supervisor"),
+    )
+    .await
+    .expect("must not hang");
+    assert_eq!(result, Ok(()));
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+#[tokio::test]
+async fn commands_fail_immediately_while_offline() {
+    // A port nobody listens on: the supervisor never reaches Connected.
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind to reserve a port");
+    let port = listener.local_addr().expect("addr").port();
+    drop(listener);
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "OfflineBot");
+    let policy = ReconnectPolicy::enabled().with_initial_delay(Duration::from_secs(30));
+    let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
+    let run_handle = tokio::spawn(supervisor.run());
+
+    let result = tokio::time::timeout(Duration::from_secs(5), handle.chat("hello"))
+        .await
+        .expect("an offline command must fail immediately, not hang");
+    assert_eq!(result, Err(ControlError::NotConnected));
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+#[tokio::test]
+async fn stale_command_fails_rather_than_silently_succeeding_on_teardown() {
+    // `ControlHandle::send` succeeding only ever meant "accepted into the
+    // play loop's own command queue", never "confirmed on the wire" — that
+    // pre-existing, fire-and-forget contract means a command can race a
+    // real TCP teardown and still get queued into the *old*, about-to-die
+    // session before that session's task notices the socket is gone (that
+    // detection isn't instantaneous). That race is not what this test
+    // proves. What this design *does* guarantee unconditionally is: once
+    // the supervisor has fully processed a session ending (with reconnect
+    // disabled, `run()` returns for good right after), no command can ever
+    // reach it again — proven deterministically by waiting for `run()`
+    // itself to finish before sending.
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept");
+        drop(minimal_login_and_configuration(stream).await);
+    });
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "StaleBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+
+    let outcome = tokio::time::timeout(Duration::from_secs(5), run_handle)
+        .await
+        .expect("must not hang")
+        .expect("no panic");
+    assert!(
+        matches!(outcome, SupervisorOutcome::NotRetried { .. }),
+        "reconnect disabled: the session ending must stop the supervisor for good, got {outcome:?}"
+    );
+
+    let result = tokio::time::timeout(Duration::from_secs(5), handle.chat("hello"))
+        .await
+        .expect("must not hang");
+    assert_eq!(
+        result,
+        Err(ControlError::SupervisorStopped),
+        "a command after the supervisor has fully stopped must never succeed"
+    );
+}
+
+#[tokio::test]
+async fn reconnect_increments_generation_and_new_session_accepts_commands() {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let port = listener.local_addr().expect("addr").port();
+    let (conn_tx, _kept_alive) = tokio::sync::mpsc::unbounded_channel::<Connection>();
+
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept #1");
+        drop(minimal_login_and_configuration(stream).await);
+
+        let (stream, _) = listener.accept().await.expect("accept #2");
+        let mut conn = minimal_login_and_configuration(stream).await;
+        let chat = conn.read_packet().await.expect("read chat on new session");
+        assert_eq!(chat.id, play::SERVERBOUND_CHAT_MESSAGE_ID);
+        let _ = conn_tx.send(conn);
+    });
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "GenerationBot");
+    let policy = ReconnectPolicy::enabled()
+        .with_initial_delay(Duration::from_millis(5))
+        .with_max_delay(Duration::from_millis(5))
+        .with_max_retries(RetryLimit::Count(3));
+    let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
+    let run_handle = tokio::spawn(supervisor.run());
+
+    assert_eq!(handle.generation(), 0, "no session has connected yet");
+
+    let mut status_rx = handle.status();
+    let mut connected_count = 0;
+    let wait = async {
+        loop {
+            status_rx.changed().await.expect("status channel open");
+            if *status_rx.borrow() == SupervisorStatus::Connected {
+                connected_count += 1;
+                if connected_count == 2 {
+                    break;
+                }
+            }
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(5), wait)
+        .await
+        .expect("must reconnect to a second session");
+
+    assert_eq!(
+        handle.generation(),
+        2,
+        "generation must increment once per successful connect"
+    );
+
+    // The new session's command path must work — proving commands route to
+    // whichever session is *currently* active, not a stale reference to the
+    // first one.
+    let result = tokio::time::timeout(Duration::from_secs(5), handle.chat("hello again"))
+        .await
+        .expect("must not hang");
+    assert_eq!(result, Ok(()));
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+#[tokio::test]
+async fn cancellation_closes_the_command_path() {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let port = listener.local_addr().expect("addr").port();
+    let (conn_tx, _kept_alive) = tokio::sync::mpsc::unbounded_channel::<Connection>();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept");
+        let conn = minimal_login_and_configuration(stream).await;
+        let _ = conn_tx.send(conn);
+    });
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "CancelCommandBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+
+    wait_until_connected(&mut handle.status()).await;
+    handle.stop();
+    tokio::time::timeout(Duration::from_secs(5), run_handle)
+        .await
+        .expect("must not hang")
+        .expect("no panic");
+
+    // The supervisor task has fully exited; the command channel's receiver
+    // is gone, so sending must fail cleanly and immediately, never hang or
+    // panic on a dropped one-shot.
+    let result = tokio::time::timeout(Duration::from_secs(5), handle.chat("too late"))
+        .await
+        .expect("must not hang after the supervisor has stopped");
+    assert_eq!(result, Err(ControlError::SupervisorStopped));
+}
+
+#[tokio::test]
+async fn concurrent_commands_are_serialized_onto_one_writer() {
+    const MESSAGES: usize = 8;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept");
+        let mut conn = minimal_login_and_configuration(stream).await;
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..MESSAGES {
+            let packet = conn.read_packet().await.expect("read chat command");
+            assert_eq!(packet.id, play::SERVERBOUND_CHAT_MESSAGE_ID);
+            let mut r = PacketReader::new(&packet.payload);
+            let message = play::PacketChatMessage::decode(&mut r).expect("decode chat");
+            // Each message must arrive whole and distinct — proof that
+            // concurrent callers never interleaved partial writes onto the
+            // wire (there is exactly one task, `run_session`, that ever
+            // calls `Connection::send_packet`).
+            assert!(
+                seen.insert(message.message),
+                "duplicate/corrupted message: every concurrent send must be distinct and intact"
+            );
+        }
+    });
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "ConcurrentBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+
+    wait_until_connected(&mut handle.status()).await;
+
+    let send_tasks: Vec<_> = (0..MESSAGES)
+        .map(|i| {
+            let handle = handle.clone();
+            tokio::spawn(async move { handle.chat(format!("concurrent message {i}")).await })
+        })
+        .collect();
+    for task in send_tasks {
+        let result = tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .expect("must not hang")
+            .expect("send task must not panic");
+        assert_eq!(result, Ok(()));
+    }
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }

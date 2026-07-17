@@ -55,10 +55,14 @@ feature):
 - Reliability: a configurable write timeout and an overall connect-to-play
   deadline (`ClientConfig::write_timeout`/`connect_deadline`), and a
   `core::supervisor::ClientSupervisor` for long-running authorized clients
-  — reconnect-with-backoff, centralized retry classification, and clean
-  cancellation. Reconnect is disabled by default and never retries after an
-  explicit server rejection or a permanent auth/protocol error unless
-  explicitly configured to; see the example below and
+  — reconnect-with-backoff, centralized retry classification, clean
+  cancellation, and a generation-tracked command handle
+  (`SupervisorHandle::send_command`/`walk_to`/`chat`/...) that targets
+  whichever session is currently active and fails with a typed
+  `ControlError` rather than queuing across a reconnect. Reconnect is
+  disabled by default and never retries after an explicit server rejection
+  or a permanent auth/protocol error unless explicitly configured to; see
+  the example below and
   [`core::supervisor`](src/core/supervisor.rs) for the full policy surface.
 - Offline-mode (cracked-server) login.
 - Microsoft/Xbox Live/Minecraft Services (premium) login — implemented and
@@ -199,13 +203,16 @@ let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
 
 // Observe from another task: handle.events() / handle.state() / handle.status().
 // handle.stop() requests a clean shutdown from anywhere, at any point.
+// handle.walk_to(x, z).await / handle.chat("hi").await control whichever
+// session is currently active; each fails with a typed `ControlError`
+// (never silently queued) if there isn't one right now.
 let outcome = supervisor.run().await;
 ```
 
-See [docs/progress.md](docs/progress.md) (Phase 3l / 4a) for the full
-design — retry classification, backoff shape, cancellation, and the current
-limitation that a supervised session doesn't yet expose a control handle for
-movement/chat.
+See [docs/progress.md](docs/progress.md) (Phase 3l/4a and 4b) for the full
+design — retry classification, backoff shape, cancellation, and how
+commands are kept from ever executing against a session a reconnect has
+already replaced.
 
 ## Honest limitations
 
