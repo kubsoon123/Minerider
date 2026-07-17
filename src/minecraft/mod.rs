@@ -24,6 +24,7 @@ pub mod player;
 pub mod players;
 pub mod presentation;
 pub mod scoreboard;
+pub mod shared_world;
 pub mod text;
 pub mod world;
 
