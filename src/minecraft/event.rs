@@ -10,6 +10,7 @@
 //! network.
 
 use crate::minecraft::hud::HudEvent;
+use crate::minecraft::inventory::InventoryEvent;
 use crate::minecraft::presentation::PresentationEvent;
 use crate::minecraft::scoreboard::ScoreboardEvent;
 
@@ -59,6 +60,8 @@ pub enum BotEvent {
     /// Typed local-player HUD and world context update. The aggregate bounded
     /// state is available in snapshots after receiver lag.
     Hud(Box<HudEvent>),
+    /// Ordered container synchronization and transaction lifecycle update.
+    Inventory(Box<InventoryEvent>),
 
     // ---- Supervisor lifecycle events ------------------------------------
     // Emitted by `crate::core::supervisor::ClientSupervisor` around

@@ -10,6 +10,7 @@
 
 use tokio::sync::mpsc::{self, error::SendError};
 
+use crate::minecraft::inventory::InventoryClickRequest;
 use crate::minecraft::player::{LocalPlayer, MovementInput};
 
 /// Horizontal distance (blocks) at which a `walk_to` goal counts as reached.
@@ -59,6 +60,8 @@ pub enum BotCommand {
     /// Run a command using the protocol's dedicated command packet. The text
     /// excludes the leading slash.
     Command(String),
+    /// Submit one typed, state-id-bound inventory transaction.
+    InventoryClick(InventoryClickRequest),
     /// Clear any walk goal and zero all movement input.
     Stop,
 }
@@ -165,6 +168,13 @@ impl ControlHandle {
         self.send(BotCommand::Command(command.into()))
     }
 
+    pub fn inventory_click(
+        &self,
+        request: InventoryClickRequest,
+    ) -> Result<(), SendError<BotCommand>> {
+        self.send(BotCommand::InventoryClick(request))
+    }
+
     /// Clears the walk goal and stops all movement.
     pub fn stop(&self) -> Result<(), SendError<BotCommand>> {
         self.send(BotCommand::Stop)
@@ -197,7 +207,7 @@ impl Controller {
             BotCommand::Sprint(on) => self.manual.sprint = on,
             BotCommand::Sneak(on) => self.manual.sneak = on,
             BotCommand::Jump(on) => self.manual.jump = on,
-            BotCommand::Chat(_) | BotCommand::Command(_) => {} // sent by the play loop
+            BotCommand::Chat(_) | BotCommand::Command(_) | BotCommand::InventoryClick(_) => {}
             BotCommand::Stop => {
                 self.goal = None;
                 self.manual = MovementInput::default();

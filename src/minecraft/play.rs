@@ -39,7 +39,7 @@ use minerider_protocol::generated::v1_21_4::play::{
     SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
     SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
     SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
-    SERVERBOUND_TELEPORT_CONFIRM_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
 use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
 use minerider_protocol::packet::RawPacket;
@@ -58,8 +58,8 @@ use crate::minecraft::control::{BotCommand, Controller};
 use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
 use crate::minecraft::entity::EntityStore;
 use crate::minecraft::event::BotEvent;
-use crate::minecraft::hud::{decode_update as decode_hud_update, HudEvent, HudState};
-use crate::minecraft::inventory::InventoryState;
+use crate::minecraft::hud::{decode_update as decode_hud_update, GameMode, HudEvent, HudState};
+use crate::minecraft::inventory::{InventoryClickRequest, InventoryEvent, InventoryState};
 use crate::minecraft::physics::Vec3;
 use crate::minecraft::player::{LocalPlayer, MovementPacket};
 use crate::minecraft::players::PlayerList;
@@ -204,6 +204,16 @@ impl PlayState {
         }
     }
 
+    fn emit_inventory(&self, event: InventoryEvent) {
+        self.emit(BotEvent::Inventory(Box::new(event)));
+    }
+
+    fn emit_inventory_events(&self, events: impl IntoIterator<Item = InventoryEvent>) {
+        for event in events {
+            self.emit_inventory(event);
+        }
+    }
+
     /// A cheap, externally-readable snapshot of the parts of play state a
     /// caller would want to observe (position, health, inventory, entities).
     /// The full `World` (block/chunk data) is intentionally excluded: cloning
@@ -299,9 +309,13 @@ pub async fn run_play(
                     Some(action @ (BotCommand::Chat(_) | BotCommand::Command(_))) => {
                         send_outbound_chat_action(conn, &action).await?
                     }
+                    Some(BotCommand::InventoryClick(request)) => {
+                        send_inventory_click(conn, &mut state, request).await?
+                    }
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
+                let _ = state_tx.send(state.snapshot(state.clock.current()));
             }
             _ = ticker.tick() => {
                 state.clock.advance();
@@ -386,8 +400,38 @@ fn encode_outbound_chat_action(
     Ok((id, output.into_inner().to_vec()))
 }
 
+async fn send_inventory_click(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    request: InventoryClickRequest,
+) -> Result<()> {
+    let transaction_id = request.transaction_id;
+    let creative = state.hud.game_mode == GameMode::Creative;
+    let prepared = match state
+        .inventory
+        .prepare_click(request, state.clock.current(), creative)
+    {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let event = state.inventory.reject_transaction(transaction_id, error);
+            state.emit_inventory(event);
+            return Ok(());
+        }
+    };
+    state.emit_inventory(prepared.event);
+    let mut output = PacketWriter::new();
+    prepared.packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_WINDOW_CLICK_ID, &output.freeze())
+        .await?;
+    let events = state.inventory.mark_sent(transaction_id);
+    state.emit_inventory_events(events);
+    Ok(())
+}
+
 /// Runs vanilla's per-tick play-entry and movement behavior.
 async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let expired = state.inventory.expire_transactions(state.clock.current());
+    state.emit_inventory_events(expired);
     if !state.player.is_alive() {
         // No death screen to click: request respawn immediately, once, and
         // wait for the server's `respawn` packet before doing anything else
@@ -731,37 +775,47 @@ fn apply_state_packet(
                 kind = p.inventory_type,
                 "opened container"
             );
-            state.inventory.open_window(&p);
+            let events = state.inventory.open_window(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_CLOSE_WINDOW_ID => {
             let p = PacketCloseWindow::decode(&mut r)?;
             debug!(window_id = p.window_id, "closed container");
-            state.inventory.close_window(&p);
+            let events = state.inventory.close_window(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_WINDOW_ITEMS_ID => {
             let p = PacketWindowItems::decode(&mut r)?;
-            state.inventory.window_items(&p);
+            let events = state.inventory.window_items(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_SET_SLOT_ID => {
             let p = PacketSetSlot::decode(&mut r)?;
-            state.inventory.set_slot(&p);
+            let events = state.inventory.set_slot(&p);
+            state.emit_inventory_events(events);
         }
         CLIENTBOUND_SET_CURSOR_ITEM_ID => {
             let p = PacketSetCursorItem::decode(&mut r)?;
-            state.inventory.set_cursor_item(&p);
+            let event = state.inventory.set_cursor_item(&p);
+            state.emit_inventory(event);
         }
         CLIENTBOUND_CRAFT_PROGRESS_BAR_ID => {
             let p = PacketCraftProgressBar::decode(&mut r)?;
-            state.inventory.craft_progress_bar(&p);
+            if let Some(event) = state.inventory.craft_progress_bar(&p) {
+                state.emit_inventory(event);
+            }
         }
         CLIENTBOUND_HELD_ITEM_SLOT_ID => {
             let p = PacketHeldItemSlot::decode(&mut r)?;
-            state.inventory.held_item_slot(&p);
+            let inventory_event = state.inventory.held_item_slot(&p);
+            state.emit_inventory(inventory_event);
             let hud_event = state.hud.on_selected_hotbar(&p);
             state.emit_hud(hud_event);
         }
         CLIENTBOUND_SET_PLAYER_INVENTORY_ID => {
             let p = PacketSetPlayerInventory::decode(&mut r)?;
+            let inventory_events = state.inventory.set_player_inventory(&p);
+            state.emit_inventory_events(inventory_events);
             let hud_event = state.hud.on_player_inventory(&p);
             state.emit_hud(hud_event);
         }

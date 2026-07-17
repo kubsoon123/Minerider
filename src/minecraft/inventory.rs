@@ -606,23 +606,22 @@ impl InventoryState {
     }
 
     pub(crate) fn mark_sent(&mut self, transaction_id: u64) -> Vec<InventoryEvent> {
-        let mut finish_without_confirmation = false;
-        if let Some(transaction) = self
+        let finish_without_confirmation = if let Some(transaction) = self
             .pending_transactions
             .iter_mut()
             .find(|transaction| transaction.request.transaction_id == transaction_id)
         {
             transaction.status = InventoryTransactionStatus::Sent;
-            finish_without_confirmation = matches!(
+            matches!(
                 transaction.request.click,
                 InventoryClick::QuickCraft {
                     phase: DragPhase::Start | DragPhase::AddSlot,
                     ..
                 }
-            );
+            )
         } else {
             return Vec::new();
-        }
+        };
         let mut events = vec![InventoryEvent::TransactionSent { transaction_id }];
         if finish_without_confirmation {
             if let Some(event) = self.finish_transaction(transaction_id, InventoryOutcome::Sent) {
