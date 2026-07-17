@@ -50,7 +50,7 @@ pub enum BotEvent {
     /// Structured chat/title/action-bar/tab-list/boss-bar/disconnect update.
     /// These events are emitted in packet order and the corresponding state
     /// is available in a fresh snapshot after a lagged receiver recovers.
-    Presentation(PresentationEvent),
+    Presentation(Box<PresentationEvent>),
 
     // ---- Supervisor lifecycle events ------------------------------------
     // Emitted by `crate::core::supervisor::ClientSupervisor` around
