@@ -130,7 +130,7 @@ round-trip, partial-credentials rejection), and three dedicated redaction
 tests (`ProxyPassword` Debug, `Socks5Credentials` Debug, a planted-secret
 regression check across every auth-adjacent error variant).
 
-`tests/socks5.rs` (9 integration tests + 1 `#[ignore]`d manual smoke test,
+`tests/socks5.rs` (8 integration tests + 1 `#[ignore]`d manual smoke test,
 real loopback TCP against an independently-implemented fake SOCKS5 relay in
 `tests/socks5_support`): a full mock Minecraft handshake through the tunnel
 (and confirms the proxy is asked to `CONNECT` to the *real* Minecraft
@@ -139,16 +139,31 @@ credentials rejected, the direct-connection path unchanged with no proxy
 configured, `ClientSupervisor` reconnecting through the same proxy route
 twice, arbitrary bytes forwarding unmodified through the tunnel (independent
 of the Minecraft protocol, via a plain echo backend), 100 concurrent local
-tunnels completing without deadlock or a leaked task, a deterministic
-"timeout during proxy TCP connection" case (an already-expired deadline
-around the real `TcpStream::connect` future — the same trade-off
-`network::connection`'s own tests document for *its* write-timeout test:
-provable determinism over a flaky realistic-hang trigger), and an
+tunnels completing without deadlock or a leaked task, and an
 unreachable-proxy case asserting `RetryClass::Transient`.
+
+Mission item 10 ("timeout during proxy TCP connection") has no dedicated
+real-network integration test: a first attempt raced an already-expired
+deadline against a real `TcpStream::connect` to a refusing loopback target
+and passed locally on Windows but **failed on Ubuntu CI** — on Linux,
+connecting to a refusing loopback destination resolves synchronously inside
+the `connect()` syscall itself (no reactor round trip), so the wrapped
+future is already `Ready` on `tokio::time::timeout_at`'s very first poll and
+the deadline is never consulted, for any budget including zero. That's
+correct, real behavior (`unreachable_proxy_is_transient` exercises exactly
+this path and correctly expects `ProxyConnect`/`Transient`, not `Timeout`),
+but it means no loopback target can deterministically exercise the *timeout*
+branch of this phase across platforms — the same category of
+platform-dependent flakiness `network::connection`'s own tests document
+giving up on for its write-timeout test. The `tokio::time::timeout_at`
+composition wrapping this phase is code-identical to the three phases
+already proven deterministic against `tokio::io::duplex` fakes (method
+negotiation, authentication, CONNECT reply); see `tests/socks5.rs` for the
+full explanation kept next to the code.
 
 Workspace test count on this branch: 204 lib unit tests (177 at PR #1's base
 plus 27 new SOCKS5 unit tests) plus the existing integration suites,
-plus 9 new `tests/socks5.rs` integration tests (10 counting the ignored
+plus 8 new `tests/socks5.rs` integration tests (9 counting the ignored
 smoke test) — see the Verification section of the final report for the
 exact `cargo test --workspace --locked` run and totals.
 
