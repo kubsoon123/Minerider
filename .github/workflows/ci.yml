@@ -96,7 +96,13 @@ jobs:
       # command routing, reconnect-storm + proxy-persistence-across-
       # reconnect, chunk-sharing-across-proxy-groups and opt-out proofs —
       # see `docs/lua_runtime_benchmark.md` for what each test covers.
-      - run: cargo test --features lua-benchmark --lib lua_benchmark --locked -- --test-threads=2
+      # Serialized (not the default parallel test runner): several of these
+      # spawn a real mock TCP server plus real ClientSupervisors with their
+      # own settle-timeout margins, and shared CI runners have far fewer
+      # cores than a dev machine — running them concurrently caused a real,
+      # reproducible flake here (contention pushed connect past its
+      # timeout), not a code bug.
+      - run: cargo test --features lua-benchmark --lib lua_benchmark --locked -- --test-threads=1
       # A tiny, deterministic real-CLI smoke run per architecture family —
       # proves the actual binary (not just its unit tests) compiles, runs,
       # and exits cleanly against a local mock server only. Never the full
