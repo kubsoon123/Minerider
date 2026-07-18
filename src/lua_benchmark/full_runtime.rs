@@ -1698,4 +1698,204 @@ mod production_smoke {
 
         swarm.shutdown(Duration::from_secs(5)).await;
     }
+
+    /// Production-wrapper scale measurement: 100/400/800 bots through the
+    /// *real* `crate::lua::runtime::run_swarm` (4 workers, shared chunks
+    /// enabled), reporting wall-clock time-to-all-connected and process RSS
+    /// at each stage. Not run in normal CI (too slow, and the mission is
+    /// explicit that the full-scale benchmark should be manual, not
+    /// per-commit) — run explicitly with:
+    /// `cargo test --release --features lua-benchmark --lib \
+    ///   lua_benchmark::full_runtime::production_smoke::production_wrapper_scale_100_400_800 \
+    ///   -- --ignored --nocapture --test-threads=1`
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "manual production-wrapper scale benchmark; see doc comment for the exact invocation"]
+    async fn production_wrapper_scale_100_400_800() {
+        for &bot_count in &[100u32, 400, 800] {
+            let (port, _server_task, _kick_tx) =
+                spawn_mock_server(ScenarioKind::Idle, bot_count).await;
+            let mut add_bots = String::new();
+            for i in 0..bot_count {
+                add_bots.push_str(&format!(
+                    "swarm:add_bot({{id = {i}, username = \"Bot{i}\", server = \"main\"}})\n"
+                ));
+            }
+            let script = format!(
+                r#"
+                swarm:configure(function()
+                    swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}, shared_chunks = true}})
+                    {add_bots}
+                end)
+                swarm:connect_all()
+                swarm:run()
+                "#
+            );
+            let rss_before = crate::lua_benchmark::metrics::process_rss_kib();
+            let start = std::time::Instant::now();
+            let config = SwarmRuntimeConfig {
+                worker_count: 4,
+                sandbox: SandboxConfig::default(),
+                high_queue_capacity: 4096,
+                low_queue_capacity: 1024,
+                callback_timeout: Duration::from_secs(10),
+                script_body: script,
+            };
+            let swarm = run_swarm(config).await.expect("swarm must start");
+
+            let all_connected = wait_for(
+                || {
+                    swarm.bot_handles.values().all(|h| {
+                        matches!(
+                            *h.status().borrow(),
+                            crate::core::supervisor::SupervisorStatus::Connected
+                        )
+                    })
+                },
+                Duration::from_secs(120),
+            )
+            .await;
+            let elapsed = start.elapsed();
+            let rss_after = crate::lua_benchmark::metrics::process_rss_kib();
+
+            println!(
+                "[production_wrapper_scale] bots={bot_count} all_connected={all_connected} \
+                 elapsed={elapsed:?} rss_before_kib={rss_before:?} rss_after_kib={rss_after:?} \
+                 marginal_kib={:?}",
+                rss_after.zip(rss_before).map(|(a, b)| a.saturating_sub(b))
+            );
+
+            assert!(all_connected, "all {bot_count} bots must reach Connected");
+            swarm.shutdown(Duration::from_secs(15)).await;
+        }
+    }
+
+    /// The "representative" combined production-wrapper benchmark the
+    /// mission asks for in one run: 100 bots, 4 workers, 2 local proxy
+    /// groups (50 bots each), a reconnect subset (20% of bots get one
+    /// deliberate kick and must reconnect through their *same* proxy),
+    /// shared chunks enabled. Manual — see the invocation in
+    /// `production_wrapper_scale_100_400_800`'s doc comment (same pattern,
+    /// different test name).
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "manual production-wrapper combined benchmark; see doc comment for the exact invocation"]
+    async fn production_wrapper_combined_proxy_groups_reconnect_shared_chunks() {
+        let bot_count = 100u32;
+        let (port, _server_task, kick_tx) =
+            spawn_mock_server(ScenarioKind::ReconnectStorm { percent: 20 }, bot_count).await;
+        let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(64).await;
+        let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(64).await;
+
+        let mut add_bots = String::new();
+        for i in 0..bot_count {
+            let proxy = if i % 2 == 0 { "proxy1" } else { "proxy2" };
+            add_bots.push_str(&format!(
+                "swarm:add_bot({{id = {i}, username = \"Bot{i}\", server = \"main\", proxy = \"{proxy}\", \
+                 reconnect = {{enabled = true, initial_delay_ms = 20, max_delay_ms = 200}}}})\n"
+            ));
+        }
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}, shared_chunks = true}})
+                swarm:add_proxy({{name = "proxy1", host = "127.0.0.1", port = {proxy1_port}}})
+                swarm:add_proxy({{name = "proxy2", host = "127.0.0.1", port = {proxy2_port}}})
+                {add_bots}
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#,
+            proxy1_port = proxy1.port,
+            proxy2_port = proxy2.port
+        );
+
+        let rss_before = crate::lua_benchmark::metrics::process_rss_kib();
+        let start = std::time::Instant::now();
+        let config = SwarmRuntimeConfig {
+            worker_count: 4,
+            sandbox: SandboxConfig::default(),
+            high_queue_capacity: 4096,
+            low_queue_capacity: 1024,
+            callback_timeout: Duration::from_secs(10),
+            script_body: script,
+        };
+        let swarm = run_swarm(config).await.expect("swarm must start");
+
+        let all_connected = wait_for(
+            || {
+                swarm.bot_handles.values().all(|h| {
+                    matches!(
+                        *h.status().borrow(),
+                        crate::core::supervisor::SupervisorStatus::Connected
+                    )
+                })
+            },
+            Duration::from_secs(60),
+        )
+        .await;
+        let elapsed_to_initial_connect = start.elapsed();
+        assert!(
+            all_connected,
+            "all {bot_count} bots must reach Connected initially"
+        );
+
+        // The mock server's targeted-bot kick logic waits for this signal
+        // before dropping each targeted bot's first connection (see
+        // `serve_one`'s `ScenarioKind::ReconnectStorm` branch) — without
+        // sending it, no reconnect is ever triggered.
+        let _ = kick_tx.send(true);
+
+        // The 20% targeted subset reconnects asynchronously after the mock
+        // server's kick; wait for every bot to reach generation >= 1 (first
+        // connect) and give the targeted ~20 bots time to complete a
+        // second (reconnect) session.
+        let reconnected = wait_for(
+            || {
+                swarm
+                    .bot_handles
+                    .values()
+                    .filter(|h| h.generation() >= 2)
+                    .count()
+                    >= (bot_count as usize) / 10
+            },
+            Duration::from_secs(30),
+        )
+        .await;
+        let elapsed_total = start.elapsed();
+        let rss_after = crate::lua_benchmark::metrics::process_rss_kib();
+
+        let proxy1_accepted = proxy1
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
+        let proxy2_accepted = proxy2
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
+        let generation_ge_2 = swarm
+            .bot_handles
+            .values()
+            .filter(|h| h.generation() >= 2)
+            .count();
+
+        println!(
+            "[production_wrapper_combined] bots={bot_count} all_connected={all_connected} \
+             reconnected_at_least_10pct={reconnected} bots_with_generation_ge_2={generation_ge_2} \
+             elapsed_to_initial_connect={elapsed_to_initial_connect:?} elapsed_total={elapsed_total:?} \
+             proxy1_accepted={proxy1_accepted} proxy2_accepted={proxy2_accepted} \
+             rss_before_kib={rss_before:?} rss_after_kib={rss_after:?}"
+        );
+
+        assert!(
+            proxy1_accepted >= 50,
+            "proxy1's 50 bots must all connect through it at least once"
+        );
+        assert!(
+            proxy2_accepted >= 50,
+            "proxy2's 50 bots must all connect through it at least once"
+        );
+        assert!(
+            reconnected,
+            "at least 10% of bots must complete a reconnect (targeted 20%)"
+        );
+
+        swarm.shutdown(Duration::from_secs(15)).await;
+    }
 }
