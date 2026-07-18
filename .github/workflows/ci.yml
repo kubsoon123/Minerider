@@ -71,3 +71,41 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo run -p minerider-codegen -- --check
+
+  lua-benchmark-smoke:
+    name: Lua runtime benchmark smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `lua-benchmark` is off by default (see Cargo.toml): this is the only
+      # job that builds mlua/vendored Lua, so a normal PR touching unrelated
+      # code never pays that compile cost. Proves the vendored build itself
+      # works on both platforms — the mission's own requirement — not just
+      # that the sandbox logic is correct.
+      - run: cargo build --features lua-benchmark --locked
+      # The full correctness suite: deterministic worker assignment, event
+      # ordering/isolation, bounded-queue overflow/coalescing, instruction
+      # and memory limits actually aborting, consecutive-error disabling,
+      # command routing, reconnect-storm + proxy-persistence-across-
+      # reconnect, chunk-sharing-across-proxy-groups and opt-out proofs —
+      # see `docs/lua_runtime_benchmark.md` for what each test covers.
+      - run: cargo test --features lua-benchmark --lib lua_benchmark --locked -- --test-threads=2
+      # A tiny, deterministic real-CLI smoke run per architecture family —
+      # proves the actual binary (not just its unit tests) compiles, runs,
+      # and exits cleanly against a local mock server only. Never the full
+      # 100/400/800-bot benchmark; see "Manual full benchmark" below.
+      - name: CLI smoke — synthetic, shared VM
+        run: cargo run --features lua-benchmark --locked --bin lua_runtime_benchmark -- --mode shared-lua --scenario synthetic --bots 10 --event-rate busy --duration-secs 2 --script realistic --seed 42
+      - name: CLI smoke — synthetic, 4-worker pool
+        run: cargo run --features lua-benchmark --locked --bin lua_runtime_benchmark -- --mode worker-pool --lua-workers 4 --scenario synthetic --bots 10 --event-rate typical --duration-secs 2 --script table-work --seed 42
+      - name: CLI smoke — full-runtime idle + chunk sharing
+        run: cargo run --features lua-benchmark --locked --bin lua_runtime_benchmark -- --mode shared-lua --scenario full-runtime --full-scenario chunks --chunk-count 9 --bots 5 --duration-secs 2 --script light-state --seed 42
+      - name: CLI smoke — full-runtime proxy groups (fake SOCKS5 only)
+        run: cargo run --features lua-benchmark --locked --bin lua_runtime_benchmark -- --mode rust-baseline --scenario full-runtime --full-scenario proxy-groups --proxy-group-size 2 --bots 6 --duration-secs 2 --script no-op --seed 42
