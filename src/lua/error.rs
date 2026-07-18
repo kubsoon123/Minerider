@@ -176,9 +176,92 @@ impl From<RegistryError> for ScriptError {
     }
 }
 
+fn contains_memory_error(err: &mlua::Error) -> bool {
+    match err {
+        mlua::Error::MemoryError(_) => true,
+        mlua::Error::CallbackError { cause, .. } | mlua::Error::WithContext { cause, .. } => {
+            contains_memory_error(cause)
+        }
+        _ => false,
+    }
+}
+
+/// Classifies a Lua error raised by a *top-level* handler invocation (see
+/// `crate::lua::worker::invoke_top_level`, the sole caller) as one of the
+/// sandbox's own abort conditions — an instruction-budget or memory-limit
+/// abort — or `None` for an ordinary script error (a plain `error(...)`, a
+/// type mismatch, etc.), which callers report as-is instead. `downcast_ref`
+/// and the manual `CallbackError`/`WithContext` recursion above both
+/// follow the same "descend through wrapping layers" path `mlua::Error`
+/// itself documents, since a hook or memory-limit abort raised deep inside
+/// a `Function::call` surfaces wrapped in one or more of those variants.
+pub fn classify_sandbox_abort(err: &mlua::Error) -> Option<ScriptError> {
+    if let Some(crate::lua::sandbox::SandboxAbort::InstructionLimit(budget)) =
+        err.downcast_ref::<crate::lua::sandbox::SandboxAbort>()
+    {
+        return Some(ScriptError::script_instruction_limit(format!(
+            "instruction budget of {budget} exceeded"
+        )));
+    }
+    if contains_memory_error(err) {
+        return Some(ScriptError::script_memory_limit(err.to_string()));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lua::sandbox::{new_sandboxed_lua, SandboxConfig};
+
+    #[test]
+    fn classify_sandbox_abort_recognizes_an_instruction_limit_abort() {
+        let config = SandboxConfig {
+            instruction_budget: 50,
+            hook_every_n_instructions: 10,
+            ..SandboxConfig::default()
+        };
+        let (lua, _counter) = new_sandboxed_lua(&config).unwrap();
+        let err = lua.load("while true do end").exec().unwrap_err();
+        match classify_sandbox_abort(&err) {
+            Some(e) => assert_eq!(e.code, "script_instruction_limit"),
+            None => panic!("expected an instruction-limit classification, got None (err: {err})"),
+        }
+    }
+
+    #[test]
+    fn classify_sandbox_abort_recognizes_a_memory_limit_abort() {
+        let config = SandboxConfig {
+            memory_limit_bytes: 64 * 1024,
+            ..SandboxConfig::default()
+        };
+        let (lua, _counter) = new_sandboxed_lua(&config).unwrap();
+        let err = lua
+            .load(
+                r#"
+                local t = {}
+                for i = 1, 10000000 do
+                    t[i] = string.rep("x", 64)
+                end
+                "#,
+            )
+            .exec()
+            .unwrap_err();
+        match classify_sandbox_abort(&err) {
+            Some(e) => assert_eq!(e.code, "script_memory_limit"),
+            None => panic!("expected a memory-limit classification, got None (err: {err})"),
+        }
+    }
+
+    #[test]
+    fn classify_sandbox_abort_returns_none_for_an_ordinary_script_error() {
+        let (lua, _counter) = new_sandboxed_lua(&SandboxConfig::default()).unwrap();
+        let err = lua.load("error('boom')").exec().unwrap_err();
+        assert!(
+            classify_sandbox_abort(&err).is_none(),
+            "an ordinary script error must not be misclassified as a sandbox abort"
+        );
+    }
 
     #[test]
     fn every_declared_error_code_is_reachable_from_a_real_conversion() {

@@ -334,6 +334,7 @@ impl UserData for LuaSwarm {
                     func,
                     std::time::Duration::from_millis(delay_ms),
                     None,
+                    None,
                 )
                 .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
             },
@@ -350,6 +351,7 @@ impl UserData for LuaSwarm {
                     func,
                     std::time::Duration::from_millis(interval_ms),
                     Some(std::time::Duration::from_millis(interval_ms)),
+                    None,
                 )
                 .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
             },

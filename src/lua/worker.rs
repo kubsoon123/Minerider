@@ -375,7 +375,6 @@ pub fn run_worker(
         }
         for envelope in batch {
             report.events_processed += 1;
-            counter.store(0, Ordering::Relaxed);
             dispatch_one(&lua, &state, envelope, &mut report);
         }
         sweep_callback_timeouts(&lua, &state);
@@ -383,6 +382,82 @@ pub fn run_worker(
     }
 
     Ok(report)
+}
+
+/// The result of one [`invoke_top_level`] call: either a genuine sandbox
+/// abort (already classified into a typed [`ScriptError`]), or the raw Lua
+/// error from an ordinary handler failure (a plain `error(...)`, a type
+/// mismatch, etc. — never itself surfaced to a script, only logged and
+/// counted).
+pub(crate) enum HandlerFailure {
+    Sandbox(crate::lua::error::ScriptError),
+    Script(mlua::Error),
+}
+
+impl std::fmt::Display for HandlerFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HandlerFailure::Sandbox(e) => write!(f, "{}: {}", e.code, e.message),
+            HandlerFailure::Script(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+/// The single choke point every *top-level* Lua callback invocation must
+/// go through: event handlers, one-shot action callbacks, pub/sub
+/// handlers, and timer callbacks. Resets the instruction counter
+/// immediately before the call — and *only* here, never for a Lua
+/// function invoked from *within* one of these (e.g. the function passed
+/// to `shared:update(fn)`), since resetting there would let a script
+/// bypass its whole budget by nesting unbounded work inside a
+/// Rust-mediated call. A resettable-per-invocation counter is also why a
+/// single VM-lifetime-cumulative counter would be wrong here: it would
+/// eventually trip on a VM that has simply run for a long time, not on
+/// any one runaway call (see `crate::lua::sandbox::new_sandboxed_lua`'s
+/// doc comment).
+pub(crate) fn invoke_top_level<A: mlua::IntoLuaMulti>(
+    state: &Rc<WorkerState>,
+    func: &mlua::Function,
+    args: A,
+) -> Result<(), HandlerFailure> {
+    state
+        .instruction_counter
+        .borrow()
+        .store(0, Ordering::Relaxed);
+    func.call::<()>(args).map_err(|e| {
+        match crate::lua::error::classify_sandbox_abort(&e) {
+            Some(script_err) => HandlerFailure::Sandbox(script_err),
+            None => HandlerFailure::Script(e),
+        }
+    })
+}
+
+/// Updates bot `bot_id`'s consecutive-error counter after a top-level
+/// handler invocation *actually ran* for it (never call this for an event
+/// that had no registered handlers at all — see `run_handlers_for`, which
+/// only calls this when at least one handler was invoked). Disables the
+/// bot once `consecutive_error_threshold` is reached; the underlying
+/// connection and every other bot are unaffected. Shared by
+/// `run_handlers_for` (event handlers) and `crate::lua::api::timers::fire_one`
+/// (bot-scoped timers) so both failure sources feed the same accounting.
+pub(crate) fn record_bot_handler_outcome(
+    state: &Rc<WorkerState>,
+    bot_id: u32,
+    succeeded: bool,
+    report: &mut WorkerReport,
+) {
+    if succeeded {
+        state.consecutive_errors.borrow_mut().remove(&bot_id);
+        return;
+    }
+    let mut errors = state.consecutive_errors.borrow_mut();
+    let count = errors.entry(bot_id).or_insert(0);
+    *count += 1;
+    if *count >= state.sandbox.consecutive_error_threshold {
+        state.disabled_bots.borrow_mut().insert(bot_id);
+        report.bots_disabled_by_consecutive_errors += 1;
+        tracing::error!(worker = state.worker_index, %bot_id, "script disabled after {count} consecutive handler errors");
+    }
 }
 
 /// Looks up, invokes, and removes a pending one-shot action callback by
@@ -395,7 +470,7 @@ pub fn run_worker(
 fn resolve_callback(lua: &Lua, state: &Rc<WorkerState>, request_id: u64, table: mlua::Table) {
     if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
         if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
-            if let Err(e) = func.call::<()>(table) {
+            if let Err(e) = invoke_top_level(state, &func, table) {
                 tracing::warn!(worker = state.worker_index, error = %e, "action_result callback failed");
             }
         }
@@ -488,7 +563,7 @@ fn dispatch_one(
             if let Ok(value) = crate::lua::api::shared::shared_value_to_lua(lua, &payload) {
                 for func in funcs {
                     report.handlers_run += 1;
-                    if let Err(e) = func.call::<()>((topic.clone(), value.clone())) {
+                    if let Err(e) = invoke_top_level(state, &func, (topic.clone(), value.clone())) {
                         report.handler_errors += 1;
                         tracing::warn!(worker = state.worker_index, %topic, error = %e, "on_message handler failed");
                     }
@@ -542,10 +617,14 @@ fn run_handlers_for(
     };
 
     let mut had_error = false;
+    let mut invoked_any = false;
     for (id, key, once) in per_bot_keys.into_iter().chain(global_keys) {
         if let Ok(func) = lua.registry_value::<mlua::Function>(&key) {
+            invoked_any = true;
             report.handlers_run += 1;
-            if let Err(e) = func.call::<()>((bot_value.clone(), event_value.clone())) {
+            if let Err(e) =
+                invoke_top_level(state, &func, (bot_value.clone(), event_value.clone()))
+            {
                 report.handler_errors += 1;
                 had_error = true;
                 tracing::warn!(worker = state.worker_index, %bot_id, event = name, error = %e, "handler error");
@@ -562,17 +641,12 @@ fn run_handlers_for(
         }
     }
 
-    if had_error {
-        let mut errors = state.consecutive_errors.borrow_mut();
-        let count = errors.entry(bot_id).or_insert(0);
-        *count += 1;
-        if *count >= state.sandbox.consecutive_error_threshold {
-            state.disabled_bots.borrow_mut().insert(bot_id);
-            report.bots_disabled_by_consecutive_errors += 1;
-            tracing::error!(worker = state.worker_index, %bot_id, "script disabled after {count} consecutive handler errors");
-        }
-    } else {
-        state.consecutive_errors.borrow_mut().remove(&bot_id);
+    // Only a handler that actually ran can affect the counter — an event
+    // with no registered handlers at all must leave a bot's existing
+    // consecutive-error streak untouched (it did not "succeed", it simply
+    // never ran anything for this bot).
+    if invoked_any {
+        record_bot_handler_outcome(state, bot_id, !had_error, report);
     }
 }
 
@@ -601,7 +675,9 @@ fn sweep_callback_timeouts(lua: &Lua, state: &Rc<WorkerState>) {
                 };
                 if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
                 {
-                    let _ = func.call::<()>(table);
+                    if let Err(e) = invoke_top_level(state, &func, table) {
+                        tracing::warn!(worker = state.worker_index, error = %e, "timed-out action callback itself failed");
+                    }
                 }
             }
             let _ = lua.remove_registry_value(cb.key);

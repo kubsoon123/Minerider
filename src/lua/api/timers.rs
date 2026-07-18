@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use mlua::{Lua, RegistryKey};
 
-use crate::lua::worker::{WorkerReport, WorkerState};
+use crate::lua::worker::{invoke_top_level, record_bot_handler_outcome, WorkerReport, WorkerState};
 
 pub const MAX_TIMERS_PER_WORKER: usize = 1024;
 pub const MIN_TIMER_INTERVAL: Duration = Duration::from_millis(10);
@@ -27,6 +27,13 @@ pub struct TimerEntry {
     pub key: RegistryKey,
     pub interval: Option<Duration>,
     pub next_fire: Instant,
+    /// `Some(bot_id)` for a bot-scoped timer (`bot:set_timeout`/`set_interval`,
+    /// scheduled via [`schedule_for_bot`]), `None` for a global/coordinator
+    /// timer (`swarm:set_timeout`/`set_interval`). Retained so a failing
+    /// bot-scoped timer callback can be attributed to the right bot for
+    /// consecutive-error tracking, exactly like a failed event handler —
+    /// see `crate::lua::worker::record_bot_handler_outcome`.
+    pub bot_id: Option<u32>,
 }
 
 #[derive(Default)]
@@ -57,7 +64,9 @@ pub enum TimerError {
 }
 
 /// Schedules a timer on this worker. `interval = None` fires once;
-/// `Some(d)` repeats every `d`. Returns the timer id used by
+/// `Some(d)` repeats every `d`. `bot_id` is `None` for a global/coordinator
+/// timer, `Some(id)` for a bot-scoped one (always via [`schedule_for_bot`]
+/// below, which validates ownership first). Returns the timer id used by
 /// `clear_timer`.
 pub fn schedule(
     state: &Rc<WorkerState>,
@@ -65,6 +74,7 @@ pub fn schedule(
     func: mlua::Function,
     delay: Duration,
     interval: Option<Duration>,
+    bot_id: Option<u32>,
 ) -> Result<u64, TimerError> {
     let delay = delay.max(MIN_TIMER_INTERVAL);
     let interval = interval.map(|i| i.max(MIN_TIMER_INTERVAL));
@@ -83,6 +93,7 @@ pub fn schedule(
             key,
             interval,
             next_fire: Instant::now() + delay,
+            bot_id,
         },
     );
     Ok(id)
@@ -108,7 +119,7 @@ pub fn schedule_for_bot(
             caller: state.worker_index,
         });
     }
-    schedule(state, lua, func, delay, interval)
+    schedule(state, lua, func, delay, interval, Some(bot_id))
 }
 
 pub fn clear(state: &Rc<WorkerState>, lua: &Lua, id: u64) -> bool {
@@ -150,22 +161,41 @@ pub fn fire_due(lua: &Lua, state: &Rc<WorkerState>, report: &mut WorkerReport) {
 /// Fires exactly one timer by id, rescheduling it if it repeats. Public so
 /// a future cross-worker timer-dispatch path (`WorkItem::TimerFired`) can
 /// reuse the same firing logic as the direct per-worker check above.
+///
+/// A bot-scoped timer whose bot has since been disabled (by too many
+/// consecutive handler errors — see `crate::lua::worker::record_bot_handler_outcome`)
+/// is skipped entirely: once a bot's script execution is disabled, *all*
+/// of its script execution stops, not just its event handlers. A
+/// bot-scoped timer's own success/failure feeds the same per-bot counter,
+/// same as a failed/succeeded event handler.
 pub fn fire_one(lua: &Lua, state: &Rc<WorkerState>, timer_id: u64, report: &mut WorkerReport) {
-    let key_and_interval = {
+    let key_interval_bot = {
         let timers = state.timers.borrow();
-        timers
-            .entries
-            .get(&timer_id)
-            .map(|e| (lua.registry_value::<mlua::Function>(&e.key), e.interval))
+        timers.entries.get(&timer_id).map(|e| {
+            (
+                lua.registry_value::<mlua::Function>(&e.key),
+                e.interval,
+                e.bot_id,
+            )
+        })
     };
-    let Some((func_result, interval)) = key_and_interval else {
+    let Some((func_result, interval, bot_id)) = key_interval_bot else {
         return;
     };
+    if let Some(id) = bot_id {
+        if state.disabled_bots.borrow().contains(&id) {
+            return;
+        }
+    }
     if let Ok(func) = func_result {
         report.handlers_run += 1;
-        if let Err(e) = func.call::<()>(()) {
+        let outcome = invoke_top_level(state, &func, ());
+        if let Err(e) = &outcome {
             report.handler_errors += 1;
             tracing::warn!(worker = state.worker_index, timer_id, error = %e, "timer callback failed");
+        }
+        if let Some(id) = bot_id {
+            record_bot_handler_outcome(state, id, outcome.is_ok(), report);
         }
     }
     let mut timers = state.timers.borrow_mut();

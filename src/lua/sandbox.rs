@@ -12,6 +12,19 @@ use std::sync::Arc;
 
 use mlua::{HookTriggers, Lua, LuaOptions, StdLib, VmState};
 
+/// Raised by the instruction-count hook below when a single top-level
+/// invocation's budget is exceeded. Wrapped as an `mlua::Error::external`
+/// (rather than a bare `RuntimeError(String)`) specifically so callers can
+/// reliably classify "this was a sandbox abort" via `err.downcast_ref`
+/// instead of pattern-matching an error message — see
+/// `crate::lua::error::classify_sandbox_abort`, the only place that reads
+/// this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SandboxAbort {
+    #[error("instruction budget of {0} exceeded")]
+    InstructionLimit(u64),
+}
+
 /// Bounds applied to every worker's Lua VM.
 #[derive(Debug, Clone, Copy)]
 pub struct SandboxConfig {
@@ -80,9 +93,7 @@ pub fn new_sandboxed_lua(config: &SandboxConfig) -> mlua::Result<(Lua, Arc<Atomi
         move |_lua, _debug| {
             let seen = hook_counter.fetch_add(1, Ordering::Relaxed);
             if seen > budget {
-                return Err(mlua::Error::RuntimeError(format!(
-                    "instruction budget of {budget} exceeded"
-                )));
+                return Err(mlua::Error::external(SandboxAbort::InstructionLimit(budget)));
             }
             Ok(VmState::Continue)
         },
