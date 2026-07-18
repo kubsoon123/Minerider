@@ -44,6 +44,27 @@ serde_json = { workspace = true }
 sha1 = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
 
+# Benchmark-only: validates the Lua runtime architecture (shared VM vs. a
+# small worker pool vs. per-bot VM) before the real wrapper is built; see
+# docs/lua_runtime_benchmark.md. `lua54` + `vendored` needs no system Lua
+# install and builds identically on Ubuntu/Windows. `send` is deliberately
+# NOT enabled: every architecture candidate here, including the per-bot-VM
+# control comparison, runs each `Lua` to completion on its own dedicated
+# `std::thread` for that VM's whole lifetime — it never crosses an `.await`
+# or moves between threads, so `Lua: Send` is never required.
+mlua = { version = "0.12", optional = true, default-features = false, features = [
+    "lua54",
+    "vendored",
+] }
+
+[features]
+lua-benchmark = ["dep:mlua"]
+
+[[bin]]
+name = "lua_runtime_benchmark"
+path = "src/bin/lua_runtime_benchmark.rs"
+required-features = ["lua-benchmark"]
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 rsa = { workspace = true }
