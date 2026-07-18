@@ -6,28 +6,10 @@
 //! whole world or every chunk. `GuiOpened` caps its slot array at
 //! [`GUI_OPENED_MAX_SLOTS`] for exactly that reason.
 
-use std::time::Instant;
-
-/// A stand-in bot identity: cheap, `Copy`, and stable for a whole benchmark
-/// run — never reassigned, matching the "deterministic worker assignment"
-/// rule (worker = `bot_id.0 % worker_count`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BotId(pub u32);
-
-/// Where an event sits in the priority model this benchmark evaluates
-/// against a plain FIFO queue (see "Event-priority experiment").
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Priority {
-    /// Lifecycle events a script must never miss.
-    High,
-    /// Frequently-repeated state that only the *latest* value matters for —
-    /// coalescible into one slot per `(bot, kind)` instead of queued.
-    Coalescible,
-    /// High-frequency, poll-only in the recommended design; still modelled
-    /// here so the "would flood a mandatory callback" case is measurable
-    /// (see the 800 bots x 20 callbacks/s discussion).
-    Low,
-}
+// `BotId`/`Priority`/`QueueItem` are the production queue's shared types
+// (`crate::lua::queue`), promoted out of this module so the benchmark and
+// the production dispatcher use one queue implementation, not two.
+pub use crate::lua::queue::{BotId, Priority, QueueItem};
 
 /// How large a realistic payload for this event is, driving which of the
 /// benchmark's three payload-size tiers a scenario is exercising.
@@ -180,14 +162,18 @@ impl BenchEvent {
     }
 }
 
-/// One event on its way to a worker: the payload plus the timestamp used
-/// for enqueue-to-* latency measurements.
-#[derive(Debug, Clone)]
-pub struct Envelope {
-    pub bot_id: BotId,
-    pub event: BenchEvent,
-    pub enqueued_at: Instant,
-    /// Monotonic per-bot sequence number, used by correctness tests to
-    /// assert per-bot ordering is preserved end to end.
-    pub bot_seq: u64,
+impl QueueItem for BenchEvent {
+    fn priority(&self) -> Priority {
+        BenchEvent::priority(self)
+    }
+
+    fn name(&self) -> &'static str {
+        BenchEvent::name(self)
+    }
 }
+
+/// One event on its way to a worker: the payload plus the timestamp used
+/// for enqueue-to-* latency measurements. A type alias over the shared
+/// generic `Envelope<E>` (see `crate::lua::queue`) so existing struct-literal
+/// call sites (`Envelope { bot_id, event, .. }`) keep working unchanged.
+pub type Envelope = crate::lua::queue::Envelope<BenchEvent>;

@@ -26,6 +26,8 @@
 
 pub mod auth;
 pub mod core;
+#[cfg(feature = "lua")]
+pub mod lua;
 #[cfg(feature = "lua-benchmark")]
 pub mod lua_benchmark;
 pub mod minecraft;

@@ -59,7 +59,11 @@ pub struct GuiSlotView {
 }
 
 impl GuiSlotView {
-    fn from_slot(index: usize, slot: &Slot) -> Self {
+    /// `pub(crate)` (not private) so `crate::lua::convert::items` can build
+    /// the same enriched view for `HudState.held_item`/`hotbar` (raw
+    /// protocol `Slot`s, not `GuiSlotView`s) instead of duplicating this
+    /// decode logic.
+    pub(crate) fn from_slot(index: usize, slot: &Slot) -> Self {
         let SlotValue::Default(data) = &slot.value else {
             return GuiSlotView {
                 index,
