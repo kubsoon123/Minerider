@@ -20,9 +20,19 @@ use crate::minecraft::scoreboard::ScoreboardEvent;
 pub enum WorkItem {
     /// A Minecraft event for one of this worker's bots.
     Bot(BotEvent),
-    /// Completion of a previously-enqueued action (see
+    /// Completion of a previously-enqueued action, delivered to the bot's
+    /// *owning* worker so its `action_result` handlers fire (see
     /// `crate::lua::dispatcher::ActionResult`).
     ActionResult(crate::lua::dispatcher::ActionResult),
+    /// The same completion, delivered instead (or additionally, when the
+    /// owning worker differs) to the worker whose Lua VM actually
+    /// registered the one-shot callback for this action — see
+    /// `crate::lua::dispatcher::DispatcherHandle::dispatch_action_result`'s
+    /// doc comment. A one-shot callback closure lives in the *calling*
+    /// worker's registry (it can only be invoked on the VM that created
+    /// it), which can differ from the bot's owning worker whenever a
+    /// script calls `swarm:bot(id)` for a bot it doesn't own.
+    CallbackCompletion(crate::lua::dispatcher::ActionResult),
     /// A cross-worker pub/sub message delivered to this worker. The
     /// payload is cloned directly into every worker's queue at publish
     /// time (see `crate::lua::dispatcher::DispatcherHandle::broadcast_message`)
@@ -50,6 +60,7 @@ impl QueueItem for WorkItem {
         match self {
             WorkItem::Bot(event) => bot_event_priority(event),
             WorkItem::ActionResult(_) => Priority::High,
+            WorkItem::CallbackCompletion(_) => Priority::High,
             WorkItem::Message { .. } => Priority::Low,
             WorkItem::TimerFired { .. } => Priority::Low,
             WorkItem::ScriptError { .. } => Priority::High,
@@ -62,6 +73,7 @@ impl QueueItem for WorkItem {
         match self {
             WorkItem::Bot(event) => bot_event_name(event),
             WorkItem::ActionResult(_) => "action_result",
+            WorkItem::CallbackCompletion(_) => "callback_completion",
             WorkItem::Message { .. } => "message",
             WorkItem::TimerFired { .. } => "timer",
             WorkItem::ScriptError { .. } => "script_error",

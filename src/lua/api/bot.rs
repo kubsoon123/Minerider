@@ -58,28 +58,40 @@ where
 {
     let request_id = this.state.dispatcher.allocate_request_id();
     let bot_id = this.bot_id;
+    // The worker whose Lua VM is issuing this action — may differ from
+    // `bot_id`'s owning worker when the script called `swarm:bot(id)` for
+    // a bot it doesn't own. Threaded through so the eventual completion
+    // can still reach a callback registered *here*, on this worker,
+    // regardless of who owns the bot (see `DispatcherHandle::dispatch_action_result`).
+    let origin_worker = this.state.worker_index;
     let dispatcher = this.state.dispatcher.clone();
     match this.state.bot_handle(bot_id) {
         Some(handle) => {
             this.state.runtime_handle.spawn(async move {
                 let outcome = op(handle).await;
-                dispatcher.dispatch_action_result(ActionResult {
-                    request_id,
-                    bot_id,
-                    outcome,
-                });
+                dispatcher.dispatch_action_result(
+                    origin_worker,
+                    ActionResult {
+                        request_id,
+                        bot_id,
+                        outcome,
+                    },
+                );
             });
         }
         None => {
             this.state.runtime_handle.spawn(async move {
-                dispatcher.dispatch_action_result(ActionResult {
-                    request_id,
-                    bot_id,
-                    outcome: ActionOutcome::Error(ScriptError::new(
-                        "not_connected",
-                        "this bot has no active connection handle yet",
-                    )),
-                });
+                dispatcher.dispatch_action_result(
+                    origin_worker,
+                    ActionResult {
+                        request_id,
+                        bot_id,
+                        outcome: ActionOutcome::Error(ScriptError::new(
+                            "not_connected",
+                            "this bot has no active connection handle yet",
+                        )),
+                    },
+                );
             });
         }
     }
@@ -267,7 +279,13 @@ impl UserData for LuaBot {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         // ---- Identity / metadata ------------------------------------
         methods.add_method("id", |_, this, ()| Ok(this.bot_id));
-        methods.add_method("worker_id", |_, this, ()| Ok(this.state.worker_index));
+        // `bot_id % worker_count` — the bot's *owning* worker, which can
+        // differ from `this.state.worker_index` (the worker whose Lua VM
+        // happens to be executing this call): `swarm:bot(id)` may return a
+        // bot owned by any worker, not just the caller's own.
+        methods.add_method("worker_id", |_, this, ()| {
+            Ok(this.state.dispatcher.worker_index_for(this.bot_id))
+        });
         methods.add_method("username", |_, this, ()| {
             Ok(this
                 .state
@@ -538,8 +556,9 @@ impl UserData for LuaBot {
         methods.add_method(
             "set_timeout",
             |lua, this, (delay_ms, func): (u64, mlua::Function)| {
-                crate::lua::api::timers::schedule(
+                crate::lua::api::timers::schedule_for_bot(
                     &this.state,
+                    this.bot_id,
                     lua,
                     func,
                     Duration::from_millis(delay_ms),
@@ -551,8 +570,9 @@ impl UserData for LuaBot {
         methods.add_method(
             "set_interval",
             |lua, this, (interval_ms, func): (u64, mlua::Function)| {
-                crate::lua::api::timers::schedule(
+                crate::lua::api::timers::schedule_for_bot(
                     &this.state,
+                    this.bot_id,
                     lua,
                     func,
                     Duration::from_millis(interval_ms),

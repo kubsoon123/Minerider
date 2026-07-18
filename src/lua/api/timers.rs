@@ -39,6 +39,21 @@ pub struct TimerRegistry {
 pub enum TimerError {
     #[error("worker timer limit of {MAX_TIMERS_PER_WORKER} exceeded")]
     LimitExceeded,
+    /// A script tried to register a bot-scoped timer for a bot owned by a
+    /// *different* worker. Each worker owns a fully separate `Lua` VM, and
+    /// a `mlua::RegistryKey` (what a timer's callback closure is stored
+    /// as) is only ever valid within the VM that created it — there is no
+    /// safe way to "move" the closure to the owning worker instead, so
+    /// this is rejected rather than silently registered on the wrong
+    /// worker (see `docs/lua_wrapper.md#worker-local-globals`).
+    #[error(
+        "cross_worker_timer: bot {bot_id} is owned by worker {owner}, not the calling worker {caller} — bot-scoped timers must be registered from that bot's own worker"
+    )]
+    CrossWorkerBot {
+        bot_id: u32,
+        owner: usize,
+        caller: usize,
+    },
 }
 
 /// Schedules a timer on this worker. `interval = None` fires once;
@@ -71,6 +86,29 @@ pub fn schedule(
         },
     );
     Ok(id)
+}
+
+/// Schedules a bot-scoped timer — identical to [`schedule`], but first
+/// rejects the call if `bot_id` isn't actually owned by this worker (see
+/// [`TimerError::CrossWorkerBot`]). The sole caller is
+/// `crate::lua::api::bot::LuaBot`'s `set_timeout`/`set_interval` methods.
+pub fn schedule_for_bot(
+    state: &Rc<WorkerState>,
+    bot_id: u32,
+    lua: &Lua,
+    func: mlua::Function,
+    delay: Duration,
+    interval: Option<Duration>,
+) -> Result<u64, TimerError> {
+    let owner = state.dispatcher.worker_index_for(bot_id);
+    if owner != state.worker_index {
+        return Err(TimerError::CrossWorkerBot {
+            bot_id,
+            owner,
+            caller: state.worker_index,
+        });
+    }
+    schedule(state, lua, func, delay, interval)
 }
 
 pub fn clear(state: &Rc<WorkerState>, lua: &Lua, id: u64) -> bool {

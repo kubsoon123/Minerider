@@ -385,6 +385,24 @@ pub fn run_worker(
     Ok(report)
 }
 
+/// Looks up, invokes, and removes a pending one-shot action callback by
+/// `request_id` on *this* worker's own registry — a no-op if none is
+/// registered here (either because none was ever registered for this
+/// action, or because it lives on a different worker; see
+/// `WorkItem::ActionResult`/`WorkItem::CallbackCompletion` above). Shared
+/// between both work items so a callback fires exactly the same way
+/// regardless of which one delivered it.
+fn resolve_callback(lua: &Lua, state: &Rc<WorkerState>, request_id: u64, table: mlua::Table) {
+    if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+        if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
+            if let Err(e) = func.call::<()>(table) {
+                tracing::warn!(worker = state.worker_index, error = %e, "action_result callback failed");
+            }
+        }
+        let _ = lua.remove_registry_value(callback.key);
+    }
+}
+
 fn dispatch_one(
     lua: &Lua,
     state: &Rc<WorkerState>,
@@ -427,19 +445,13 @@ fn dispatch_one(
         WorkItem::ActionResult(result) => {
             let table = crate::lua::convert::events::action_result_to_table(lua, &result);
             if let Ok(table) = table {
-                if let Some(callback) = state
-                    .callbacks
-                    .borrow_mut()
-                    .pending
-                    .remove(&result.request_id)
-                {
-                    if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
-                        if let Err(e) = func.call::<()>(table.clone()) {
-                            tracing::warn!(worker = state.worker_index, error = %e, "action_result callback failed");
-                        }
-                    }
-                    let _ = lua.remove_registry_value(callback.key);
-                }
+                // Only resolves a callback actually registered *on this
+                // worker* — a no-op when the calling worker (where the
+                // callback lives) differs from this bot's owning worker,
+                // since `DispatcherHandle::dispatch_action_result` also
+                // sends a `CallbackCompletion` to that calling worker in
+                // that case (see its doc comment).
+                resolve_callback(lua, state, result.request_id, table.clone());
                 let bot_obj = crate::lua::api::bot::make_bot(lua, state.clone(), bot_id).ok();
                 if let Some(bot_value) = bot_obj {
                     run_handlers_for(
@@ -452,6 +464,11 @@ fn dispatch_one(
                         report,
                     );
                 }
+            }
+        }
+        WorkItem::CallbackCompletion(result) => {
+            if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result) {
+                resolve_callback(lua, state, result.request_id, table);
             }
         }
         WorkItem::Message { topic, payload } => {
@@ -624,6 +641,323 @@ mod tests {
             shutdown: Arc::new(AtomicBool::new(false)),
             callback_timeout: DEFAULT_CALLBACK_TIMEOUT,
         })
+    }
+
+    /// Builds `worker_count` `WorkerState`s that share one real
+    /// `DispatcherHandle` (one queue per worker, exactly like `run_swarm`
+    /// wires it up) and one shared `SharedState` — enough to exercise
+    /// genuinely cross-worker routing (`DispatcherHandle::dispatch_action_result`,
+    /// `worker_index_for`) directly, without a real Lua script, network
+    /// connection, or `run_swarm` call.
+    fn test_states(
+        worker_count: usize,
+        sandbox: SandboxConfig,
+        callback_timeout: Duration,
+    ) -> Vec<Rc<WorkerState>> {
+        let queues: Vec<_> = (0..worker_count)
+            .map(|_| WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(64, 64))))
+            .collect();
+        let dispatcher = DispatcherHandle::new(queues);
+        let shared_state = Arc::new(crate::lua::api::shared::SharedState::new());
+        (0..worker_count)
+            .map(|worker_index| {
+                Rc::new(WorkerState {
+                    worker_index,
+                    is_coordinator: worker_index == 0,
+                    dispatcher: dispatcher.clone(),
+                    runtime_handle: tokio::runtime::Handle::current(),
+                    instruction_counter: RefCell::new(Arc::new(AtomicU64::new(0))),
+                    sandbox,
+                    handlers: RefCell::new(HandlerRegistry::default()),
+                    callbacks: RefCell::new(CallbackRegistry::default()),
+                    disabled_bots: RefCell::new(HashSet::new()),
+                    consecutive_errors: RefCell::new(HashMap::new()),
+                    config_builder: RefCell::new(SwarmRegistryBuilder::default()),
+                    config_tx: RefCell::new(None),
+                    startup_barrier: StartupBarrier::new(),
+                    startup_report_tx: tokio::sync::mpsc::unbounded_channel().0,
+                    started: RefCell::new(None),
+                    shared_state: shared_state.clone(),
+                    pubsub: RefCell::new(HashMap::new()),
+                    timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
+                    shutdown: Arc::new(AtomicBool::new(false)),
+                    callback_timeout,
+                })
+            })
+            .collect()
+    }
+
+    /// Regression proof that extracting `resolve_callback` out of the
+    /// `ActionResult` arm (to share it with the new `CallbackCompletion`
+    /// arm below) didn't change the common same-worker path: a callback
+    /// registered on the same worker that owns the bot must still fire
+    /// exactly once, and `action_result` handlers must still run too.
+    #[tokio::test]
+    async fn action_result_still_resolves_a_same_worker_callback_and_runs_handlers() {
+        let states = test_states(1, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let state = states[0].clone();
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+        lua.load(
+            r#"
+            swarm:on("action_result", function(bot, event)
+                _G.handler_saw_ok = event.ok
+            end)
+            "#,
+        )
+        .exec()
+        .unwrap();
+        let callback: mlua::Function = lua
+            .load("function(result) _G.callback_saw_ok = result.ok end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        state.callbacks.borrow_mut().pending.insert(
+            1,
+            PendingCallback {
+                key,
+                bot_id: 0,
+                registered_at: Instant::now(),
+            },
+        );
+
+        let result = crate::lua::dispatcher::ActionResult {
+            request_id: 1,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        };
+        let envelope = crate::lua::queue::Envelope {
+            bot_id: crate::lua::queue::BotId(0),
+            event: WorkItem::ActionResult(result),
+            enqueued_at: Instant::now(),
+            bot_seq: 0,
+        };
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        dispatch_one(&lua, &state, envelope, &mut report);
+
+        let callback_saw_ok: bool = lua.globals().get("callback_saw_ok").unwrap();
+        let handler_saw_ok: bool = lua.globals().get("handler_saw_ok").unwrap();
+        assert!(callback_saw_ok, "the locally-registered callback must fire");
+        assert!(handler_saw_ok, "action_result handlers must still run");
+        assert!(
+            state.callbacks.borrow().pending.is_empty(),
+            "the callback must be removed after firing exactly once"
+        );
+    }
+
+    /// The core Fix 3 regression: a one-shot callback registered by the
+    /// *calling* worker for a bot owned by a *different* worker must still
+    /// fire — via the `CallbackCompletion` work item delivered directly to
+    /// the calling (origin) worker, since the callback closure only exists
+    /// in that worker's own Lua registry.
+    #[tokio::test]
+    async fn callback_completion_fires_on_the_origin_worker_even_when_a_different_worker_owns_the_bot(
+    ) {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let origin = states[0].clone(); // worker 0 — the caller
+        let (lua, counter) = new_sandboxed_lua(&origin.sandbox).unwrap();
+        *origin.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, origin.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.seen_outcome = result.outcome; _G.seen_bot_id = result.bot_id end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        origin.callbacks.borrow_mut().pending.insert(
+            7,
+            PendingCallback {
+                key,
+                bot_id: 1, // owned by worker 1 (1 % 2), not this origin worker
+                registered_at: Instant::now(),
+            },
+        );
+
+        let result = crate::lua::dispatcher::ActionResult {
+            request_id: 7,
+            bot_id: 1,
+            outcome: ActionOutcome::DeliveredSent,
+        };
+        let envelope = crate::lua::queue::Envelope {
+            bot_id: crate::lua::queue::BotId(1),
+            event: WorkItem::CallbackCompletion(result),
+            enqueued_at: Instant::now(),
+            bot_seq: 0,
+        };
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        dispatch_one(&lua, &origin, envelope, &mut report);
+
+        let seen_outcome: String = lua.globals().get("seen_outcome").unwrap();
+        let seen_bot_id: u32 = lua.globals().get("seen_bot_id").unwrap();
+        assert_eq!(seen_outcome, "delivered_sent");
+        assert_eq!(seen_bot_id, 1);
+        assert!(
+            origin.callbacks.borrow().pending.is_empty(),
+            "the callback must be removed after firing exactly once"
+        );
+    }
+
+    /// Same cross-worker routing, but for an `Error` outcome — proves the
+    /// full structured error table (`code`, `message`, ...), not just a
+    /// success flag, survives the `CallbackCompletion` path intact.
+    #[tokio::test]
+    async fn callback_completion_delivers_error_outcomes_to_the_originating_worker() {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let origin = states[0].clone();
+        let (lua, counter) = new_sandboxed_lua(&origin.sandbox).unwrap();
+        *origin.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, origin.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        origin.callbacks.borrow_mut().pending.insert(
+            9,
+            PendingCallback {
+                key,
+                bot_id: 1,
+                registered_at: Instant::now(),
+            },
+        );
+
+        let result = crate::lua::dispatcher::ActionResult {
+            request_id: 9,
+            bot_id: 1,
+            outcome: ActionOutcome::Error(crate::lua::error::ScriptError::new(
+                "no_gui_open",
+                "no non-player GUI is currently open",
+            )),
+        };
+        let envelope = crate::lua::queue::Envelope {
+            bot_id: crate::lua::queue::BotId(1),
+            event: WorkItem::CallbackCompletion(result),
+            enqueued_at: Instant::now(),
+            bot_seq: 0,
+        };
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        dispatch_one(&lua, &origin, envelope, &mut report);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "no_gui_open");
+    }
+
+    /// A callback registered on the calling worker for a bot owned by a
+    /// different worker must still be swept and time out correctly —
+    /// `sweep_callback_timeouts` only ever touches the worker it runs on,
+    /// so cross-worker origin has no bearing on it, but this proves that
+    /// explicitly rather than by inference.
+    #[tokio::test]
+    async fn sweep_callback_timeouts_resolves_a_cross_worker_registered_callback() {
+        let states = test_states(2, SandboxConfig::default(), Duration::from_millis(5));
+        let origin = states[0].clone();
+        let (lua, counter) = new_sandboxed_lua(&origin.sandbox).unwrap();
+        *origin.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, origin.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        origin.callbacks.borrow_mut().pending.insert(
+            3,
+            PendingCallback {
+                key,
+                bot_id: 1, // owned by worker 1, not this (origin) worker
+                registered_at: Instant::now(),
+            },
+        );
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        sweep_callback_timeouts(&lua, &origin);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "inventory_timeout");
+        assert!(
+            origin.callbacks.borrow().pending.is_empty(),
+            "the timed-out callback must be removed"
+        );
+    }
+
+    /// `bot:set_timeout`/`set_interval` must reject a bot owned by a
+    /// different worker rather than silently registering a timer that
+    /// looks bot-scoped but isn't actually tied to that bot's own worker —
+    /// see `TimerError::CrossWorkerBot`'s doc comment for why this can't
+    /// instead just "route to the right worker" (a Lua closure is only
+    /// valid within the VM that created it).
+    #[tokio::test]
+    async fn schedule_for_bot_rejects_a_bot_owned_by_a_different_worker() {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let caller = states[0].clone(); // worker 0
+        let (lua, _counter) = new_sandboxed_lua(&caller.sandbox).unwrap();
+        let func: mlua::Function = lua.load("function() end").eval().unwrap();
+
+        let err = crate::lua::api::timers::schedule_for_bot(
+            &caller,
+            1, // owned by worker 1 (1 % 2), not this caller
+            &lua,
+            func,
+            Duration::from_millis(10),
+            None,
+        )
+        .expect_err("must reject a bot owned by a different worker");
+        match err {
+            crate::lua::api::timers::TimerError::CrossWorkerBot {
+                bot_id,
+                owner,
+                caller: caller_idx,
+            } => {
+                assert_eq!(bot_id, 1);
+                assert_eq!(owner, 1);
+                assert_eq!(caller_idx, 0);
+            }
+            other => panic!("expected CrossWorkerBot, got {other:?}"),
+        }
+        assert!(
+            caller.timers.borrow().entries.is_empty(),
+            "no timer may be registered when the ownership check rejects the call"
+        );
+    }
+
+    #[tokio::test]
+    async fn schedule_for_bot_succeeds_for_a_bot_this_worker_actually_owns() {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let caller = states[0].clone(); // worker 0
+        let (lua, _counter) = new_sandboxed_lua(&caller.sandbox).unwrap();
+        let func: mlua::Function = lua.load("function() end").eval().unwrap();
+
+        let id = crate::lua::api::timers::schedule_for_bot(
+            &caller,
+            0, // owned by worker 0 (0 % 2) — the calling worker itself
+            &lua,
+            func,
+            Duration::from_millis(10),
+            None,
+        )
+        .expect("must succeed for a bot this worker owns");
+        assert!(caller.timers.borrow().entries.contains_key(&id));
     }
 
     /// Fast, no-network proof of the consecutive-error → disable

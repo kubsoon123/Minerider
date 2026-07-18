@@ -1218,6 +1218,106 @@ mod production_smoke {
         swarm.shutdown(Duration::from_secs(5)).await;
     }
 
+    /// The full Fix 3 regression, through the real Lua/dispatcher/network
+    /// stack with all four production workers: every bot's `gui_opened`
+    /// handler (which fires on that bot's *own* worker) deliberately
+    /// reaches across to `swarm:bot((id+1) % 4)` — a bot owned by a
+    /// *different* worker — and clicks its open GUI with a one-shot
+    /// callback. This proves, simultaneously, that: (1) `swarm:bot(id)`'s
+    /// remote lookup and `bot:worker_id()` report the bot's true owner
+    /// regardless of who's asking; (2) the action actually executes
+    /// against the target bot's own `SupervisorHandle`, not the caller's;
+    /// and (3) the one-shot callback fires back on the *originating*
+    /// worker (the bot's own worker), never lost to the target's owner.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cross_worker_bot_lookup_action_and_callback_all_land_on_the_right_worker() {
+        let bot_count = 4u32;
+        let (port, _server_task, _kick_tx) =
+            spawn_mock_server(ScenarioKind::RealisticState, bot_count).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                for i = 0, 3 do
+                    swarm:add_bot({{id = i, username = "Bot" .. i, server = "main"}})
+                end
+            end)
+            swarm:on("gui_opened", function(bot, event)
+                local my_id = bot:id()
+                local target_id = (my_id + 1) % 4
+                local target = swarm:bot(target_id)
+                swarm.shared:set("own_worker_" .. tostring(my_id), bot:worker_id())
+                swarm.shared:set("target_worker_" .. tostring(my_id), target:worker_id())
+                target:click_gui(0, "left", function(result)
+                    swarm.shared:set("callback_worker_" .. tostring(my_id), swarm:status().worker_index)
+                    swarm.shared:set("callback_fired_" .. tostring(my_id), true)
+                end)
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(4, script))
+            .await
+            .expect("swarm must start");
+        assert_eq!(swarm.dispatcher.worker_count(), 4);
+
+        for i in 0..bot_count {
+            let own_key = format!("own_worker_{i}");
+            let target_key = format!("target_worker_{i}");
+            let callback_key = format!("callback_worker_{i}");
+            let fired_key = format!("callback_fired_{i}");
+
+            let seen = wait_for(
+                || swarm.shared_state.get(&fired_key).is_some(),
+                Duration::from_secs(8),
+            )
+            .await;
+            assert!(
+                seen,
+                "bot {i}'s cross-worker callback never fired (own={:?} target={:?})",
+                swarm.shared_state.get(&own_key),
+                swarm.shared_state.get(&target_key)
+            );
+
+            let expected_own = (i % 4) as f64;
+            match swarm.shared_state.get(&own_key) {
+                Some(SharedValue::Number(n)) => {
+                    assert_eq!(
+                        n, expected_own,
+                        "bot {i}:worker_id() reported the wrong owner"
+                    )
+                }
+                other => panic!("unexpected own_worker_{i}: {other:?}"),
+            }
+
+            let expected_target = ((i + 1) % 4) as f64;
+            match swarm.shared_state.get(&target_key) {
+                Some(SharedValue::Number(n)) => assert_eq!(
+                    n,
+                    expected_target,
+                    "remote lookup swarm:bot({}):worker_id() reported the wrong owner",
+                    (i + 1) % 4
+                ),
+                other => panic!("unexpected target_worker_{i}: {other:?}"),
+            }
+
+            // The callback was registered by bot i's own `gui_opened`
+            // handler (running on worker `i`), for an action against a
+            // bot owned by a *different* worker — it must fire back on
+            // worker `i`, never on the target's owning worker.
+            match swarm.shared_state.get(&callback_key) {
+                Some(SharedValue::Number(n)) => assert_eq!(
+                    n, expected_own,
+                    "bot {i}'s callback fired on the wrong worker — it must return to the originating worker, not the target bot's owner"
+                ),
+                other => panic!("unexpected callback_worker_{i}: {other:?}"),
+            }
+        }
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn reconnect_preserves_proxy_assignment_in_the_production_runtime() {
         let proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(16).await;
@@ -1728,6 +1828,82 @@ mod production_smoke {
             count_after_wait, count_at_clear,
             "clear_timer must stop further interval firings"
         );
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+    }
+
+    /// Bot-scoped timer ownership, through the real Lua/network stack with
+    /// all four production workers: every bot's own worker must still be
+    /// able to schedule a timer for *its own* bot, but reaching across to
+    /// `swarm:bot((id+1) % 4):set_timeout(...)` — a bot owned by a
+    /// *different* worker — must be rejected with a typed
+    /// `cross_worker_timer` error rather than silently registering a timer
+    /// that looks bot-scoped but isn't actually tied to that bot's worker.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bot_scoped_timers_reject_cross_worker_registration_across_all_four_workers() {
+        let bot_count = 4u32;
+        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, bot_count).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                for i = 0, 3 do
+                    swarm:add_bot({{id = i, username = "Bot" .. i, server = "main"}})
+                end
+            end)
+            swarm:on("connected", function(bot, event)
+                local my_id = bot:id()
+                local ok_own = pcall(function()
+                    bot:set_timeout(10000, function() end)
+                end)
+                swarm.shared:set("own_timer_ok_" .. tostring(my_id), ok_own)
+
+                local target = swarm:bot((my_id + 1) % 4)
+                local ok_cross, err_cross = pcall(function()
+                    target:set_timeout(10000, function() end)
+                end)
+                swarm.shared:set("cross_timer_ok_" .. tostring(my_id), ok_cross)
+                swarm.shared:set("cross_timer_err_" .. tostring(my_id), tostring(err_cross))
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(4, script))
+            .await
+            .expect("swarm must start");
+
+        for i in 0..bot_count {
+            let own_key = format!("own_timer_ok_{i}");
+            let cross_ok_key = format!("cross_timer_ok_{i}");
+            let cross_err_key = format!("cross_timer_err_{i}");
+
+            let seen = wait_for(
+                || swarm.shared_state.get(&cross_ok_key).is_some(),
+                Duration::from_secs(5),
+            )
+            .await;
+            assert!(
+                seen,
+                "bot {i} never reported its cross-worker timer attempt"
+            );
+
+            match swarm.shared_state.get(&own_key) {
+                Some(SharedValue::Bool(true)) => {}
+                other => panic!("bot {i}'s own-worker timer must succeed, got {other:?}"),
+            }
+            match swarm.shared_state.get(&cross_ok_key) {
+                Some(SharedValue::Bool(false)) => {}
+                other => panic!("bot {i}'s cross-worker timer must be rejected, got {other:?}"),
+            }
+            match swarm.shared_state.get(&cross_err_key) {
+                Some(SharedValue::Str(s)) => assert!(
+                    s.contains("cross_worker_timer"),
+                    "bot {i}'s rejection error must be the typed cross_worker_timer error, got: {s}"
+                ),
+                other => panic!("unexpected cross_timer_err_{i}: {other:?}"),
+            }
+        }
 
         swarm.shutdown(Duration::from_secs(5)).await;
     }

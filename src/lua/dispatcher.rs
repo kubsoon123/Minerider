@@ -181,9 +181,28 @@ impl DispatcherHandle {
         self.queues[idx].push(BotId(bot_id), WorkItem::Bot(event), seq)
     }
 
-    pub fn dispatch_action_result(&self, result: ActionResult) {
-        let idx = self.worker_index_for(result.bot_id);
-        self.queues[idx].push_action_result(result);
+    /// Delivers an action's completion to the bot's *owning* worker (for
+    /// `action_result` handler dispatch, and — when `origin_worker` is
+    /// that same owning worker — the common-case callback lookup too), and
+    /// additionally, whenever `origin_worker` differs from the owning
+    /// worker, delivers a second `CallbackCompletion` directly to
+    /// `origin_worker` so a one-shot callback registered there (by
+    /// `swarm:bot(id):click_gui(...)`-style calls made from a worker that
+    /// doesn't own `bot_id`) is never silently lost. `origin_worker` is
+    /// the worker whose Lua VM issued the action — see
+    /// `crate::lua::api::bot::spawn_action`, the only caller.
+    pub fn dispatch_action_result(&self, origin_worker: usize, result: ActionResult) {
+        let owner = self.worker_index_for(result.bot_id);
+        if origin_worker == owner {
+            self.queues[owner].push_action_result(result);
+            return;
+        }
+        self.queues[owner].push_action_result(result.clone());
+        self.queues[origin_worker].push(
+            BotId(result.bot_id),
+            WorkItem::CallbackCompletion(result),
+            0,
+        );
     }
 
     pub fn dispatch_timer(&self, bot_id: u32, timer_id: u64) {
@@ -261,6 +280,63 @@ mod tests {
         for i in [0, 2, 3] {
             assert_eq!(handle.queue(i).depth(), 0);
         }
+    }
+
+    #[test]
+    fn dispatch_action_result_delivers_only_to_the_owner_when_origin_matches() {
+        let handle = DispatcherHandle::new(make_queues(4));
+        let result = ActionResult {
+            request_id: 1,
+            bot_id: 5,
+            outcome: ActionOutcome::DeliveredSent,
+        };
+        // bot 5 is owned by worker 1 (5 % 4); origin == owner is the
+        // common case (a script acting on its own bot) — must stay a
+        // single push, not double up on every action.
+        handle.dispatch_action_result(1, result);
+        assert_eq!(
+            handle.queue(1).depth(),
+            1,
+            "owning worker gets the ActionResult"
+        );
+        for i in [0, 2, 3] {
+            assert_eq!(handle.queue(i).depth(), 0, "worker {i} must get nothing");
+        }
+    }
+
+    #[test]
+    fn dispatch_action_result_also_delivers_a_callback_completion_when_origin_differs_from_the_owner(
+    ) {
+        let handle = DispatcherHandle::new(make_queues(4));
+        let result = ActionResult {
+            request_id: 2,
+            bot_id: 5,
+            outcome: ActionOutcome::DeliveredSent,
+        };
+        // bot 5 is owned by worker 1; a different worker (2) is the
+        // caller, e.g. via `swarm:bot(5):click_gui(...)` from worker 2.
+        handle.dispatch_action_result(2, result);
+        assert_eq!(
+            handle.queue(1).depth(),
+            1,
+            "the owning worker still gets the ActionResult for its action_result handlers"
+        );
+        assert_eq!(
+            handle.queue(2).depth(),
+            1,
+            "the origin worker gets a CallbackCompletion for its own pending callback"
+        );
+        for i in [0, 3] {
+            assert_eq!(handle.queue(i).depth(), 0, "worker {i} must get nothing");
+        }
+        assert!(matches!(
+            handle.queue(2).wait_for_batch()[0].event,
+            WorkItem::CallbackCompletion(_)
+        ));
+        assert!(matches!(
+            handle.queue(1).wait_for_batch()[0].event,
+            WorkItem::ActionResult(_)
+        ));
     }
 
     #[test]
