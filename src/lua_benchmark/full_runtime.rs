@@ -870,6 +870,16 @@ mod tests {
     use super::*;
     use crate::lua_benchmark::scripts::ScriptKind;
 
+    // `settle_timeout: Duration::from_secs(90)` below: widened from 45s
+    // after a third CI-only flake (`proxy_groups_scenario_routes_every_bot_through_its_assigned_proxy`
+    // failed on ubuntu-latest with only 2/4 bots connected within 45s —
+    // never reproduced locally). This module's own test count roughly
+    // doubled once `production_smoke` (see the sibling module below) was
+    // added, plausibly increasing resource pressure on a shared CI runner
+    // for tests that run later in the same `--test-threads=1` process.
+    // Widening again rather than chasing a specific root cause, consistent
+    // with the first two flakes this suite hit (see git history) — real
+    // environment slowness, not a logic bug in code this diff didn't touch.
     fn no_proxy() -> Arc<dyn Fn(u32) -> Option<Arc<Socks5ProxyConfig>> + Send + Sync> {
         Arc::new(|_bot| None)
     }
@@ -884,7 +894,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(45),
+            settle_timeout: Duration::from_secs(90),
             run_duration: Duration::from_millis(100),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -905,7 +915,7 @@ mod tests {
             script_body: ScriptKind::LightState.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(45),
+            settle_timeout: Duration::from_secs(90),
             run_duration: Duration::from_millis(500),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -927,7 +937,7 @@ mod tests {
             script_body: ScriptKind::Realistic.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(45),
+            settle_timeout: Duration::from_secs(90),
             run_duration: Duration::from_millis(500),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -952,7 +962,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(45),
+            settle_timeout: Duration::from_secs(90),
             run_duration: Duration::from_millis(500),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -988,7 +998,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for,
-            settle_timeout: Duration::from_secs(45),
+            settle_timeout: Duration::from_secs(90),
             run_duration: Duration::from_millis(200),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -1026,7 +1036,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for,
-            settle_timeout: Duration::from_secs(45),
+            settle_timeout: Duration::from_secs(90),
             run_duration: Duration::from_millis(600),
             cleanup_wait: Duration::from_millis(20),
         };
