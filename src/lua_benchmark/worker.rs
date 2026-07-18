@@ -48,6 +48,14 @@ impl WorkerQueue {
         self.state.lock().unwrap().depth()
     }
 
+    pub fn peak_depth(&self) -> usize {
+        self.state.lock().unwrap().peak_depth()
+    }
+
+    pub fn dropped(&self) -> u64 {
+        self.state.lock().unwrap().dropped()
+    }
+
     /// No more pushes will happen; wakes the worker so it can drain
     /// whatever remains and exit.
     pub fn close(&self) {

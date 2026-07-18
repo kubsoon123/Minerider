@@ -161,6 +161,23 @@ impl Dispatcher {
         }
     }
 
+    /// The highest combined queue depth reached across every worker over
+    /// the dispatcher's whole lifetime — tracked continuously, not a
+    /// point-in-time snapshot like [`Self::queue_depth_total`].
+    pub fn queue_peak_depth_total(&self) -> usize {
+        match self {
+            Dispatcher::RustBaseline { .. } => 0,
+            Dispatcher::Lua { queues, .. } => queues.iter().map(|q| q.peak_depth()).sum(),
+        }
+    }
+
+    pub fn queue_dropped_total(&self) -> u64 {
+        match self {
+            Dispatcher::RustBaseline { .. } => 0,
+            Dispatcher::Lua { queues, .. } => queues.iter().map(|q| q.dropped()).sum(),
+        }
+    }
+
     pub fn metrics(&self) -> Arc<DispatcherMetrics> {
         match self {
             Dispatcher::RustBaseline { metrics, .. } => metrics.clone(),

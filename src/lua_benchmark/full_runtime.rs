@@ -92,6 +92,8 @@ pub struct FullRuntimeResult {
     pub enqueue_to_start: super::metrics::LatencySummary,
     pub enqueue_to_complete: super::metrics::LatencySummary,
     pub command_latency: super::metrics::LatencySummary,
+    pub queue_peak_depth_total: usize,
+    pub queue_dropped_total: u64,
     pub wall_time: Duration,
 }
 
@@ -201,6 +203,8 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
     }
     let dispatcher = Arc::try_unwrap(dispatcher)
         .unwrap_or_else(|_| panic!("dispatcher still shared after every bridge task joined"));
+    let queue_peak_depth_total = dispatcher.queue_peak_depth_total();
+    let queue_dropped_total = dispatcher.queue_dropped_total();
     let _worker_reports = dispatcher.shutdown();
 
     // Every worker (and any `bot.command` call it was mid-executing) has
@@ -249,6 +253,8 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         enqueue_to_start,
         enqueue_to_complete,
         command_latency,
+        queue_peak_depth_total,
+        queue_dropped_total,
         wall_time: wall_start.elapsed(),
     }
 }
@@ -424,6 +430,16 @@ async fn spawn_mock_server(
         .expect("bind mock server");
     let port = listener.local_addr().expect("local addr").port();
     let (kick_tx, kick_rx) = watch::channel(false);
+    // One flag per bot so each targeted bot is kicked exactly once, even
+    // though `ReconnectStorm`'s condition (`bot_index % 100 < percent`) is
+    // otherwise still true on the bot's own reconnect — without this, a
+    // targeted bot would be kicked again on every connection attempt up to
+    // `max_retries`, turning one deliberate blip into a cascade.
+    let already_kicked: Arc<Vec<std::sync::atomic::AtomicBool>> = Arc::new(
+        (0..bot_count)
+            .map(|_| std::sync::atomic::AtomicBool::new(false))
+            .collect(),
+    );
 
     let task = tokio::spawn(async move {
         let mut handles = Vec::new();
@@ -446,8 +462,9 @@ async fn spawn_mock_server(
                 Err(_) => break,
             };
             let kick_rx = kick_rx.clone();
+            let already_kicked = already_kicked.clone();
             handles.push(tokio::spawn(async move {
-                let _ = serve_one(stream, scenario, kick_rx).await;
+                let _ = serve_one(stream, scenario, kick_rx, already_kicked).await;
             }));
         }
         for h in handles {
@@ -462,6 +479,7 @@ async fn serve_one(
     stream: TcpStream,
     scenario: ScenarioKind,
     mut kick_rx: watch::Receiver<bool>,
+    already_kicked: Arc<Vec<std::sync::atomic::AtomicBool>>,
 ) -> Result<(), String> {
     stream.set_nodelay(true).map_err(|e| e.to_string())?;
     let mut conn = Connection::from_tcp_stream(stream).map_err(|e| e.to_string())?;
@@ -539,14 +557,30 @@ async fn serve_one(
             send_chat(&mut conn, "welcome").await?;
         }
         ScenarioKind::ReconnectStorm { percent } => {
-            if (bot_index % 100) < percent {
+            let targeted = (bot_index % 100) < percent;
+            let is_first_connection = targeted
+                && already_kicked
+                    .get(bot_index as usize)
+                    .map(|flag| {
+                        flag.compare_exchange(
+                            false,
+                            true,
+                            std::sync::atomic::Ordering::SeqCst,
+                            std::sync::atomic::Ordering::SeqCst,
+                        )
+                        .is_ok()
+                    })
+                    .unwrap_or(false);
+            if is_first_connection {
                 // First connection for this bot: wait for the kick signal,
                 // then drop the raw connection (no `kick_disconnect`
                 // packet) — a network blip, not a server-issued ban. The
                 // client classifies this as a transient error, which (by
                 // design, unlike an explicit kick) `ReconnectPolicy`
-                // retries by default; the second connection (the client's
-                // own reconnect) falls through to `Idle` behavior below.
+                // retries by default; the bot's *second* connection (its
+                // own reconnect) finds `is_first_connection` false (the
+                // flag is already set) and falls through to idle below —
+                // exactly one kick per targeted bot, not one per attempt.
                 if !*kick_rx.borrow() {
                     let _ = kick_rx.changed().await;
                 }

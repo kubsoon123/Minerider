@@ -257,6 +257,31 @@ impl QueueDesign {
     pub fn is_empty(&self) -> bool {
         self.depth() == 0
     }
+
+    /// The highest combined depth this queue reached over its whole
+    /// lifetime so far — tracked continuously by the underlying
+    /// [`QueueStats`], not a point-in-time snapshot (see
+    /// `docs/lua_runtime_benchmark.md`'s "Queues" measurements).
+    pub fn peak_depth(&self) -> usize {
+        match self {
+            Self::Fifo(q) => q.stats().peak_depth,
+            Self::Priority(q) => {
+                let (high, coalesced, low) = q.stats();
+                high.peak_depth + coalesced.peak_depth + low.peak_depth
+            }
+        }
+    }
+
+    /// Total events dropped due to overflow across every lane.
+    pub fn dropped(&self) -> u64 {
+        match self {
+            Self::Fifo(q) => q.stats().dropped,
+            Self::Priority(q) => {
+                let (high, _, low) = q.stats();
+                high.dropped + low.dropped
+            }
+        }
+    }
 }
 
 #[cfg(test)]

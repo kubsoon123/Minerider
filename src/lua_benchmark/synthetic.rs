@@ -104,6 +104,7 @@ pub struct SyntheticResult {
     pub command_sink_emitted: u64,
     pub command_sink_dropped: u64,
     pub queue_peak_depth_total: usize,
+    pub queue_dropped_total: u64,
     pub worker_reports: Vec<Result<super::worker::WorkerReport, String>>,
 }
 
@@ -151,7 +152,8 @@ pub fn run_synthetic_scenario(
     generate_events(&dispatcher, config);
     rss.after_events = process_rss_kib();
 
-    let queue_peak_depth_total = dispatcher.queue_depth_total();
+    let queue_peak_depth_total = dispatcher.queue_peak_depth_total();
+    let queue_dropped_total = dispatcher.queue_dropped_total();
     let worker_reports = dispatcher.shutdown();
     rss.after_shutdown = process_rss_kib();
 
@@ -185,6 +187,7 @@ pub fn run_synthetic_scenario(
         command_sink_emitted: sink_stats.emitted,
         command_sink_dropped: sink_stats.dropped,
         queue_peak_depth_total,
+        queue_dropped_total,
         worker_reports,
     }
 }
