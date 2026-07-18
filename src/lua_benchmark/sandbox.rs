@@ -17,8 +17,16 @@ pub struct SandboxConfig {
     /// enforcement, higher hook overhead; see "Measure the overhead of
     /// these protections" in the mission and this benchmark's own results.
     pub hook_every_n_instructions: u32,
-    /// Total instruction-hook firings allowed for one handler invocation
-    /// before it is aborted as runaway (Script 6's `while true do end`).
+    /// Hook *firings* allowed for one handler invocation before it is
+    /// aborted as runaway (Script 6's `while true do end`) — the real VM
+    /// instruction count this bounds is `instruction_budget *
+    /// hook_every_n_instructions`. Measured directly: the first default
+    /// tried here (2,000,000, i.e. 2 billion real instructions) took 12.8s
+    /// wall-clock to abort a tight empty loop in a debug build — nowhere
+    /// near `docs/lua_design.md`'s "low-single-digit milliseconds" target.
+    /// 2,000 (≈2,000,000 real instructions) lands in the low-single-digit
+    /// millisecond range on the same machine; see
+    /// `docs/lua_runtime_benchmark.md`'s sandbox-overhead measurements.
     pub instruction_budget: u64,
     /// Consecutive handler errors (including instruction/memory aborts)
     /// before a bot's script execution is disabled — the connection itself
@@ -31,7 +39,7 @@ impl Default for SandboxConfig {
         Self {
             memory_limit_bytes: 4 * 1024 * 1024,
             hook_every_n_instructions: 1000,
-            instruction_budget: 2_000_000,
+            instruction_budget: 2_000,
             consecutive_error_threshold: 10,
         }
     }

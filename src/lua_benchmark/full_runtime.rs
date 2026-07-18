@@ -83,8 +83,15 @@ pub struct FullRuntimeResult {
     pub rss_after_shutdown: Option<u64>,
     pub rss_after_cleanup_wait: Option<u64>,
     pub events_dispatched: u64,
+    pub handler_executions: u64,
+    pub handler_errors: u64,
+    pub commands_emitted: u64,
+    pub commands_dropped: u64,
     pub commands_routed_to_supervisor: u64,
     pub reconnects_observed: u64,
+    pub enqueue_to_start: super::metrics::LatencySummary,
+    pub enqueue_to_complete: super::metrics::LatencySummary,
+    pub command_latency: super::metrics::LatencySummary,
     pub wall_time: Duration,
 }
 
@@ -100,6 +107,7 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         spawn_mock_server(config.scenario, config.bot_count).await;
 
     let (sink, command_rx) = CommandSink::bounded(4096);
+    let sink_stats_handle = sink.clone();
     let metrics = Arc::new(DispatcherMetrics::new(1 << 16));
     let dispatcher = Arc::new(Dispatcher::start(
         config.architecture,
@@ -217,6 +225,12 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
     tokio::time::sleep(config.cleanup_wait).await;
     let rss_after_cleanup_wait = process_rss_kib();
 
+    let throughput = metrics.throughput.snapshot();
+    let sink_stats = sink_stats_handle.stats();
+    let enqueue_to_start = metrics.enqueue_to_start.lock().unwrap().summary();
+    let enqueue_to_complete = metrics.enqueue_to_complete.lock().unwrap().summary();
+    let command_latency = metrics.command_latency.lock().unwrap().summary();
+
     FullRuntimeResult {
         bot_count: config.bot_count,
         bots_connected: connected_count.load(Ordering::Relaxed),
@@ -225,9 +239,16 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         rss_after_scenario,
         rss_after_shutdown,
         rss_after_cleanup_wait,
-        events_dispatched: metrics.throughput.events_dispatched.load(Ordering::Relaxed),
+        events_dispatched: throughput.events_dispatched,
+        handler_executions: throughput.handler_executions,
+        handler_errors: throughput.handler_errors,
+        commands_emitted: sink_stats.emitted,
+        commands_dropped: sink_stats.dropped,
         commands_routed_to_supervisor: commands_routed.load(Ordering::Relaxed) as u64,
         reconnects_observed: reconnects_observed.load(Ordering::Relaxed) as u64,
+        enqueue_to_start,
+        enqueue_to_complete,
+        command_latency,
         wall_time: wall_start.elapsed(),
     }
 }
@@ -409,8 +430,13 @@ async fn spawn_mock_server(
         // Accept at least bot_count connections; reconnects after a kick
         // arrive as additional connections on the same listener.
         let expected = match scenario {
+            // At least one reconnect per targeted bot, plus headroom for
+            // legitimate extra retries under real scheduling/timing
+            // variance — an accept loop that stops exactly at the
+            // theoretical minimum would itself force spurious extra
+            // retries (a refused connection is also a transient failure).
             ScenarioKind::ReconnectStorm { percent } => {
-                bot_count as usize + (bot_count as usize * percent as usize / 100)
+                bot_count as usize + (bot_count as usize * percent as usize / 100) * 3
             }
             _ => bot_count as usize,
         };
@@ -940,6 +966,50 @@ mod tests {
             targets.len(),
             2,
             "exactly the 2 bots assigned to proxy_a must have connected through it"
+        );
+    }
+
+    /// `ClientSupervisor::new` documents that `cfg` (including its `proxy`)
+    /// "is reused unchanged for every (re)connect attempt" — this proves it
+    /// end to end: a bot assigned to a proxy, disconnected by a network
+    /// blip, and reconnected must route its *second* connection through
+    /// that exact same proxy too, not fall back to direct or a different
+    /// one. Every accepted connection on the fake proxy's port is counted,
+    /// so a bot that reconnects through it shows up twice.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn proxy_assignment_persists_across_a_reconnect() {
+        let proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(16).await;
+        let proxy_cfg = Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy.port));
+        let proxy_for: Arc<dyn Fn(u32) -> Option<Arc<Socks5ProxyConfig>> + Send + Sync> =
+            Arc::new(move |_bot| Some(proxy_cfg.clone()));
+
+        let config = SwarmConfig {
+            bot_count: 2,
+            // Every bot (100%) gets disconnected once and must reconnect.
+            scenario: ScenarioKind::ReconnectStorm { percent: 100 },
+            share_chunk_payloads: true,
+            architecture: Architecture::RustBaseline,
+            script_body: ScriptKind::NoOp.source(),
+            sandbox_config: SandboxConfig::default(),
+            proxy_for,
+            settle_timeout: Duration::from_secs(10),
+            run_duration: Duration::from_millis(600),
+            cleanup_wait: Duration::from_millis(20),
+        };
+        let result = run_full_runtime_scenario(config).await;
+        assert!(
+            result.reconnects_observed >= 2,
+            "both bots must have a reconnect scheduled, got {}",
+            result.reconnects_observed
+        );
+
+        let accepted = proxy
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            accepted >= 4,
+            "2 bots x (>= 1 initial connection + >= 1 reconnect) must all route through the \
+             same proxy, got {accepted}"
         );
     }
 }
