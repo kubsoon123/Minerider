@@ -121,22 +121,36 @@ jobs:
       # and memory limits actually aborting, consecutive-error disabling,
       # command routing, reconnect-storm + proxy-persistence-across-
       # reconnect, chunk-sharing-across-proxy-groups and opt-out proofs —
-      # see `docs/lua_runtime_benchmark.md` for what each test covers. Also
-      # includes `lua_benchmark::full_runtime::production_smoke`: the
-      # production-wrapper smoke (4 default workers, several bots, 2 local
-      # fake proxy groups incl. the actual shipped examples/lua/swarm.lua,
-      # reconnect-preserves-proxy, every targeted state view, bot- and
-      # swarm-scoped timers, GUI click, one-bad-handler isolation, graceful
-      # shutdown) driven through the real production runtime
-      # (`crate::lua::runtime::run_swarm`) — reusing this same mock
-      # server/fake-SOCKS5 fixture rather than a second test harness.
+      # see `docs/lua_runtime_benchmark.md` for what each test covers.
       # Serialized (not the default parallel test runner): several of these
       # spawn a real mock TCP server plus real ClientSupervisors with their
       # own settle-timeout margins, and shared CI runners have far fewer
       # cores than a dev machine — running them concurrently caused a real,
       # reproducible flake here (contention pushed connect past its
       # timeout), not a code bug.
-      - run: cargo test --features lua-benchmark --lib lua_benchmark --locked -- --test-threads=1
+      #
+      # Deliberately excludes `production_smoke` (run as its own step
+      # below): once that module's real-network integration tests were
+      # added, running everything in one `cargo test` process caused
+      # *different* pre-existing tests to fail from run to run on the
+      # ubuntu runner (not the same test each time) even after widening
+      # their settle margins — a sign of genuine resource contention
+      # accumulating within one long-lived test process on a shared
+      # 2-core runner, not something one more timeout bump fixes. Splitting
+      # into two process-isolated steps gives each suite a clean resource
+      # baseline instead of inheriting whatever the other left behind.
+      - run: cargo test --features lua-benchmark --lib lua_benchmark --locked -- --test-threads=1 --skip production_smoke
+      # `lua_benchmark::full_runtime::production_smoke`: the
+      # production-wrapper smoke (4 default workers, several bots, 2 local
+      # fake proxy groups incl. the actual shipped examples/lua/swarm.lua,
+      # reconnect-preserves-proxy, every targeted state view, bot- and
+      # swarm-scoped timers, GUI click, one-bad-handler isolation, graceful
+      # shutdown) driven through the real production runtime
+      # (`crate::lua::runtime::run_swarm`) — reusing the same mock
+      # server/fake-SOCKS5 fixture as the step above rather than a second
+      # test harness, just isolated into its own process (see comment
+      # above).
+      - run: cargo test --features lua-benchmark --lib lua_benchmark::full_runtime::production_smoke --locked -- --test-threads=1
       # A tiny, deterministic real-CLI smoke run per architecture family —
       # proves the actual binary (not just its unit tests) compiles, runs,
       # and exits cleanly against a local mock server only. Never the full
