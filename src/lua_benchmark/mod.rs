@@ -13,6 +13,7 @@ pub mod command;
 pub mod dispatch;
 pub mod event;
 pub mod fake_socks5;
+pub mod full_runtime;
 pub mod lua_api;
 pub mod metrics;
 pub mod queue;
