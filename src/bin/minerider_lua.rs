@@ -17,6 +17,7 @@ use std::time::Duration;
 use minerider::lua::runtime::{run_swarm, SwarmRuntimeConfig, DEFAULT_WORKER_COUNT};
 use minerider::lua::sandbox::SandboxConfig;
 
+#[derive(Debug)]
 struct Args {
     script: String,
     lua_workers: usize,
@@ -67,8 +68,15 @@ OPTIONS:
 }
 
 fn parse_args() -> Result<Args, String> {
+    parse_args_from(std::env::args().skip(1))
+}
+
+/// Parses from an arbitrary argument iterator (not directly `std::env::args`)
+/// so the parsing logic itself is unit-testable without touching real
+/// process argv.
+fn parse_args_from(argv: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut args = Args::default();
-    let mut argv = std::env::args().skip(1).peekable();
+    let mut argv = argv.peekable();
     let mut positional_script: Option<String> = None;
 
     while let Some(arg) = argv.next() {
@@ -197,4 +205,74 @@ async fn async_main(args: Args, script_body: String) -> ExitCode {
     }
 
     ExitCode::from(exit::OK)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(argv: &[&str]) -> Result<Args, String> {
+        parse_args_from(argv.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn positional_script_is_accepted() {
+        let a = args(&["swarm.lua"]).unwrap();
+        assert_eq!(a.script, "swarm.lua");
+        assert_eq!(a.lua_workers, DEFAULT_WORKER_COUNT);
+        assert_eq!(a.log_level, "info");
+        assert_eq!(a.shutdown_timeout_secs, 10);
+    }
+
+    #[test]
+    fn explicit_script_flag_is_accepted() {
+        let a = args(&["--script", "swarm.lua"]).unwrap();
+        assert_eq!(a.script, "swarm.lua");
+    }
+
+    #[test]
+    fn all_flags_override_defaults() {
+        let a = args(&[
+            "--script",
+            "swarm.lua",
+            "--lua-workers",
+            "8",
+            "--log-level",
+            "debug",
+            "--shutdown-timeout-secs",
+            "30",
+        ])
+        .unwrap();
+        assert_eq!(a.lua_workers, 8);
+        assert_eq!(a.log_level, "debug");
+        assert_eq!(a.shutdown_timeout_secs, 30);
+    }
+
+    #[test]
+    fn missing_script_is_an_error() {
+        assert!(args(&[]).is_err());
+    }
+
+    #[test]
+    fn zero_workers_is_rejected() {
+        let err = args(&["swarm.lua", "--lua-workers", "0"]).unwrap_err();
+        assert!(err.contains("--lua-workers"));
+    }
+
+    #[test]
+    fn unrecognized_flag_is_an_error() {
+        assert!(args(&["swarm.lua", "--not-a-real-flag"]).is_err());
+    }
+
+    #[test]
+    fn missing_value_for_a_flag_is_an_error() {
+        assert!(args(&["--script"]).is_err());
+        assert!(args(&["swarm.lua", "--lua-workers"]).is_err());
+    }
+
+    #[test]
+    fn invalid_numeric_value_is_an_error() {
+        assert!(args(&["swarm.lua", "--lua-workers", "not-a-number"]).is_err());
+        assert!(args(&["swarm.lua", "--shutdown-timeout-secs", "not-a-number"]).is_err());
+    }
 }

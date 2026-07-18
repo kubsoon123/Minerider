@@ -72,6 +72,32 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo run -p minerider-codegen -- --check
 
+  lua-production:
+    name: Lua production wrapper (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # `lua` is off by default (see Cargo.toml) — a normal build/test/PR
+      # touching unrelated code never pays the mlua/vendored-Lua compile
+      # cost. This job proves the production wrapper (src/lua/, the
+      # minerider-lua binary) builds, its own unit tests pass, and it's
+      # clippy-clean on both platforms, independent of the separate
+      # lua-benchmark harness below (which additionally exercises the
+      # production runtime end to end against real network fixtures — see
+      # that job's `production_smoke` tests).
+      - run: cargo build --features lua --locked
+      - run: cargo test --features lua --locked
+      - run: cargo clippy --features lua --all-targets -- -D warnings
+
   lua-benchmark-smoke:
     name: Lua runtime benchmark smoke (${{ matrix.os }})
     strategy:
@@ -95,7 +121,15 @@ jobs:
       # and memory limits actually aborting, consecutive-error disabling,
       # command routing, reconnect-storm + proxy-persistence-across-
       # reconnect, chunk-sharing-across-proxy-groups and opt-out proofs —
-      # see `docs/lua_runtime_benchmark.md` for what each test covers.
+      # see `docs/lua_runtime_benchmark.md` for what each test covers. Also
+      # includes `lua_benchmark::full_runtime::production_smoke`: the
+      # production-wrapper smoke (4 default workers, several bots, 2 local
+      # fake proxy groups incl. the actual shipped examples/lua/swarm.lua,
+      # reconnect-preserves-proxy, every targeted state view, bot- and
+      # swarm-scoped timers, GUI click, one-bad-handler isolation, graceful
+      # shutdown) driven through the real production runtime
+      # (`crate::lua::runtime::run_swarm`) — reusing this same mock
+      # server/fake-SOCKS5 fixture rather than a second test harness.
       # Serialized (not the default parallel test runner): several of these
       # spawn a real mock TCP server plus real ClientSupervisors with their
       # own settle-timeout margins, and shared CI runners have far fewer
