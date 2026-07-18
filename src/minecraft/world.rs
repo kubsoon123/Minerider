@@ -207,6 +207,31 @@ impl World {
         self.chunks.remove(&(packet.chunk_x, packet.chunk_z));
     }
 
+    /// The retained `Arc` for a loaded chunk, if any — crate-internal only,
+    /// so the shared-vs-independent payload identity (`Arc::ptr_eq`) can be
+    /// proven directly rather than only inferred from `intern`'s source
+    /// (see `lua_benchmark::chunk_proof`); does not change `insert_chunk`/
+    /// `unload_chunk` behavior. Only compiled with the benchmark, whose
+    /// tests are its only caller — never dead weight in a normal build.
+    #[cfg(all(feature = "lua-benchmark", test))]
+    pub(crate) fn chunk_arc(&self, x: i32, z: i32) -> Option<&Arc<ChunkSnapshot>> {
+        self.chunks.get(&(x, z))
+    }
+
+    /// Seeds a chunk from an already-built [`ChunkSnapshot`] through the
+    /// real private `intern` path `insert_chunk` itself uses — skipping
+    /// only the `PacketMapChunk` decode step, which is exercised by the
+    /// existing decode/roundtrip tests elsewhere. Lets the chunk-sharing
+    /// proof (`lua_benchmark::chunk_proof`) seed specific positions/content
+    /// without constructing a full protocol payload.
+    #[cfg(all(feature = "lua-benchmark", test))]
+    pub(crate) fn insert_test_snapshot(&mut self, x: i32, z: i32, snapshot: ChunkSnapshot) {
+        let chunk = self
+            .intern(snapshot)
+            .expect("test snapshot must fingerprint cleanly");
+        self.chunks.insert((x, z), chunk);
+    }
+
     pub fn has_chunk(&self, x: i32, z: i32) -> bool {
         self.chunks.contains_key(&(x, z))
     }

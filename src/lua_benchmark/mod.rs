@@ -7,6 +7,8 @@
 //! Only compiled with `--features lua-benchmark`; the default build never
 //! pulls in `mlua` or compiles the vendored Lua C sources.
 
+#[cfg(test)]
+pub mod chunk_proof;
 pub mod command;
 pub mod dispatch;
 pub mod event;
