@@ -561,6 +561,9 @@ impl UserData for LuaBot {
                 .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
             },
         );
+        methods.add_method("clear_timer", |lua, this, id: u64| {
+            Ok(crate::lua::api::timers::clear(&this.state, lua, id))
+        });
 
         // ---- Events ----------------------------------------------------
         methods.add_method("on", |lua, this, (name, func): (String, mlua::Function)| {

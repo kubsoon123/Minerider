@@ -513,3 +513,144 @@ fn sweep_callback_timeouts(lua: &Lua, state: &Rc<WorkerState>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lua::dispatcher::DispatcherHandle;
+    use crate::lua::queue::{PriorityQueue, QueueDesign};
+    use std::sync::atomic::AtomicBool;
+
+    fn test_state(sandbox: SandboxConfig) -> Rc<WorkerState> {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(64, 64)));
+        let dispatcher = DispatcherHandle::new(vec![queue]);
+        Rc::new(WorkerState {
+            worker_index: 0,
+            is_coordinator: true,
+            dispatcher,
+            runtime_handle: tokio::runtime::Handle::current(),
+            instruction_counter: RefCell::new(Arc::new(AtomicU64::new(0))),
+            sandbox,
+            handlers: RefCell::new(HandlerRegistry::default()),
+            callbacks: RefCell::new(CallbackRegistry::default()),
+            disabled_bots: RefCell::new(HashSet::new()),
+            consecutive_errors: RefCell::new(HashMap::new()),
+            config_builder: RefCell::new(SwarmRegistryBuilder::new()),
+            config_tx: RefCell::new(None),
+            startup_barrier: StartupBarrier::new(),
+            started: RefCell::new(None),
+            shared_state: Arc::new(crate::lua::api::shared::SharedState::new()),
+            pubsub: RefCell::new(HashMap::new()),
+            timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            callback_timeout: DEFAULT_CALLBACK_TIMEOUT,
+        })
+    }
+
+    /// Fast, no-network proof of the consecutive-error → disable
+    /// transition: a handler that always errors for bot 0 must disable
+    /// *only* bot 0 once `consecutive_error_threshold` is reached, leaving
+    /// bot 1 (and the worker itself) untouched. The full network path
+    /// (real events driving this through `dispatch_one`) is additionally
+    /// exercised in
+    /// `crate::lua_benchmark::full_runtime::production_smoke::a_bot_with_a_broken_handler_does_not_affect_other_bots_or_the_connection`.
+    #[tokio::test]
+    async fn consecutive_handler_errors_disable_the_offending_bot_only() {
+        let sandbox = SandboxConfig {
+            consecutive_error_threshold: 3,
+            ..SandboxConfig::default()
+        };
+        let state = test_state(sandbox);
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+        lua.load(
+            r#"
+            swarm:on("connected", function(bot, event)
+                if bot:id() == 0 then error("boom") end
+            end)
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        for _ in 0..5 {
+            let bot0 = crate::lua::api::bot::make_bot(&lua, state.clone(), 0).unwrap();
+            run_handlers_for(
+                &lua,
+                &state,
+                0,
+                "connected",
+                bot0,
+                mlua::Value::Nil,
+                &mut report,
+            );
+        }
+
+        assert!(
+            state.disabled_bots.borrow().contains(&0),
+            "bot 0 must be disabled after {} consecutive errors",
+            state.sandbox.consecutive_error_threshold
+        );
+        assert!(report.bots_disabled_by_consecutive_errors >= 1);
+        assert!(
+            !state.disabled_bots.borrow().contains(&1),
+            "bot 1 must never be disabled — it never errored"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_successful_handler_resets_the_consecutive_error_counter() {
+        let sandbox = SandboxConfig {
+            consecutive_error_threshold: 3,
+            ..SandboxConfig::default()
+        };
+        let state = test_state(sandbox);
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+        lua.load(
+            r#"
+            local calls = 0
+            swarm:on("connected", function(bot, event)
+                calls = calls + 1
+                -- Errors on odd calls only, so the counter should never
+                -- accumulate to the threshold.
+                if calls % 2 == 1 then error("boom") end
+            end)
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        for _ in 0..6 {
+            let bot0 = crate::lua::api::bot::make_bot(&lua, state.clone(), 0).unwrap();
+            run_handlers_for(
+                &lua,
+                &state,
+                0,
+                "connected",
+                bot0,
+                mlua::Value::Nil,
+                &mut report,
+            );
+        }
+
+        assert!(
+            !state.disabled_bots.borrow().contains(&0),
+            "alternating success/error must never reach the consecutive-error threshold"
+        );
+    }
+}

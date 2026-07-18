@@ -1436,4 +1436,266 @@ mod production_smoke {
             std::env::remove_var("MINERIDER_PROXY2_PASS");
         }
     }
+
+    /// Every targeted state view (`state`/`player`/`entities`/`players`/
+    /// `inventory`/`hud`/`presentation`/`scoreboard`) must be reachable and
+    /// well-formed once the mock server has sent real chunk/entity/HUD/
+    /// inventory data — not just compile, but actually produce sane values
+    /// through a real Lua VM.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn every_targeted_state_view_is_reachable_and_well_formed() {
+        let (port, _server_task, _kick_tx) =
+            spawn_mock_server(ScenarioKind::RealisticState, 1).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                swarm:add_bot({{username = "Bot0", server = "main"}})
+            end)
+            swarm:on("gui_opened", function(bot, event)
+                local state = bot:state()
+                local player = bot:player()
+                local entities = bot:entities()
+                local players = bot:players()
+                local inventory = bot:inventory()
+                local hud = bot:hud()
+                local presentation = bot:presentation()
+                local scoreboard = bot:scoreboard()
+                swarm.shared:set("state_ok", state ~= nil and type(state.tick) == "number")
+                swarm.shared:set("player_ok", player ~= nil and type(player.position.x) == "number")
+                swarm.shared:set("entities_ok", entities ~= nil)
+                swarm.shared:set("players_ok", players ~= nil)
+                swarm.shared:set("inventory_ok", inventory ~= nil and inventory.player_inventory ~= nil)
+                swarm.shared:set("hud_ok", hud ~= nil and hud.vitals ~= nil and type(hud.vitals.health) == "number")
+                swarm.shared:set("presentation_ok", presentation ~= nil and presentation.chat ~= nil)
+                swarm.shared:set("scoreboard_ok", scoreboard ~= nil and scoreboard.objectives ~= nil)
+                local view = bot:open_gui()
+                swarm.shared:set(
+                    "gui_slot_shape_ok",
+                    view ~= nil
+                        and view.slots[1] ~= nil
+                        and type(view.slots[1].raw_slot) == "number"
+                        and type(view.slots[1].lua_index) == "number"
+                        and view.slots[1].lua_index == view.slots[1].raw_slot + 1
+                )
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(1, script))
+            .await
+            .expect("swarm must start");
+
+        for key in [
+            "state_ok",
+            "player_ok",
+            "entities_ok",
+            "players_ok",
+            "inventory_ok",
+            "hud_ok",
+            "presentation_ok",
+            "scoreboard_ok",
+            "gui_slot_shape_ok",
+        ] {
+            let seen = wait_for(
+                || matches!(swarm.shared_state.get(key), Some(SharedValue::Bool(true))),
+                Duration::from_secs(5),
+            )
+            .await;
+            assert!(seen, "state view check `{key}` did not report true");
+        }
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+    }
+
+    /// `bot:set_timeout`/`set_interval`/`clear_timer` must actually fire on
+    /// a real per-worker timer scheduler (not just be callable), and
+    /// `clear_timer` must stop further firings of an interval.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bot_timers_fire_and_clear_timer_stops_further_firings() {
+        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 1).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                swarm:add_bot({{username = "Bot0", server = "main"}})
+            end)
+            swarm:on("connected", function(bot, event)
+                bot:set_timeout(50, function()
+                    swarm.shared:set("timeout_fired", true)
+                end)
+                local interval_id
+                interval_id = bot:set_interval(30, function()
+                    swarm.shared:update("interval_count", function(v)
+                        return (v or 0) + 1
+                    end)
+                end)
+                bot:set_timeout(200, function()
+                    bot:clear_timer(interval_id)
+                    swarm.shared:set("interval_cleared", true)
+                end)
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(1, script))
+            .await
+            .expect("swarm must start");
+
+        let timeout_fired = wait_for(
+            || {
+                matches!(
+                    swarm.shared_state.get("timeout_fired"),
+                    Some(SharedValue::Bool(true))
+                )
+            },
+            Duration::from_secs(3),
+        )
+        .await;
+        assert!(timeout_fired, "one-shot set_timeout must fire");
+
+        let cleared = wait_for(
+            || {
+                matches!(
+                    swarm.shared_state.get("interval_cleared"),
+                    Some(SharedValue::Bool(true))
+                )
+            },
+            Duration::from_secs(3),
+        )
+        .await;
+        assert!(cleared, "the clearing timeout must itself fire");
+
+        let count_at_clear = match swarm.shared_state.get("interval_count") {
+            Some(SharedValue::Number(n)) => n,
+            other => panic!("interval never fired: {other:?}"),
+        };
+        assert!(
+            count_at_clear >= 3.0,
+            "interval must have fired multiple times before being cleared, got {count_at_clear}"
+        );
+
+        // Give the (now-cleared) interval a generous window in which it
+        // must NOT fire again.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let count_after_wait = match swarm.shared_state.get("interval_count") {
+            Some(SharedValue::Number(n)) => n,
+            other => panic!("interval count disappeared: {other:?}"),
+        };
+        assert_eq!(
+            count_after_wait, count_at_clear,
+            "clear_timer must stop further interval firings"
+        );
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+    }
+
+    /// A "global" `swarm:set_timeout` registered identically by every
+    /// worker (since every worker runs the same script) must still fire
+    /// exactly once overall, not once per worker — see
+    /// `crate::lua::api::timers`'s coordinator-only gating.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn global_swarm_timer_fires_exactly_once_across_all_workers() {
+        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 4).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                for i = 0, 3 do
+                    swarm:add_bot({{id = i, username = "Bot" .. i, server = "main"}})
+                end
+            end)
+            swarm:set_timeout(100, function()
+                swarm.shared:update("global_timer_fires", function(v)
+                    return (v or 0) + 1
+                end)
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(4, script))
+            .await
+            .expect("swarm must start");
+
+        let fired = wait_for(
+            || swarm.shared_state.get("global_timer_fires").is_some(),
+            Duration::from_secs(3),
+        )
+        .await;
+        assert!(fired, "the global timer must fire at least once");
+
+        // Give plenty of margin past the fire time, then confirm the count
+        // never exceeded 1 despite 4 workers all having run this script.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        match swarm.shared_state.get("global_timer_fires") {
+            Some(SharedValue::Number(n)) => {
+                assert_eq!(n, 1.0, "must fire exactly once, not once per worker")
+            }
+            other => panic!("unexpected value: {other:?}"),
+        }
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+    }
+
+    /// A single handler error for one bot must never crash the worker,
+    /// never stop that same event from still firing that bot's other
+    /// handlers or delivering it to unrelated bots, and must never affect
+    /// any bot's underlying Minecraft connection. The consecutive-error
+    /// *threshold* → disable transition itself is exercised at the unit
+    /// level in `crate::lua::worker::tests::consecutive_handler_errors_disable_the_offending_bot_only`
+    /// (fast, no network) rather than by driving 10 real network events
+    /// through this integration harness.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_bot_with_a_broken_handler_does_not_affect_other_bots_or_the_connection() {
+        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 2).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                swarm:add_bot({{id = 0, username = "Bot0", server = "main"}})
+                swarm:add_bot({{id = 1, username = "Bot1", server = "main"}})
+            end)
+            swarm:on("connected", function(bot, event)
+                swarm.shared:update("connected_count", function(v) return (v or 0) + 1 end)
+                if bot:id() == 0 then
+                    error("boom")
+                end
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(1, script))
+            .await
+            .expect("swarm must start");
+
+        let both_connected = wait_for(
+            || matches!(swarm.shared_state.get("connected_count"), Some(SharedValue::Number(n)) if n >= 2.0),
+            Duration::from_secs(5),
+        )
+        .await;
+        assert!(
+            both_connected,
+            "both bots must still connect and fire their connected handler once"
+        );
+
+        for handle in swarm.bot_handles.values() {
+            let ok = wait_for(
+                || {
+                    matches!(
+                        *handle.status().borrow(),
+                        crate::core::supervisor::SupervisorStatus::Connected
+                    )
+                },
+                Duration::from_secs(5),
+            )
+            .await;
+            assert!(ok, "every bot's underlying connection must remain healthy despite bot 0's broken handler");
+        }
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+    }
 }

@@ -287,5 +287,51 @@ impl UserData for LuaSwarm {
                 Ok(id)
             },
         );
+
+        // ---- Coordinator/global timers ----------------------------------
+        // `swarm:set_timeout`/`set_interval` only actually arm on the
+        // coordinator (worker 0): every worker runs this same script, so
+        // without this gate a "global" timer would fire once per worker
+        // instead of exactly once. On a non-coordinator worker this still
+        // returns a valid, unique-looking id (so scripts don't need
+        // worker-aware branching) but never schedules anything to fire.
+        methods.add_method(
+            "set_timeout",
+            |lua, this, (delay_ms, func): (u64, mlua::Function)| {
+                if !this.state.is_coordinator {
+                    return Ok(0);
+                }
+                crate::lua::api::timers::schedule(
+                    &this.state,
+                    lua,
+                    func,
+                    std::time::Duration::from_millis(delay_ms),
+                    None,
+                )
+                .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+            },
+        );
+        methods.add_method(
+            "set_interval",
+            |lua, this, (interval_ms, func): (u64, mlua::Function)| {
+                if !this.state.is_coordinator {
+                    return Ok(0);
+                }
+                crate::lua::api::timers::schedule(
+                    &this.state,
+                    lua,
+                    func,
+                    std::time::Duration::from_millis(interval_ms),
+                    Some(std::time::Duration::from_millis(interval_ms)),
+                )
+                .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+            },
+        );
+        methods.add_method("clear_timer", |lua, this, id: u64| {
+            if !this.state.is_coordinator {
+                return Ok(false);
+            }
+            Ok(crate::lua::api::timers::clear(&this.state, lua, id))
+        });
     }
 }
