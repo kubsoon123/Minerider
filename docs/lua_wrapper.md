@@ -282,21 +282,49 @@ reconnect logic of its own):
 
 ## Proxy grouping and credentials
 
-`swarm:add_proxy({name, host, port, username_env, password_env})` — proxy
-handles are Rust-owned and immutable once registered; many bots reference
-one by `name`. **Lua only ever supplies environment-variable *names*.**
-The actual secret values are resolved exactly once per proxy, by
-`crate::lua::registry::ProxyDef::resolve`, called from
-`crate::lua::runtime::spawn_all_bots` — entirely outside any Lua context.
-The resulting `Socks5ProxyConfig` (with real credentials inside) is handed
-straight into each bot's `ClientConfig` and is never passed back into Lua
-in any form. The sandbox additionally never exposes `os.getenv` at all
-(`crate::lua::sandbox::install_restricted_os_shim` only installs `time`/
-`clock`), so there is no code path by which a script could read an
-environment variable's value even if it knew the right name. No proxy
-rotation, fallback, or auto-switching is implemented — a bot's proxy
-assignment is fixed at registration and reused unchanged for its whole
-lifetime, including every reconnect.
+**Proxy endpoints and credentials are never Lua-constructible.** There is
+no `swarm:add_proxy` that takes a host/port — calling it at all returns a
+typed `invalid_configuration` error. Instead, the **host** (the CLI, or
+any other embedder calling `crate::lua::runtime::run_swarm`) supplies a
+fixed `crate::lua::registry::ProxyProfiles` map — profile id →
+already-resolved `Arc<Socks5ProxyConfig>` — via
+`SwarmRuntimeConfig::proxy_profiles`, *before* the script ever runs. A
+script may only reference a profile by its id
+(`swarm:add_bot({proxy = "profile_id"})`); the id is validated against
+that host-supplied set at `add_bot`/`add_group` time
+(`crate::lua::registry::SwarmRegistryBuilder`, which is constructed with
+the id set and has no `add_proxy` method at all), and an unregistered id
+returns `unknown_proxy` — an error that deliberately carries only the id
+the script asked for, never any host/port/credential detail
+(`crate::lua::registry::UnknownProxyProfile`).
+
+This closes a real exfiltration path an earlier version of this wrapper
+had: when scripts could supply `username_env`/`password_env` themselves,
+a sandboxed script could name *any* environment variable already present
+in the process (not necessarily a proxy credential at all) and *any*
+destination host, and Rust would faithfully read that variable and send
+it to that script-chosen endpoint as SOCKS5 auth — without ever needing
+the sandboxed `os.getenv` (which was never exposed, but was never the
+actual gap; see
+`production_smoke::a_script_cannot_choose_an_arbitrary_proxy_endpoint_or_env_var`
+for the regression test). Proxy references are now a pure lookup key into
+host-owned data, nothing more.
+
+The CLI's own way of building a `ProxyProfiles` map is
+`crate::lua::runtime::proxy_profiles_from_env`, driven by repeatable
+`--proxy-profile <id>=<ENV_PREFIX>` flags: argv carries only the profile
+id and an environment-variable-name *prefix* (operator-chosen, not a
+secret), and the actual host/port/username/password are read from
+`{PREFIX}_HOST`/`_PORT`/`_USERNAME`/`_PASSWORD` (reusing the existing
+`Socks5ProxyConfig::from_env`) — **never from argv**. No-auth proxies are
+preserved (omit `_USERNAME`/`_PASSWORD` entirely). `Socks5ProxyConfig`/
+`Socks5Credentials`'s existing `Debug` impls redact usernames and
+passwords unconditionally, so even an incidental `{:?}` of a resolved
+profile can never leak one.
+
+No proxy rotation, fallback, or auto-switching is implemented — a bot's
+proxy assignment is fixed at registration and reused unchanged for its
+whole lifetime, including every reconnect.
 
 ## Chunk sharing
 

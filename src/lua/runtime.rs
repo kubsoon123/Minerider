@@ -7,7 +7,7 @@
 //! is the sync, one-`Lua`-VM-per-OS-thread half. The two meet at
 //! [`worker::StartupBarrier`].
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,9 +17,10 @@ use crate::core::supervisor::{ClientSupervisor, ReconnectPolicy, SupervisorHandl
 use crate::lua::api::shared::SharedState;
 use crate::lua::dispatcher::{DispatcherHandle, WorkerQueue};
 use crate::lua::queue::{PriorityQueue, QueueDesign};
-use crate::lua::registry::SwarmRegistry;
+use crate::lua::registry::{ProxyProfiles, SwarmRegistry, UnknownProxyProfile};
 use crate::lua::sandbox::SandboxConfig;
 use crate::lua::worker::{run_worker, StartupBarrier, StartupPayload, WorkerConfig, WorkerReport};
+use crate::network::socks5::{EnvConfigError, Socks5ProxyConfig};
 
 /// Persistent workers by default — never scales with bot count (see
 /// `docs/lua_runtime_benchmark.md`'s recommendation).
@@ -40,6 +41,13 @@ pub struct SwarmRuntimeConfig {
     pub low_queue_capacity: usize,
     pub callback_timeout: Duration,
     pub script_body: String,
+    /// Host-trusted proxy profiles: profile id → complete, already-resolved
+    /// config (including credentials, if any). Never derived from Lua — a
+    /// script may only reference a profile id already present here. See
+    /// `crate::lua::registry`'s module doc comment for why, and
+    /// [`proxy_profiles_from_env`] for the CLI's own way of building this
+    /// map from environment variables (never argv).
+    pub proxy_profiles: Arc<ProxyProfiles>,
 }
 
 impl Default for SwarmRuntimeConfig {
@@ -51,16 +59,49 @@ impl Default for SwarmRuntimeConfig {
             low_queue_capacity: DEFAULT_LOW_QUEUE_CAPACITY,
             callback_timeout: crate::lua::worker::DEFAULT_CALLBACK_TIMEOUT,
             script_body: String::new(),
+            proxy_profiles: Arc::new(ProxyProfiles::new()),
         }
     }
+}
+
+/// Builds a [`ProxyProfiles`] map for the CLI from environment variables
+/// only — the caller passes `profile_id -> ENV_PREFIX` pairs (e.g. from a
+/// repeatable `--proxy-profile id=PREFIX` flag), and each profile's actual
+/// host/port/credentials are read from `{PREFIX}_HOST`/`_PORT`/
+/// `_USERNAME`/`_PASSWORD` via the existing `Socks5ProxyConfig::from_env`.
+/// **Never accepts a password through `prefixes` itself** — only prefix
+/// *names*, which are operator-chosen and never come from a script or from
+/// argv containing the secret itself.
+pub fn proxy_profiles_from_env(
+    prefixes: impl IntoIterator<Item = (String, String)>,
+) -> Result<ProxyProfiles, EnvConfigError> {
+    let mut profiles = ProxyProfiles::new();
+    for (profile_id, env_prefix) in prefixes {
+        match Socks5ProxyConfig::from_env(&env_prefix)? {
+            Some(cfg) => {
+                profiles.insert(profile_id, Arc::new(cfg));
+            }
+            None => {
+                return Err(EnvConfigError::Missing(format!("{env_prefix}_HOST")));
+            }
+        }
+    }
+    Ok(profiles)
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
     #[error("script error: {0}")]
     Script(String),
-    #[error("proxy resolution failed: {0}")]
-    Proxy(#[from] crate::lua::registry::ProxyResolveError),
+    /// A bot referenced a proxy profile id that isn't in
+    /// `SwarmRuntimeConfig::proxy_profiles`. This should already be caught
+    /// by `crate::lua::registry::SwarmRegistryBuilder::add_bot` (which
+    /// validates against the same id set) — reaching this variant means
+    /// that invariant was somehow violated, so spawning fails loudly
+    /// rather than silently connecting a bot directly (bypassing its
+    /// intended proxy would be a real, not merely cosmetic, regression).
+    #[error("proxy profile error: {0}")]
+    Proxy(#[from] UnknownProxyProfile),
     #[error("worker startup failed: {0}")]
     Worker(String),
 }
@@ -100,6 +141,13 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
     let dispatcher = DispatcherHandle::new(queues.clone());
     let runtime_handle = tokio::runtime::Handle::current();
     let (config_tx, config_rx) = std::sync::mpsc::sync_channel(1);
+    // Only the *names* of the host's registered proxy profiles reach a
+    // worker (and therefore the coordinator's `SwarmRegistryBuilder`) — the
+    // actual `Arc<Socks5ProxyConfig>` values (with credentials) are only
+    // ever read from `config.proxy_profiles` on this async side, in
+    // `spawn_all_bots`, never handed to a worker thread.
+    let proxy_profile_ids: Arc<BTreeSet<String>> =
+        Arc::new(config.proxy_profiles.keys().cloned().collect());
 
     let mut worker_threads = Vec::with_capacity(worker_count);
     for (worker_index, queue) in queues.iter().enumerate().take(worker_count) {
@@ -112,6 +160,7 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
             sandbox: config.sandbox,
             startup_barrier: startup_barrier.clone(),
             shared_state: shared_state.clone(),
+            proxy_profile_ids: proxy_profile_ids.clone(),
             config_tx: if is_coordinator {
                 Some(config_tx.clone())
             } else {
@@ -145,7 +194,7 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
         })?;
 
     let (bot_handles, supervisor_tasks, bridge_tasks) =
-        spawn_all_bots(&registry, &dispatcher).await?;
+        spawn_all_bots(&registry, &config.proxy_profiles, &dispatcher).await?;
     let bot_handles = Arc::new(bot_handles);
     let registry = Arc::new(registry);
 
@@ -168,6 +217,7 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
 
 async fn spawn_all_bots(
     registry: &SwarmRegistry,
+    proxy_profiles: &ProxyProfiles,
     dispatcher: &DispatcherHandle,
 ) -> Result<
     (
@@ -177,11 +227,6 @@ async fn spawn_all_bots(
     ),
     RuntimeError,
 > {
-    let mut resolved_proxies = HashMap::new();
-    for (name, proxy) in &registry.proxies {
-        resolved_proxies.insert(name.clone(), proxy.resolve()?);
-    }
-
     let mut bot_handles = HashMap::new();
     let mut supervisor_tasks = tokio::task::JoinSet::new();
     let mut bridge_tasks = tokio::task::JoinSet::new();
@@ -198,10 +243,17 @@ async fn spawn_all_bots(
             .with_write_timeout(server.write_timeout)
             .with_connect_deadline(server.connect_deadline)
             .with_chunk_sharing(server.shared_chunks);
-        if let Some(proxy_name) = &bot_def.proxy {
-            if let Some(proxy_cfg) = resolved_proxies.get(proxy_name) {
-                cfg = cfg.with_socks5_proxy(proxy_cfg.clone());
-            }
+        if let Some(profile_id) = &bot_def.proxy {
+            // Must already be a valid key — `SwarmRegistryBuilder::add_bot`
+            // validated it against this exact same profile-id set. Treated
+            // as a hard error rather than silently falling back to a direct
+            // connection: a bot silently skipping its intended proxy would
+            // be a real behavioral/security regression, not a cosmetic one.
+            let proxy_cfg = proxy_profiles
+                .get(profile_id)
+                .cloned()
+                .ok_or_else(|| UnknownProxyProfile(profile_id.clone()))?;
+            cfg = cfg.with_socks5_proxy(proxy_cfg);
         }
         let policy: ReconnectPolicy = bot_def.reconnect.clone();
         let (supervisor, handle) = ClientSupervisor::new(cfg, policy);

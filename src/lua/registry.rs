@@ -7,19 +7,35 @@
 //! without a Lua VM, and it is the single source of truth other workers
 //! read from instead of re-running `configure` themselves.
 //!
-//! Proxy credentials are the one deliberately asymmetric piece: Lua only
-//! ever supplies environment variable *names* (see [`ProxyDef`]); the
-//! actual secret values are resolved by [`ProxyDef::resolve`], which is
-//! called from `crate::lua::runtime` outside any Lua context, and the
-//! resulting `Socks5ProxyConfig` (with real credentials inside) is never
-//! handed back to Lua.
+//! **Proxy trust model.** Proxy endpoints and credentials are never
+//! Lua-constructible. The host (the CLI, or any other embedder calling
+//! `crate::lua::runtime::run_swarm`) supplies a fixed
+//! [`ProxyProfiles`] map — profile id → a complete, already-resolved
+//! `Arc<Socks5ProxyConfig>` — *before* any script runs. A script may only
+//! reference a profile by its id (`add_bot({proxy = "profile_id"})`); it
+//! can never choose an arbitrary host/port, and it can never choose which
+//! environment variable a credential is read from. This closes an
+//! exfiltration path that existed when scripts could supply
+//! `username_env`/`password_env` themselves: a sandboxed script could pick
+//! *any* environment variable name (e.g. an unrelated secret already in
+//! the process's environment) and *any* destination host, and Rust would
+//! faithfully read that variable and send it there as SOCKS5 auth — all
+//! without ever calling the sandboxed `os.getenv` (which was never
+//! exposed, but was never the actual gap). See `docs/lua_wrapper.md
+//! #proxy-grouping-and-credentials` for the full writeup and
+//! `crate::lua::runtime::proxy_profiles_from_env` for the CLI's own
+//! (env-var-only, never-argv) way of building this map.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::supervisor::ReconnectPolicy;
-use crate::network::socks5::{Socks5Credentials, Socks5ProxyConfig};
+use crate::network::socks5::Socks5ProxyConfig;
+
+/// Profile id → fully-resolved proxy config, supplied by the host and
+/// never derived from Lua. See the module doc comment.
+pub type ProxyProfiles = std::collections::HashMap<String, Arc<Socks5ProxyConfig>>;
 
 /// A named Minecraft server endpoint bots can be assigned to.
 #[derive(Debug, Clone, PartialEq)]
@@ -51,59 +67,13 @@ impl Default for ServerDef {
     }
 }
 
-/// A named SOCKS5 proxy handle. Many bots may reference one by name.
-/// Credentials are never stored as plaintext here — only the names of the
-/// environment variables that hold them.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProxyDef {
-    pub name: String,
-    pub host: String,
-    pub port: u16,
-    pub username_env: Option<String>,
-    pub password_env: Option<String>,
-}
-
+/// Raised when a bot/group references a proxy profile id the host never
+/// registered. Deliberately carries only the id the script asked for —
+/// never any host/port/credential detail, so this error is always safe to
+/// log or return to Lua verbatim.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ProxyResolveError {
-    #[error("proxy `{proxy}` references environment variable `{var}`, which is not set")]
-    MissingEnvVar { proxy: String, var: String },
-}
-
-impl ProxyDef {
-    /// Resolves this proxy's credentials from the environment. Called only
-    /// from `crate::lua::runtime`, outside any Lua context — Lua itself
-    /// never has a code path that can read an environment variable's
-    /// value, only specify its name (see `crate::lua::sandbox`, which never
-    /// exposes `os.getenv`).
-    pub fn resolve(&self) -> Result<Arc<Socks5ProxyConfig>, ProxyResolveError> {
-        let mut cfg = Socks5ProxyConfig::new(self.host.clone(), self.port);
-        match (&self.username_env, &self.password_env) {
-            (None, None) => {}
-            (Some(user_var), Some(pass_var)) => {
-                let username =
-                    std::env::var(user_var).map_err(|_| ProxyResolveError::MissingEnvVar {
-                        proxy: self.name.clone(),
-                        var: user_var.clone(),
-                    })?;
-                let password =
-                    std::env::var(pass_var).map_err(|_| ProxyResolveError::MissingEnvVar {
-                        proxy: self.name.clone(),
-                        var: pass_var.clone(),
-                    })?;
-                cfg = cfg.with_credentials(Socks5Credentials::new(username, password));
-            }
-            (Some(var), None) | (None, Some(var)) => {
-                return Err(ProxyResolveError::MissingEnvVar {
-                    proxy: self.name.clone(),
-                    var: format!(
-                        "{var} (both username_env and password_env are required together)"
-                    ),
-                });
-            }
-        }
-        Ok(Arc::new(cfg))
-    }
-}
+#[error("proxy profile `{0}` is not configured")]
+pub struct UnknownProxyProfile(pub String);
 
 /// One bot's static configuration. `id` is the stable numeric identity used
 /// for deterministic worker assignment (`id % worker_count`) — it never
@@ -143,8 +113,6 @@ pub struct BotSpec {
 pub enum RegistryError {
     #[error("server `{0}` is already defined")]
     DuplicateServer(String),
-    #[error("proxy `{0}` is already defined")]
-    DuplicateProxy(String),
     #[error("bot id {0} is already in use")]
     DuplicateBotId(u32),
     #[error("bot username `{0}` is already in use")]
@@ -153,8 +121,11 @@ pub enum RegistryError {
     DuplicateGroup(String),
     #[error("server `{0}` is not defined")]
     UnknownServer(String),
-    #[error("proxy `{0}` is not defined")]
-    UnknownProxy(String),
+    /// The script referenced a proxy profile id the host never registered
+    /// in `crate::lua::registry::ProxyProfiles`. Never carries host/port/
+    /// credential detail — see [`UnknownProxyProfile`].
+    #[error(transparent)]
+    UnknownProxy(#[from] UnknownProxyProfile),
     #[error("invalid configuration: {0}")]
     InvalidConfiguration(String),
 }
@@ -165,7 +136,6 @@ impl RegistryError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::DuplicateServer(_)
-            | Self::DuplicateProxy(_)
             | Self::DuplicateBotId(_)
             | Self::DuplicateUsername(_)
             | Self::DuplicateGroup(_) => "duplicate_id",
@@ -176,23 +146,47 @@ impl RegistryError {
     }
 }
 
-/// Accumulates `add_server`/`add_proxy`/`add_bot`/`add_group` calls made
-/// during the coordinator's `swarm:configure(fn)` callback, validating each
-/// one immediately so a misconfiguration fails fast with a precise error
+/// Accumulates `add_server`/`add_bot`/`add_group` calls made during the
+/// coordinator's `swarm:configure(fn)` callback, validating each one
+/// immediately so a misconfiguration fails fast with a precise error
 /// rather than surfacing later as a confusing connect-time failure.
-#[derive(Debug, Default)]
+///
+/// There is deliberately no `add_proxy`: the set of valid proxy profile
+/// ids (`proxy_profile_ids`) is supplied by the host at construction time
+/// (mirroring `crate::lua::registry::ProxyProfiles`, but holding only ids
+/// — never the actual `Socks5ProxyConfig`/credentials, which this builder
+/// has no need to see) and is read-only for the whole configuration
+/// phase. A script can reference a profile by id; it can never define,
+/// rename, or replace one. See the module doc comment.
+#[derive(Debug)]
 pub struct SwarmRegistryBuilder {
     servers: BTreeMap<String, ServerDef>,
-    proxies: BTreeMap<String, ProxyDef>,
+    proxy_profile_ids: Arc<BTreeSet<String>>,
     bots: BTreeMap<u32, BotDef>,
     username_to_id: BTreeMap<String, u32>,
     groups: BTreeMap<String, GroupDef>,
     next_auto_id: u32,
 }
 
+impl Default for SwarmRegistryBuilder {
+    fn default() -> Self {
+        Self::new(Arc::new(BTreeSet::new()))
+    }
+}
+
 impl SwarmRegistryBuilder {
-    pub fn new() -> Self {
-        Self::default()
+    /// `proxy_profile_ids` is the set of profile ids the host registered
+    /// for this run (see `crate::lua::runtime::SwarmRuntimeConfig::proxy_profiles`)
+    /// — the only proxy references a script will ever be allowed to make.
+    pub fn new(proxy_profile_ids: Arc<BTreeSet<String>>) -> Self {
+        Self {
+            servers: BTreeMap::new(),
+            proxy_profile_ids,
+            bots: BTreeMap::new(),
+            username_to_id: BTreeMap::new(),
+            groups: BTreeMap::new(),
+            next_auto_id: 0,
+        }
     }
 
     pub fn add_server(&mut self, def: ServerDef) -> Result<(), RegistryError> {
@@ -220,25 +214,6 @@ impl SwarmRegistryBuilder {
         Ok(())
     }
 
-    pub fn add_proxy(&mut self, def: ProxyDef) -> Result<(), RegistryError> {
-        if def.name.is_empty() {
-            return Err(RegistryError::InvalidConfiguration(
-                "proxy name must not be empty".to_string(),
-            ));
-        }
-        if def.host.is_empty() {
-            return Err(RegistryError::InvalidConfiguration(format!(
-                "proxy `{}` has an empty host",
-                def.name
-            )));
-        }
-        if self.proxies.contains_key(&def.name) {
-            return Err(RegistryError::DuplicateProxy(def.name));
-        }
-        self.proxies.insert(def.name.clone(), def);
-        Ok(())
-    }
-
     fn allocate_id(&mut self) -> u32 {
         while self.bots.contains_key(&self.next_auto_id) {
             self.next_auto_id += 1;
@@ -258,8 +233,8 @@ impl SwarmRegistryBuilder {
             return Err(RegistryError::UnknownServer(spec.server));
         }
         if let Some(proxy) = &spec.proxy {
-            if !self.proxies.contains_key(proxy) {
-                return Err(RegistryError::UnknownProxy(proxy.clone()));
+            if !self.proxy_profile_ids.contains(proxy) {
+                return Err(UnknownProxyProfile(proxy.clone()).into());
             }
         }
         if self.username_to_id.contains_key(&spec.username) {
@@ -313,7 +288,6 @@ impl SwarmRegistryBuilder {
     pub fn build(self) -> SwarmRegistry {
         SwarmRegistry {
             servers: self.servers,
-            proxies: self.proxies,
             bots: self.bots,
             username_to_id: self.username_to_id,
             groups: self.groups,
@@ -325,10 +299,17 @@ impl SwarmRegistryBuilder {
 /// `swarm:configure(fn)` run on the coordinator worker. Immutable and
 /// `Clone`-cheap-ish (an `Arc<SwarmRegistry>` is what actually gets shared);
 /// every worker reads the same data instead of re-deriving it.
+///
+/// Deliberately has no `proxies` field: the actual proxy configs
+/// (including credentials) live only in the host-owned
+/// `crate::lua::registry::ProxyProfiles` map passed to
+/// `crate::lua::runtime::run_swarm`, resolved directly by profile id at
+/// bot-spawn time — never staged through the registry, which only ever
+/// needs to know a `BotDef.proxy` *id string* was validated against that
+/// map's keys at `add_bot` time.
 #[derive(Debug, Clone, Default)]
 pub struct SwarmRegistry {
     pub servers: BTreeMap<String, ServerDef>,
-    pub proxies: BTreeMap<String, ProxyDef>,
     pub bots: BTreeMap<u32, BotDef>,
     pub username_to_id: BTreeMap<String, u32>,
     pub groups: BTreeMap<String, GroupDef>,
@@ -374,9 +355,13 @@ mod tests {
         }
     }
 
+    fn builder_with_profiles(ids: &[&str]) -> SwarmRegistryBuilder {
+        SwarmRegistryBuilder::new(Arc::new(ids.iter().map(|s| s.to_string()).collect()))
+    }
+
     #[test]
     fn auto_assigned_bot_ids_are_sequential_and_unique() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         let id0 = b.add_bot(bot("alice", "main")).unwrap();
         let id1 = b.add_bot(bot("bob", "main")).unwrap();
@@ -386,7 +371,7 @@ mod tests {
 
     #[test]
     fn explicit_bot_id_is_respected_and_auto_assignment_skips_past_it() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         let mut spec = bot("alice", "main");
         spec.id = Some(5);
@@ -398,7 +383,7 @@ mod tests {
 
     #[test]
     fn duplicate_explicit_bot_id_is_rejected() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         let mut spec_a = bot("alice", "main");
         spec_a.id = Some(1);
@@ -412,7 +397,7 @@ mod tests {
 
     #[test]
     fn duplicate_username_is_rejected() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         b.add_bot(bot("alice", "main")).unwrap();
         let err = b.add_bot(bot("alice", "main")).unwrap_err();
@@ -421,24 +406,51 @@ mod tests {
 
     #[test]
     fn bot_referencing_unknown_server_is_rejected() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         let err = b.add_bot(bot("alice", "ghost")).unwrap_err();
         assert_eq!(err.code(), "unknown_server");
     }
 
     #[test]
-    fn bot_referencing_unknown_proxy_is_rejected() {
-        let mut b = SwarmRegistryBuilder::new();
+    fn bot_referencing_a_proxy_profile_the_host_never_registered_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         let mut spec = bot("alice", "main");
-        spec.proxy = Some("ghost-proxy".to_string());
+        spec.proxy = Some("ghost-profile".to_string());
         let err = b.add_bot(spec).unwrap_err();
         assert_eq!(err.code(), "unknown_proxy");
+        // The error must carry only the id the script asked for, never
+        // credential/host/port detail (there is none to carry — the
+        // builder itself never sees `Socks5ProxyConfig` at all).
+        assert_eq!(
+            err.to_string(),
+            "proxy profile `ghost-profile` is not configured"
+        );
+    }
+
+    #[test]
+    fn bot_referencing_a_host_registered_proxy_profile_succeeds() {
+        let mut b = builder_with_profiles(&["proxy1", "proxy2"]);
+        b.add_server(server("main")).unwrap();
+        let mut spec = bot("alice", "main");
+        spec.proxy = Some("proxy1".to_string());
+        assert!(b.add_bot(spec).is_ok());
+    }
+
+    #[test]
+    fn a_script_cannot_widen_the_proxy_profile_set_there_is_no_add_proxy_method() {
+        // Compile-time proof, not a runtime assertion: `SwarmRegistryBuilder`
+        // has no `add_proxy` method at all (see the struct's doc comment) —
+        // the only way profile ids become valid is via the `Arc<BTreeSet<String>>`
+        // passed into `new`, which only the host (never Lua) constructs.
+        let b = builder_with_profiles(&["proxy1"]);
+        assert_eq!(b.proxy_profile_ids.len(), 1);
+        assert!(b.proxy_profile_ids.contains("proxy1"));
     }
 
     #[test]
     fn duplicate_server_name_is_rejected() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         let err = b.add_server(server("main")).unwrap_err();
         assert!(matches!(err, RegistryError::DuplicateServer(_)));
@@ -446,7 +458,7 @@ mod tests {
 
     #[test]
     fn group_referencing_unknown_bot_is_rejected() {
-        let mut b = SwarmRegistryBuilder::new();
+        let mut b = SwarmRegistryBuilder::default();
         b.add_server(server("main")).unwrap();
         let id = b.add_bot(bot("alice", "main")).unwrap();
         b.add_group("g1".to_string(), vec![id]).unwrap();
@@ -461,55 +473,5 @@ mod tests {
         assert_eq!(registry.worker_index(1, 4), 1);
         assert_eq!(registry.worker_index(4, 4), 0);
         assert_eq!(registry.worker_index(7, 4), 3);
-    }
-
-    #[test]
-    fn proxy_resolve_requires_both_env_vars_or_neither() {
-        let proxy = ProxyDef {
-            name: "p1".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 1080,
-            username_env: Some("MINERIDER_TEST_PROXY_USER_ONLY".to_string()),
-            password_env: None,
-        };
-        let err = proxy.resolve().unwrap_err();
-        assert!(matches!(err, ProxyResolveError::MissingEnvVar { .. }));
-    }
-
-    #[test]
-    fn proxy_resolve_with_no_credentials_succeeds() {
-        let proxy = ProxyDef {
-            name: "p1".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 1080,
-            username_env: None,
-            password_env: None,
-        };
-        let cfg = proxy.resolve().unwrap();
-        assert!(cfg.credentials.is_none());
-    }
-
-    #[test]
-    fn proxy_resolve_reads_credentials_from_named_env_vars() {
-        // SAFETY: test-only, single-threaded within this test's scope for
-        // these specific unique var names.
-        unsafe {
-            std::env::set_var("MINERIDER_TEST_PROXY_USER_RESOLVE", "alice");
-            std::env::set_var("MINERIDER_TEST_PROXY_PASS_RESOLVE", "hunter2");
-        }
-        let proxy = ProxyDef {
-            name: "p1".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 1080,
-            username_env: Some("MINERIDER_TEST_PROXY_USER_RESOLVE".to_string()),
-            password_env: Some("MINERIDER_TEST_PROXY_PASS_RESOLVE".to_string()),
-        };
-        let cfg = proxy.resolve().unwrap();
-        assert!(cfg.credentials.is_some());
-        assert_eq!(cfg.credentials.as_ref().unwrap().username, "alice");
-        unsafe {
-            std::env::remove_var("MINERIDER_TEST_PROXY_USER_RESOLVE");
-            std::env::remove_var("MINERIDER_TEST_PROXY_PASS_RESOLVE");
-        }
     }
 }

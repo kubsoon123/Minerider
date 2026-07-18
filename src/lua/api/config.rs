@@ -1,7 +1,11 @@
-//! Parses the Lua tables passed to `swarm:add_server/add_proxy/add_bot/
-//! add_group` (and their `reconnect = {...}` sub-tables) into
-//! `crate::lua::registry`'s pure-Rust config types. All parsing happens
-//! here so `registry.rs` itself never depends on `mlua`.
+//! Parses the Lua tables passed to `swarm:add_server/add_bot/add_group`
+//! (and their `reconnect = {...}` sub-tables) into `crate::lua::registry`'s
+//! pure-Rust config types. All parsing happens here so `registry.rs`
+//! itself never depends on `mlua`.
+//!
+//! Deliberately no `parse_proxy_def`: proxy profiles are host-supplied,
+//! never Lua-constructible — see `crate::lua::registry`'s module doc
+//! comment.
 
 use std::time::Duration;
 
@@ -9,7 +13,7 @@ use mlua::{Table, Value};
 
 use crate::core::supervisor::{Jitter, ReconnectPolicy, RetryDecision, RetryLimit};
 use crate::lua::error::ScriptError;
-use crate::lua::registry::{BotSpec, ProxyDef, ServerDef};
+use crate::lua::registry::{BotSpec, ServerDef};
 
 fn get_string(table: &Table, key: &str) -> mlua::Result<Option<String>> {
     match table.get::<Value>(key)? {
@@ -81,16 +85,6 @@ pub fn parse_server_def(table: &Table) -> mlua::Result<ServerDef> {
     def.connect_deadline = get_ms(table, "connect_deadline_ms", def.connect_deadline)?;
     def.shared_chunks = get_bool(table, "shared_chunks", def.shared_chunks)?;
     Ok(def)
-}
-
-pub fn parse_proxy_def(table: &Table) -> mlua::Result<ProxyDef> {
-    Ok(ProxyDef {
-        name: get_string(table, "name")?.unwrap_or_default(),
-        host: get_string(table, "host")?.unwrap_or_default(),
-        port: get_u16(table, "port", 1080)?,
-        username_env: get_string(table, "username_env")?,
-        password_env: get_string(table, "password_env")?,
-    })
 }
 
 fn parse_retry_decision(

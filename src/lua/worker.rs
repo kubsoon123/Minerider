@@ -234,6 +234,11 @@ pub struct WorkerConfig {
     pub sandbox: SandboxConfig,
     pub startup_barrier: Arc<StartupBarrier>,
     pub shared_state: Arc<crate::lua::api::shared::SharedState>,
+    /// The host-registered proxy *profile ids* (never the actual configs —
+    /// see `crate::lua::registry`'s module doc comment) available for this
+    /// run, used only to validate `add_bot`/`add_group`'s `proxy` field on
+    /// the coordinator.
+    pub proxy_profile_ids: Arc<std::collections::BTreeSet<String>>,
     pub config_tx: Option<std::sync::mpsc::SyncSender<SwarmRegistry>>,
     pub shutdown: Arc<std::sync::atomic::AtomicBool>,
     pub callback_timeout: Duration,
@@ -261,7 +266,7 @@ pub fn run_worker(
         callbacks: RefCell::new(CallbackRegistry::default()),
         disabled_bots: RefCell::new(HashSet::new()),
         consecutive_errors: RefCell::new(HashMap::new()),
-        config_builder: RefCell::new(SwarmRegistryBuilder::new()),
+        config_builder: RefCell::new(SwarmRegistryBuilder::new(config.proxy_profile_ids)),
         config_tx: RefCell::new(config.config_tx),
         startup_barrier: config.startup_barrier,
         started: RefCell::new(None),
@@ -535,7 +540,7 @@ mod tests {
             callbacks: RefCell::new(CallbackRegistry::default()),
             disabled_bots: RefCell::new(HashSet::new()),
             consecutive_errors: RefCell::new(HashMap::new()),
-            config_builder: RefCell::new(SwarmRegistryBuilder::new()),
+            config_builder: RefCell::new(SwarmRegistryBuilder::default()),
             config_tx: RefCell::new(None),
             startup_barrier: StartupBarrier::new(),
             started: RefCell::new(None),

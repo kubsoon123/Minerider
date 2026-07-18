@@ -1069,6 +1069,7 @@ mod tests {
 /// `docs/lua_wrapper.md#testing` and in `src/lua/*`'s own unit tests.
 #[cfg(test)]
 mod production_smoke {
+    use std::sync::Arc;
     use std::time::Duration;
 
     use super::{spawn_mock_server, ScenarioKind};
@@ -1076,6 +1077,7 @@ mod production_smoke {
     use crate::lua::runtime::{run_swarm, SwarmRuntimeConfig};
     use crate::lua::sandbox::SandboxConfig;
     use crate::lua::shared_value::SharedValue;
+    use crate::network::socks5::Socks5ProxyConfig;
 
     async fn wait_for<F: Fn() -> bool>(condition: F, timeout: Duration) -> bool {
         let start = std::time::Instant::now();
@@ -1089,6 +1091,18 @@ mod production_smoke {
     }
 
     fn base_config(worker_count: usize, script_body: String) -> SwarmRuntimeConfig {
+        base_config_with_proxies(
+            worker_count,
+            script_body,
+            crate::lua::registry::ProxyProfiles::new(),
+        )
+    }
+
+    fn base_config_with_proxies(
+        worker_count: usize,
+        script_body: String,
+        proxy_profiles: crate::lua::registry::ProxyProfiles,
+    ) -> SwarmRuntimeConfig {
         SwarmRuntimeConfig {
             worker_count,
             sandbox: SandboxConfig::default(),
@@ -1096,6 +1110,7 @@ mod production_smoke {
             low_queue_capacity: 64,
             callback_timeout: Duration::from_secs(10),
             script_body,
+            proxy_profiles: Arc::new(proxy_profiles),
         }
     }
 
@@ -1211,7 +1226,6 @@ mod production_smoke {
             r#"
             swarm:configure(function()
                 swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
-                swarm:add_proxy({{name = "p1", host = "127.0.0.1", port = {proxy_port}}})
                 swarm:add_bot({{
                     username = "Bot0",
                     server = "main",
@@ -1221,10 +1235,14 @@ mod production_smoke {
             end)
             swarm:connect_all()
             swarm:run()
-            "#,
-            proxy_port = proxy.port
+            "#
         );
-        let swarm = run_swarm(base_config(1, script))
+        let mut proxy_profiles = crate::lua::registry::ProxyProfiles::new();
+        proxy_profiles.insert(
+            "p1".to_string(),
+            Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy.port)),
+        );
+        let swarm = run_swarm(base_config_with_proxies(1, script, proxy_profiles))
             .await
             .expect("swarm must start");
 
@@ -1325,7 +1343,7 @@ mod production_smoke {
     /// Lua error or a silent no-op.
     #[tokio::test(flavor = "multi_thread")]
     async fn add_bot_with_unknown_server_returns_a_typed_error_not_a_panic() {
-        let mut builder = SwarmRegistryBuilder::new();
+        let mut builder = SwarmRegistryBuilder::default();
         let err = builder
             .add_bot(crate::lua::registry::BotSpec {
                 id: None,
@@ -1339,15 +1357,153 @@ mod production_smoke {
         assert_eq!(err.code(), "unknown_server");
     }
 
+    /// Regression test for the proxy-secret-exfiltration fix: before this
+    /// fix, a script could call `swarm:add_proxy({host=..., port=...,
+    /// username_env=..., password_env=...})` with *any* host/port and
+    /// *any* environment variable names — Rust would then read those
+    /// variables (regardless of what secret actually lived there) and send
+    /// them as SOCKS5 credentials to that script-chosen endpoint. This
+    /// proves the fix: `add_proxy` is now always a typed error (never
+    /// silently accepted), a bot's `proxy` field is validated as an opaque
+    /// profile id against a host-supplied set (never resolved as an
+    /// environment variable name), and the *only* endpoint any bot in this
+    /// test ever successfully connects through is the one the host
+    /// (`proxy_profiles`, constructed here exactly as a CLI would) actually
+    /// registered.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_script_cannot_choose_an_arbitrary_proxy_endpoint_or_env_var() {
+        // A secret that must never be read as a side effect of anything
+        // this test's script does. If the old vulnerability were still
+        // present, a script could get Rust to read this by naming it as
+        // `username_env`/`password_env`, or by using its name as a proxy
+        // reference — this test asserts neither ever happens.
+        unsafe {
+            std::env::set_var("MINERIDER_MUST_NEVER_BE_READ", "top-secret-value");
+        }
+
+        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 1).await;
+        // The one and only proxy the host actually registers.
+        let real_proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
+        let mut proxy_profiles = crate::lua::registry::ProxyProfiles::new();
+        proxy_profiles.insert(
+            "trusted".to_string(),
+            Arc::new(Socks5ProxyConfig::new("127.0.0.1", real_proxy.port)),
+        );
+
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+
+                -- Attempt 1: try to define a proxy directly (the old,
+                -- removed API shape). Must fail with a typed error, never
+                -- silently succeed or crash the configure phase.
+                local ok, err = swarm:add_proxy({{
+                    name = "evil",
+                    host = "127.0.0.1",
+                    port = 9,
+                    username_env = "MINERIDER_MUST_NEVER_BE_READ",
+                    password_env = "MINERIDER_MUST_NEVER_BE_READ",
+                }})
+                swarm.shared:set("add_proxy_ok", ok == true)
+                swarm.shared:set("add_proxy_err_code", err and err.code or nil)
+
+                -- Attempt 2: use the secret's own name as a proxy *id* —
+                -- still just an opaque string key looked up in the host's
+                -- map, never resolved as an environment variable name, so
+                -- this must fail exactly like any other unregistered id.
+                local bot_id, add_err = swarm:add_bot({{
+                    username = "Evil0",
+                    server = "main",
+                    proxy = "MINERIDER_MUST_NEVER_BE_READ",
+                }})
+                swarm.shared:set("evil_bot_id", bot_id)
+                swarm.shared:set("evil_bot_err_code", add_err and add_err.code or nil)
+
+                -- The one legitimate bot, via the host-registered profile id.
+                swarm:add_bot({{id = 0, username = "Bot0", server = "main", proxy = "trusted"}})
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+
+        let swarm = run_swarm(base_config_with_proxies(1, script, proxy_profiles))
+            .await
+            .expect("swarm must start (the one legitimate bot is valid config)");
+
+        let configured = wait_for(
+            || swarm.shared_state.get("add_proxy_ok").is_some(),
+            Duration::from_secs(5),
+        )
+        .await;
+        assert!(configured, "configure() must have run to completion");
+
+        assert_eq!(
+            swarm.shared_state.get("add_proxy_ok"),
+            Some(SharedValue::Bool(false)),
+            "add_proxy must never succeed"
+        );
+        assert_eq!(
+            swarm.shared_state.get("add_proxy_err_code"),
+            Some(SharedValue::Str("invalid_configuration".to_string()))
+        );
+
+        assert_eq!(
+            swarm.shared_state.get("evil_bot_id"),
+            Some(SharedValue::Nil),
+            "a bot referencing an unregistered proxy id must never be created"
+        );
+        assert_eq!(
+            swarm.shared_state.get("evil_bot_err_code"),
+            Some(SharedValue::Str("unknown_proxy".to_string()))
+        );
+        assert_eq!(
+            swarm.registry.bots.len(),
+            1,
+            "only the one legitimate bot may exist"
+        );
+
+        let connected = wait_for(
+            || {
+                matches!(
+                    *swarm.bot_handles.get(&0).unwrap().status().borrow(),
+                    crate::core::supervisor::SupervisorStatus::Connected
+                )
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+        assert!(
+            connected,
+            "the one legitimate bot must connect through the trusted profile"
+        );
+
+        let accepted = real_proxy
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            accepted, 1,
+            "exactly the one legitimate bot must have routed through the real proxy — \
+             no other endpoint was ever reachable"
+        );
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+
+        unsafe {
+            std::env::remove_var("MINERIDER_MUST_NEVER_BE_READ");
+        }
+    }
+
     /// Loads the *actual shipped* `examples/lua/swarm.lua` (via
     /// `include_str!`, so this test breaks if the file and this test drift)
     /// and runs it for real: 2 proxy groups of 3 bots each, through two
     /// independent local fake SOCKS5 relays, against the local mock
-    /// server. Only the example's fixed placeholder host/port literals are
-    /// substituted for this run's dynamically-bound test ports; every
-    /// other line — `add_proxy`'s `username_env`/`password_env`,
-    /// `add_group`'s `reconnect` table, the `connected`/`chat`/`gui_opened`
-    /// handlers, `connect_all`/`run` — is exactly what a user would run.
+    /// server. The script itself never defines a proxy (there is no
+    /// `add_proxy` anymore — see `crate::lua::registry`'s module doc
+    /// comment): the two profiles it references (`"proxy1"`/`"proxy2"`)
+    /// are supplied here exactly as a host CLI would, via
+    /// `SwarmRuntimeConfig::proxy_profiles`, entirely outside the script.
     #[tokio::test(flavor = "multi_thread")]
     async fn the_shipped_example_script_connects_two_full_proxy_groups() {
         const EXAMPLE: &str = include_str!("../../examples/lua/swarm.lua");
@@ -1356,19 +1512,18 @@ mod production_smoke {
         let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
         let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
 
-        // SAFETY: test-only; these are local placeholder credentials for a
-        // from-scratch fake relay, never the compromised one.
-        unsafe {
-            std::env::set_var("MINERIDER_PROXY1_USER", "alice");
-            std::env::set_var("MINERIDER_PROXY1_PASS", "hunter2");
-            std::env::set_var("MINERIDER_PROXY2_USER", "bob");
-            std::env::set_var("MINERIDER_PROXY2_PASS", "hunter3");
-        }
+        let mut proxy_profiles = crate::lua::registry::ProxyProfiles::new();
+        proxy_profiles.insert(
+            "proxy1".to_string(),
+            Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy1.port)),
+        );
+        proxy_profiles.insert(
+            "proxy2".to_string(),
+            Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy2.port)),
+        );
 
         let script = EXAMPLE
             .replace("port = 25565", &format!("port = {port}"))
-            .replace("port = 1080", &format!("port = {}", proxy1.port))
-            .replace("port = 1081", &format!("port = {}", proxy2.port))
             // The mock server only accepts usernames it can parse as
             // `Bot<index>`, and needs every bot's index unique across both
             // groups; the example's own naming is what real servers would
@@ -1380,33 +1535,14 @@ mod production_smoke {
             .replace(
                 "username_prefix = \"Swarm2_\"",
                 "username_prefix = \"Bot2\"",
-            )
-            // `FakeSocks5Server` (see `crate::lua_benchmark::fake_socks5`)
-            // is deliberately no-auth-only, matching every other proxy
-            // test in this file (`proxy_assignment_persists_across_a_reconnect`
-            // etc.) — offering credentials makes the real client negotiate
-            // `METHOD_USER_PASS` only, which this fake relay doesn't speak.
-            // The shipped example itself is unchanged and still
-            // demonstrates the credentialed pattern for a real proxy.
-            .replace("username_env = \"MINERIDER_PROXY1_USER\",", "")
-            .replace("password_env = \"MINERIDER_PROXY1_PASS\",", "")
-            .replace("username_env = \"MINERIDER_PROXY2_USER\",", "")
-            .replace("password_env = \"MINERIDER_PROXY2_PASS\",", "");
+            );
 
-        let config = SwarmRuntimeConfig {
-            worker_count: 4,
-            sandbox: SandboxConfig::default(),
-            high_queue_capacity: 256,
-            low_queue_capacity: 64,
-            callback_timeout: Duration::from_secs(10),
-            script_body: script,
-        };
+        let config = base_config_with_proxies(4, script, proxy_profiles);
         let swarm = run_swarm(config)
             .await
             .expect("the shipped example script must start cleanly");
         assert_eq!(swarm.registry.bots.len(), 6, "2 groups of 3 bots each");
         assert_eq!(swarm.registry.groups.len(), 2);
-        assert_eq!(swarm.registry.proxies.len(), 2);
 
         let all_connected = wait_for(
             || {
@@ -1438,13 +1574,6 @@ mod production_smoke {
         );
 
         swarm.shutdown(Duration::from_secs(5)).await;
-
-        unsafe {
-            std::env::remove_var("MINERIDER_PROXY1_USER");
-            std::env::remove_var("MINERIDER_PROXY1_PASS");
-            std::env::remove_var("MINERIDER_PROXY2_USER");
-            std::env::remove_var("MINERIDER_PROXY2_PASS");
-        }
     }
 
     /// Every targeted state view (`state`/`player`/`entities`/`players`/
@@ -1742,14 +1871,9 @@ mod production_smoke {
             );
             let rss_before = crate::lua_benchmark::metrics::process_rss_kib();
             let start = std::time::Instant::now();
-            let config = SwarmRuntimeConfig {
-                worker_count: 4,
-                sandbox: SandboxConfig::default(),
-                high_queue_capacity: 4096,
-                low_queue_capacity: 1024,
-                callback_timeout: Duration::from_secs(10),
-                script_body: script,
-            };
+            let mut config = base_config(4, script);
+            config.high_queue_capacity = 4096;
+            config.low_queue_capacity = 1024;
             let swarm = run_swarm(config).await.expect("swarm must start");
 
             let all_connected = wait_for(
@@ -1807,27 +1931,28 @@ mod production_smoke {
             r#"
             swarm:configure(function()
                 swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}, shared_chunks = true}})
-                swarm:add_proxy({{name = "proxy1", host = "127.0.0.1", port = {proxy1_port}}})
-                swarm:add_proxy({{name = "proxy2", host = "127.0.0.1", port = {proxy2_port}}})
                 {add_bots}
             end)
             swarm:connect_all()
             swarm:run()
-            "#,
-            proxy1_port = proxy1.port,
-            proxy2_port = proxy2.port
+            "#
+        );
+
+        let mut proxy_profiles = crate::lua::registry::ProxyProfiles::new();
+        proxy_profiles.insert(
+            "proxy1".to_string(),
+            Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy1.port)),
+        );
+        proxy_profiles.insert(
+            "proxy2".to_string(),
+            Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy2.port)),
         );
 
         let rss_before = crate::lua_benchmark::metrics::process_rss_kib();
         let start = std::time::Instant::now();
-        let config = SwarmRuntimeConfig {
-            worker_count: 4,
-            sandbox: SandboxConfig::default(),
-            high_queue_capacity: 4096,
-            low_queue_capacity: 1024,
-            callback_timeout: Duration::from_secs(10),
-            script_body: script,
-        };
+        let mut config = base_config_with_proxies(4, script, proxy_profiles);
+        config.high_queue_capacity = 4096;
+        config.low_queue_capacity = 1024;
         let swarm = run_swarm(config).await.expect("swarm must start");
 
         let all_connected = wait_for(

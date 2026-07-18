@@ -3,18 +3,29 @@
 //! ```text
 //! cargo run --release --features lua --bin minerider-lua -- scripts/swarm.lua
 //! cargo run --release --features lua --bin minerider-lua -- \
-//!     --script examples/lua/swarm.lua --lua-workers 4 --log-level info --shutdown-timeout-secs 10
+//!     --script examples/lua/swarm.lua --lua-workers 4 --log-level info --shutdown-timeout-secs 10 \
+//!     --proxy-profile proxy1=PROXY1 --proxy-profile proxy2=PROXY2
 //! ```
 //!
 //! See `docs/lua_wrapper.md` for the architecture and
 //! `docs/lua_api_reference.md` for the scripting API. The sandbox never
 //! grants Lua filesystem access — the script file is selected here, by the
 //! host CLI, not by the script itself.
+//!
+//! `--proxy-profile <id>=<ENV_PREFIX>` (repeatable) is the *only* way a
+//! script's `proxy = "<id>"` references resolve to anything: argv carries
+//! only the profile id and an environment-variable-name *prefix*, never a
+//! secret. The actual host/port/username/password are read from
+//! `{PREFIX}_HOST`/`_PORT`/`_USERNAME`/`_PASSWORD` (see
+//! `crate::lua::runtime::proxy_profiles_from_env`) — set those in your
+//! shell/CI secret store, never on this command line.
 
 use std::process::ExitCode;
 use std::time::Duration;
 
-use minerider::lua::runtime::{run_swarm, SwarmRuntimeConfig, DEFAULT_WORKER_COUNT};
+use minerider::lua::runtime::{
+    proxy_profiles_from_env, run_swarm, SwarmRuntimeConfig, DEFAULT_WORKER_COUNT,
+};
 use minerider::lua::sandbox::SandboxConfig;
 
 #[derive(Debug)]
@@ -23,6 +34,9 @@ struct Args {
     lua_workers: usize,
     log_level: String,
     shutdown_timeout_secs: u64,
+    /// `(profile_id, env_prefix)` pairs from repeated `--proxy-profile`
+    /// flags — never a credential, only an id and a variable-name prefix.
+    proxy_profiles: Vec<(String, String)>,
 }
 
 impl Default for Args {
@@ -32,6 +46,7 @@ impl Default for Args {
             lua_workers: DEFAULT_WORKER_COUNT,
             log_level: "info".to_string(),
             shutdown_timeout_secs: 10,
+            proxy_profiles: Vec::new(),
         }
     }
 }
@@ -62,6 +77,10 @@ OPTIONS:
     --lua-workers <N>             Persistent Lua worker count (default: {DEFAULT_WORKER_COUNT}; does not scale with bot count)
     --log-level <level>           trace|debug|info|warn|error (default: info)
     --shutdown-timeout-secs <N>   Bound on graceful shutdown after Ctrl+C (default: 10)
+    --proxy-profile <id>=<PREFIX> Register a proxy profile the script may reference as `proxy = "<id>"`.
+                                  Credentials are read from {{PREFIX}}_HOST/_PORT/_USERNAME/_PASSWORD
+                                  environment variables — never from this flag's value itself, and
+                                  never from the script. Repeatable.
     -h, --help                    Print this help and exit
 "#
     );
@@ -105,6 +124,19 @@ fn parse_args_from(argv: impl Iterator<Item = String>) -> Result<Args, String> {
                     .parse()
                     .map_err(|_| format!("invalid --shutdown-timeout-secs value: {v}"))?;
             }
+            "--proxy-profile" => {
+                let v = argv.next().ok_or("--proxy-profile requires a value")?;
+                let (id, prefix) = v.split_once('=').ok_or_else(|| {
+                    format!("invalid --proxy-profile value `{v}`: expected `<id>=<ENV_PREFIX>`")
+                })?;
+                if id.is_empty() || prefix.is_empty() {
+                    return Err(format!(
+                        "invalid --proxy-profile value `{v}`: both <id> and <ENV_PREFIX> must be non-empty"
+                    ));
+                }
+                args.proxy_profiles
+                    .push((id.to_string(), prefix.to_string()));
+            }
             other if !other.starts_with('-') && positional_script.is_none() => {
                 positional_script = Some(other.to_string());
             }
@@ -144,6 +176,17 @@ fn main() -> ExitCode {
         }
     };
 
+    // Resolved here, synchronously, from environment variables only —
+    // never from argv (argv only ever carried `id=ENV_PREFIX` pairs, see
+    // --proxy-profile above) and never touched by the script.
+    let proxy_profiles = match proxy_profiles_from_env(args.proxy_profiles.iter().cloned()) {
+        Ok(profiles) => profiles,
+        Err(e) => {
+            eprintln!("error: proxy profile configuration failed: {e}");
+            return ExitCode::from(exit::CONFIG_ERROR);
+        }
+    };
+
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -155,14 +198,19 @@ fn main() -> ExitCode {
         }
     };
 
-    runtime.block_on(async_main(args, script_body))
+    runtime.block_on(async_main(args, script_body, proxy_profiles))
 }
 
-async fn async_main(args: Args, script_body: String) -> ExitCode {
+async fn async_main(
+    args: Args,
+    script_body: String,
+    proxy_profiles: minerider::lua::registry::ProxyProfiles,
+) -> ExitCode {
     let config = SwarmRuntimeConfig {
         worker_count: args.lua_workers,
         sandbox: SandboxConfig::default(),
         script_body,
+        proxy_profiles: std::sync::Arc::new(proxy_profiles),
         ..SwarmRuntimeConfig::default()
     };
 
@@ -274,5 +322,39 @@ mod tests {
     fn invalid_numeric_value_is_an_error() {
         assert!(args(&["swarm.lua", "--lua-workers", "not-a-number"]).is_err());
         assert!(args(&["swarm.lua", "--shutdown-timeout-secs", "not-a-number"]).is_err());
+    }
+
+    #[test]
+    fn proxy_profile_flag_parses_id_and_env_prefix() {
+        let a = args(&[
+            "swarm.lua",
+            "--proxy-profile",
+            "proxy1=PROXY1",
+            "--proxy-profile",
+            "proxy2=PROXY2",
+        ])
+        .unwrap();
+        assert_eq!(
+            a.proxy_profiles,
+            vec![
+                ("proxy1".to_string(), "PROXY1".to_string()),
+                ("proxy2".to_string(), "PROXY2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn proxy_profile_flag_never_accepts_a_bare_password() {
+        // No `=` at all: rejected, rather than silently treating the whole
+        // value as an id with an empty prefix (which could otherwise be a
+        // sneaky way to slip a secret onto argv under a permissive parser).
+        assert!(args(&[
+            "swarm.lua",
+            "--proxy-profile",
+            "just-a-secret-looking-string"
+        ])
+        .is_err());
+        assert!(args(&["swarm.lua", "--proxy-profile", "=PROXY1"]).is_err());
+        assert!(args(&["swarm.lua", "--proxy-profile", "proxy1="]).is_err());
     }
 }

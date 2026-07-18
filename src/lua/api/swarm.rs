@@ -53,12 +53,23 @@ impl UserData for LuaSwarm {
             }
         });
 
-        methods.add_method("add_proxy", |lua, this, table: Table| {
-            let def = super::config::parse_proxy_def(&table)?;
-            match this.state.config_builder.borrow_mut().add_proxy(def) {
-                Ok(()) => Ok((Value::Boolean(true), Value::Nil)),
-                Err(e) => super::errors::err_pair(lua, e.into()),
-            }
+        // There is deliberately no way for a script to define a proxy:
+        // proxy endpoints and credentials are host-supplied profiles (see
+        // `crate::lua::registry`'s module doc comment) — a script may only
+        // *reference* a profile id via `add_bot`/`add_group`'s `proxy`
+        // field. `add_proxy` is kept as a callable method (rather than
+        // simply absent) so a script written against the old API gets a
+        // clear, typed explanation instead of a raw "attempt to call a nil
+        // value".
+        methods.add_method("add_proxy", |lua, _this, _table: Table| {
+            super::errors::err_pair(
+                lua,
+                ScriptError::new(
+                    "invalid_configuration",
+                    "proxies are configured by the host, not by scripts; reference a profile id \
+                     via add_bot/add_group's `proxy` field instead",
+                ),
+            )
         });
 
         methods.add_method("add_bot", |lua, this, table: Table| {

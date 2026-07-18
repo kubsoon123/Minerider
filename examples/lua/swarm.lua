@@ -1,16 +1,25 @@
 -- Example minerider-lua swarm script: 2 SOCKS5 proxy groups of 3 bots
 -- each, connected to one local server, with lifecycle/chat/GUI handlers.
 --
--- Run it (against your own local server — never a public one):
---   MINERIDER_PROXY1_USER=alice MINERIDER_PROXY1_PASS=hunter2 \
---   MINERIDER_PROXY2_USER=bob   MINERIDER_PROXY2_PASS=hunter3 \
---   cargo run --release --features lua --bin minerider-lua -- examples/lua/swarm.lua
+-- Proxy profiles ("proxy1"/"proxy2" below) are never defined by this
+-- script — they are host-trusted, registered by whoever *runs* this
+-- script (the CLI, here), never by the script itself. This script may
+-- only *reference* a profile id; it cannot choose an arbitrary endpoint
+-- or an arbitrary environment variable to read credentials from. See
+-- docs/lua_wrapper.md#proxy-grouping-and-credentials for why.
 --
--- Every host/port/env-var-name below is a local placeholder. Proxy
--- credentials are never written in this script or read directly by Lua —
--- only the *names* of the environment variables that hold them are given
--- to swarm:add_proxy; Rust resolves the actual values outside the sandbox.
--- See docs/lua_wrapper.md#proxies for the full security model.
+-- Run it (against your own local server and local SOCKS5 relays — never
+-- public ones):
+--   PROXY1_HOST=127.0.0.1 PROXY1_PORT=1080 PROXY1_USERNAME=alice PROXY1_PASSWORD=hunter2 \
+--   PROXY2_HOST=127.0.0.1 PROXY2_PORT=1081 PROXY2_USERNAME=bob   PROXY2_PASSWORD=hunter3 \
+--   cargo run --release --features lua --bin minerider-lua -- examples/lua/swarm.lua \
+--       --proxy-profile proxy1=PROXY1 --proxy-profile proxy2=PROXY2
+--
+-- Every host/port/env-var-name above is a local placeholder. `PROXY1_USERNAME`/
+-- `PROXY1_PASSWORD` (etc.) are read directly by the CLI's own env-var path
+-- (`crate::lua::runtime::proxy_profiles_from_env`) before this script ever
+-- runs; the password is never on the command line and never reaches Lua in
+-- any form.
 
 -- ---------------------------------------------------------------------
 -- Configuration phase: runs exactly once, on the coordinator worker.
@@ -22,21 +31,6 @@ swarm:configure(function()
         port = 25565,
         view_distance = 10,
         shared_chunks = true,
-    })
-
-    swarm:add_proxy({
-        name = "proxy1",
-        host = "127.0.0.1",
-        port = 1080,
-        username_env = "MINERIDER_PROXY1_USER",
-        password_env = "MINERIDER_PROXY1_PASS",
-    })
-    swarm:add_proxy({
-        name = "proxy2",
-        host = "127.0.0.1",
-        port = 1081,
-        username_env = "MINERIDER_PROXY2_USER",
-        password_env = "MINERIDER_PROXY2_PASS",
     })
 
     local reconnect = {

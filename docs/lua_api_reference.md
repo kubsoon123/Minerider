@@ -28,8 +28,7 @@ There is no `minerider.create_swarm(...)` callable from *inside* a script
 ```lua
 swarm:configure(function()
   swarm:add_server({...})
-  swarm:add_proxy({...})
-  swarm:add_bot({...})
+  swarm:add_bot({..., proxy = "profile_id"})   -- profile_id is host-registered, not defined here
   swarm:add_group({...})
 end)
 ```
@@ -51,21 +50,22 @@ Returns `(true, nil)` on success or `(nil, error_table)` — see
 `ClientConfig::with_chunk_sharing`; sharing scope is always derived from
 `host`/`port` only, regardless of any bot's proxy.
 
-**`swarm:add_proxy(table) -> ok, err`**
-
-| Field | Type | Default |
-|---|---|---|
-| `name` | string (required, unique) | — |
-| `host` | string (required) | — |
-| `port` | number | `1080` |
-| `username_env` | string or nil | nil |
-| `password_env` | string or nil | nil |
-
-`username_env`/`password_env` are environment variable **names**, not
-values — Lua never reads the actual credential. Both must be given
-together or neither (a proxy with only one set is a config error at
-resolve time). No-auth SOCKS5 if neither is given. See
-`docs/lua_wrapper.md#proxy-grouping-and-credentials`.
+**There is no `swarm:add_proxy`.** Proxy endpoints and credentials are
+never Lua-constructible — calling `swarm:add_proxy(table)` (kept callable
+only so old scripts get a clear error instead of "attempt to call a nil
+value") always returns `(nil, {code = "invalid_configuration", ...})`.
+Proxies are **host-trusted profiles**: the host (the CLI, via repeatable
+`--proxy-profile <id>=<ENV_PREFIX>` flags, or any embedder calling
+`crate::lua::runtime::run_swarm` directly) registers a fixed
+`profile_id -> Socks5ProxyConfig` map *before* the script runs
+(`SwarmRuntimeConfig::proxy_profiles`). A script may only *reference* a
+profile by id via `add_bot`/`add_group`'s `proxy` field below — it can
+never choose an arbitrary host/port, and it can never choose which
+environment variable a credential is read from. Referencing an id the
+host never registered returns `unknown_proxy`, carrying only the id the
+script asked for, never any host/port/credential detail. See
+`docs/lua_wrapper.md#proxy-grouping-and-credentials` for the full
+security writeup.
 
 **`swarm:add_bot(table) -> bot_id, err`**
 
@@ -74,7 +74,7 @@ resolve time). No-auth SOCKS5 if neither is given. See
 | `id` | number or nil | auto-assigned (next free integer) |
 | `username` | string (required, unique) | — |
 | `server` | string (required, must reference a registered server) | — |
-| `proxy` | string or nil (must reference a registered proxy) | nil (direct connection) |
+| `proxy` | string or nil (must reference a host-registered proxy profile id — see above) | nil (direct connection) |
 | `reconnect` | table or nil | see [Reconnect policy](#reconnect-policy-table) |
 
 Returns the assigned numeric `bot_id` on success, or `(nil, error_table)`.
