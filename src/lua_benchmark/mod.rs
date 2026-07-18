@@ -10,9 +10,11 @@
 pub mod command;
 pub mod dispatch;
 pub mod event;
+pub mod fake_socks5;
 pub mod lua_api;
 pub mod metrics;
 pub mod queue;
 pub mod sandbox;
 pub mod scripts;
+pub mod synthetic;
 pub mod worker;
