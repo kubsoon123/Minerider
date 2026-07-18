@@ -103,17 +103,14 @@ impl ScriptError {
     }
 
     pub fn queue_full() -> Self {
-        Self::new("queue_full", "the bounded command queue is full")
-            .retryable(true)
+        Self::new("queue_full", "the bounded command queue is full").retryable(true)
     }
 }
 
 impl From<ControlError> for ScriptError {
     fn from(err: ControlError) -> Self {
         match err {
-            ControlError::InvalidAction(inner) => {
-                Self::new("invalid_action", inner.to_string())
-            }
+            ControlError::InvalidAction(inner) => Self::new("invalid_action", inner.to_string()),
             ControlError::QueueFull => Self::queue_full(),
             ControlError::NotConnected => {
                 Self::new("not_connected", "the bot is not currently connected").retryable(true)

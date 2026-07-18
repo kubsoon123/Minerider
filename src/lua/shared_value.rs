@@ -64,7 +64,9 @@ impl SharedValue {
             SharedValue::Bool(_) => 1,
             SharedValue::Number(_) => 8,
             SharedValue::Str(s) => s.len() + 8,
-            SharedValue::Array(items) => items.iter().map(SharedValue::approx_size).sum::<usize>() + 8,
+            SharedValue::Array(items) => {
+                items.iter().map(SharedValue::approx_size).sum::<usize>() + 8
+            }
             SharedValue::Map(entries) => {
                 entries
                     .iter()

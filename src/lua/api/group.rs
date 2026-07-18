@@ -85,6 +85,15 @@ impl UserData for LuaGroup {
     }
 }
 
-pub fn make_group(lua: &mlua::Lua, state: Rc<WorkerState>, name: String, bot_ids: Vec<u32>) -> mlua::Result<Value> {
-    lua.pack(LuaGroup { state, name, bot_ids })
+pub fn make_group(
+    lua: &mlua::Lua,
+    state: Rc<WorkerState>,
+    name: String,
+    bot_ids: Vec<u32>,
+) -> mlua::Result<Value> {
+    lua.pack(LuaGroup {
+        state,
+        name,
+        bot_ids,
+    })
 }

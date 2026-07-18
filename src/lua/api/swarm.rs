@@ -109,7 +109,9 @@ impl UserData for LuaSwarm {
         // any bot/group, but events for a bot only ever reach *its own*
         // assigned worker's handlers) ------------------------------------
         methods.add_method("bot", |lua, this, id: u32| match this.state.registry() {
-            Some(r) if r.bots.contains_key(&id) => super::bot::make_bot(lua, this.state.clone(), id),
+            Some(r) if r.bots.contains_key(&id) => {
+                super::bot::make_bot(lua, this.state.clone(), id)
+            }
             _ => Ok(Value::Nil),
         });
         methods.add_method("bots", |lua, this, ()| {
@@ -121,18 +123,33 @@ impl UserData for LuaSwarm {
             }
             Ok(t)
         });
-        methods.add_method("group", |lua, this, name: String| match this.state.registry() {
-            Some(r) => match r.groups.get(&name) {
-                Some(g) => super::group::make_group(lua, this.state.clone(), g.name.clone(), g.bot_ids.clone()),
+        methods.add_method("group", |lua, this, name: String| {
+            match this.state.registry() {
+                Some(r) => match r.groups.get(&name) {
+                    Some(g) => super::group::make_group(
+                        lua,
+                        this.state.clone(),
+                        g.name.clone(),
+                        g.bot_ids.clone(),
+                    ),
+                    None => Ok(Value::Nil),
+                },
                 None => Ok(Value::Nil),
-            },
-            None => Ok(Value::Nil),
+            }
         });
         methods.add_method("groups", |lua, this, ()| {
             let t = lua.create_table()?;
             if let Some(registry) = this.state.registry() {
                 for (i, g) in registry.groups.values().enumerate() {
-                    t.set(i + 1, super::group::make_group(lua, this.state.clone(), g.name.clone(), g.bot_ids.clone())?)?;
+                    t.set(
+                        i + 1,
+                        super::group::make_group(
+                            lua,
+                            this.state.clone(),
+                            g.name.clone(),
+                            g.bot_ids.clone(),
+                        )?,
+                    )?;
                 }
             }
             Ok(t)
@@ -167,7 +184,9 @@ impl UserData for LuaSwarm {
                     handle.stop();
                 }
             }
-            this.state.shutdown.store(true, std::sync::atomic::Ordering::Release);
+            this.state
+                .shutdown
+                .store(true, std::sync::atomic::Ordering::Release);
             Ok(())
         });
 
@@ -183,14 +202,26 @@ impl UserData for LuaSwarm {
             t.set("is_coordinator", this.state.is_coordinator)?;
             let started = this.state.started.borrow();
             t.set("started", started.is_some())?;
-            t.set("bot_count", started.as_ref().map(|p| p.registry.bots.len()).unwrap_or(0))?;
+            t.set(
+                "bot_count",
+                started.as_ref().map(|p| p.registry.bots.len()).unwrap_or(0),
+            )?;
             Ok(t)
         });
         methods.add_method("stats", |lua, this, ()| {
             let t = lua.create_table()?;
-            t.set("queue_depth_total", this.state.dispatcher.queue_depth_total())?;
-            t.set("queue_peak_depth_total", this.state.dispatcher.queue_peak_depth_total())?;
-            t.set("queue_dropped_total", this.state.dispatcher.queue_dropped_total())?;
+            t.set(
+                "queue_depth_total",
+                this.state.dispatcher.queue_depth_total(),
+            )?;
+            t.set(
+                "queue_peak_depth_total",
+                this.state.dispatcher.queue_peak_depth_total(),
+            )?;
+            t.set(
+                "queue_dropped_total",
+                this.state.dispatcher.queue_dropped_total(),
+            )?;
             Ok(t)
         });
 
@@ -199,14 +230,27 @@ impl UserData for LuaSwarm {
         methods.add_method("on", |lua, this, (name, func): (String, mlua::Function)| {
             let name = super::intern_event_name(&name)?;
             let key = lua.create_registry_value(func)?;
-            Ok(this.state.handlers.borrow_mut().register_global(name, key, false))
+            Ok(this
+                .state
+                .handlers
+                .borrow_mut()
+                .register_global(name, key, false))
         });
-        methods.add_method("once", |lua, this, (name, func): (String, mlua::Function)| {
-            let name = super::intern_event_name(&name)?;
-            let key = lua.create_registry_value(func)?;
-            Ok(this.state.handlers.borrow_mut().register_global(name, key, true))
+        methods.add_method(
+            "once",
+            |lua, this, (name, func): (String, mlua::Function)| {
+                let name = super::intern_event_name(&name)?;
+                let key = lua.create_registry_value(func)?;
+                Ok(this
+                    .state
+                    .handlers
+                    .borrow_mut()
+                    .register_global(name, key, true))
+            },
+        );
+        methods.add_method("off", |_, this, id: u64| {
+            Ok(this.state.handlers.borrow_mut().remove(id))
         });
-        methods.add_method("off", |_, this, id: u64| Ok(this.state.handlers.borrow_mut().remove(id)));
 
         // ---- Bounded cross-worker pub/sub --------------------------------
         methods.add_method("publish", |lua, this, (topic, payload): (String, Value)| {
@@ -215,23 +259,33 @@ impl UserData for LuaSwarm {
                     this.state.dispatcher.broadcast_message(topic, shared);
                     Ok((Value::Boolean(true), Value::Nil))
                 }
-                Err(e) => super::errors::err_pair(lua, ScriptError::new("invalid_configuration", e.to_string())),
+                Err(e) => super::errors::err_pair(
+                    lua,
+                    ScriptError::new("invalid_configuration", e.to_string()),
+                ),
             }
         });
-        methods.add_method("on_message", |lua, this, (topic, func): (String, mlua::Function)| {
-            let key = lua.create_registry_value(func)?;
-            let id = {
-                let mut handlers = this.state.handlers.borrow_mut();
-                handlers.next_id += 1;
-                handlers.next_id
-            };
-            this.state
-                .pubsub
-                .borrow_mut()
-                .entry(topic)
-                .or_default()
-                .push(crate::lua::worker::Handler { id, key: key.into(), once: false });
-            Ok(id)
-        });
+        methods.add_method(
+            "on_message",
+            |lua, this, (topic, func): (String, mlua::Function)| {
+                let key = lua.create_registry_value(func)?;
+                let id = {
+                    let mut handlers = this.state.handlers.borrow_mut();
+                    handlers.next_id += 1;
+                    handlers.next_id
+                };
+                this.state
+                    .pubsub
+                    .borrow_mut()
+                    .entry(topic)
+                    .or_default()
+                    .push(crate::lua::worker::Handler {
+                        id,
+                        key: key.into(),
+                        once: false,
+                    });
+                Ok(id)
+            },
+        );
     }
 }

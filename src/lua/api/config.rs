@@ -93,7 +93,11 @@ pub fn parse_proxy_def(table: &Table) -> mlua::Result<ProxyDef> {
     })
 }
 
-fn parse_retry_decision(table: &Table, key: &str, default: RetryDecision) -> mlua::Result<RetryDecision> {
+fn parse_retry_decision(
+    table: &Table,
+    key: &str,
+    default: RetryDecision,
+) -> mlua::Result<RetryDecision> {
     match get_string(table, key)? {
         None => Ok(default),
         Some(s) if s == "retry" => Ok(RetryDecision::Retry),
@@ -142,12 +146,21 @@ pub fn parse_reconnect_policy(table: Option<&Table>) -> mlua::Result<ReconnectPo
             Jitter::None
         };
     }
-    policy.stable_session_reset = get_ms(table, "stable_session_reset_ms", policy.stable_session_reset)?;
+    policy.stable_session_reset = get_ms(
+        table,
+        "stable_session_reset_ms",
+        policy.stable_session_reset,
+    )?;
     policy.on_transient = parse_retry_decision(table, "on_transient", policy.on_transient)?;
-    policy.on_server_rejected = parse_retry_decision(table, "on_server_rejected", policy.on_server_rejected)?;
-    policy.on_auth_failure = parse_retry_decision(table, "on_auth_failure", policy.on_auth_failure)?;
-    policy.on_protocol_incompatible =
-        parse_retry_decision(table, "on_protocol_incompatible", policy.on_protocol_incompatible)?;
+    policy.on_server_rejected =
+        parse_retry_decision(table, "on_server_rejected", policy.on_server_rejected)?;
+    policy.on_auth_failure =
+        parse_retry_decision(table, "on_auth_failure", policy.on_auth_failure)?;
+    policy.on_protocol_incompatible = parse_retry_decision(
+        table,
+        "on_protocol_incompatible",
+        policy.on_protocol_incompatible,
+    )?;
     Ok(policy)
 }
 

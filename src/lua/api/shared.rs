@@ -49,7 +49,11 @@ impl SharedState {
     }
 
     pub fn get(&self, key: &str) -> Option<SharedValue> {
-        self.store.lock().expect("shared state poisoned").get(key).map(|v| v.value.clone())
+        self.store
+            .lock()
+            .expect("shared state poisoned")
+            .get(key)
+            .map(|v| v.value.clone())
     }
 
     pub fn set(&self, key: String, value: SharedValue) -> Result<(), SharedStateError> {
@@ -112,7 +116,11 @@ pub fn lua_value_to_shared(value: &Value) -> Result<SharedValue, SharedValueErro
     convert(value, 0, &mut budget)
 }
 
-fn convert(value: &Value, depth: usize, budget: &mut usize) -> Result<SharedValue, SharedValueError> {
+fn convert(
+    value: &Value,
+    depth: usize,
+    budget: &mut usize,
+) -> Result<SharedValue, SharedValueError> {
     if depth > MAX_DEPTH {
         return Err(SharedValueError::TooDeep);
     }
@@ -134,8 +142,14 @@ fn convert(value: &Value, depth: usize, budget: &mut usize) -> Result<SharedValu
             SharedValue::Str(String::from_utf8_lossy(&bytes).to_string())
         }
         Value::Table(t) => convert_table(t, depth, budget)?,
-        Value::Function(_) | Value::UserData(_) | Value::Thread(_) | Value::LightUserData(_) | Value::Error(_) => {
-            return Err(SharedValueError::UnsupportedType("function/userdata/thread"));
+        Value::Function(_)
+        | Value::UserData(_)
+        | Value::Thread(_)
+        | Value::LightUserData(_)
+        | Value::Error(_) => {
+            return Err(SharedValueError::UnsupportedType(
+                "function/userdata/thread",
+            ));
         }
         _ => return Err(SharedValueError::UnsupportedType("unrecognized")),
     };
@@ -147,7 +161,11 @@ fn convert(value: &Value, depth: usize, budget: &mut usize) -> Result<SharedValu
     Ok(result)
 }
 
-fn convert_table(t: &Table, depth: usize, budget: &mut usize) -> Result<SharedValue, SharedValueError> {
+fn convert_table(
+    t: &Table,
+    depth: usize,
+    budget: &mut usize,
+) -> Result<SharedValue, SharedValueError> {
     // A dense 1-based integer sequence converts to an array; anything else
     // (string keys, sparse/mixed keys) converts to a map. Non-string,
     // non-sequence-index keys are rejected outright.
@@ -178,7 +196,11 @@ fn convert_table(t: &Table, depth: usize, budget: &mut usize) -> Result<SharedVa
     }
 }
 
-fn convert_map(t: &Table, depth: usize, budget: &mut usize) -> Result<SharedValue, SharedValueError> {
+fn convert_map(
+    t: &Table,
+    depth: usize,
+    budget: &mut usize,
+) -> Result<SharedValue, SharedValueError> {
     let mut entries = Vec::new();
     for pair in t.clone().pairs::<Value, Value>() {
         let (k, v) = pair.map_err(|_| SharedValueError::UnsupportedKey)?;
@@ -255,37 +277,54 @@ impl mlua::UserData for LuaSharedHandle {
         // read and the final compare-and-swap — never while `fn` itself
         // runs, so one worker's updater can never block another worker's
         // unrelated shared-state access while its Lua callback executes.
-        methods.add_method("update", |lua, this, (key, func): (String, mlua::Function)| {
-            for _ in 0..MAX_UPDATE_RETRIES {
-                let (current, version) = this.shared.read_for_update(&key);
-                let current_lua = shared_value_to_lua(lua, &current)?;
-                let new_lua: Value = func.call(current_lua)?;
-                let new_shared = match lua_value_to_shared(&new_lua) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return crate::lua::api::errors::err_pair(
-                            lua,
-                            crate::lua::error::ScriptError::new("invalid_configuration", e.to_string()),
-                        )
-                    }
-                };
-                match this.shared.compare_and_swap(&key, version, new_shared.clone()) {
-                    Ok(true) => return Ok((shared_value_to_lua(lua, &new_shared)?, Value::Nil)),
-                    Ok(false) => continue,
-                    Err(e) => {
-                        return crate::lua::api::errors::err_pair(
-                            lua,
-                            crate::lua::error::ScriptError::new("invalid_configuration", e.to_string()),
-                        )
+        methods.add_method(
+            "update",
+            |lua, this, (key, func): (String, mlua::Function)| {
+                for _ in 0..MAX_UPDATE_RETRIES {
+                    let (current, version) = this.shared.read_for_update(&key);
+                    let current_lua = shared_value_to_lua(lua, &current)?;
+                    let new_lua: Value = func.call(current_lua)?;
+                    let new_shared = match lua_value_to_shared(&new_lua) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return crate::lua::api::errors::err_pair(
+                                lua,
+                                crate::lua::error::ScriptError::new(
+                                    "invalid_configuration",
+                                    e.to_string(),
+                                ),
+                            )
+                        }
+                    };
+                    match this
+                        .shared
+                        .compare_and_swap(&key, version, new_shared.clone())
+                    {
+                        Ok(true) => {
+                            return Ok((shared_value_to_lua(lua, &new_shared)?, Value::Nil))
+                        }
+                        Ok(false) => continue,
+                        Err(e) => {
+                            return crate::lua::api::errors::err_pair(
+                                lua,
+                                crate::lua::error::ScriptError::new(
+                                    "invalid_configuration",
+                                    e.to_string(),
+                                ),
+                            )
+                        }
                     }
                 }
-            }
-            crate::lua::api::errors::err_pair(
-                lua,
-                crate::lua::error::ScriptError::new("invalid_configuration", "shared:update contention exceeded retry limit")
+                crate::lua::api::errors::err_pair(
+                    lua,
+                    crate::lua::error::ScriptError::new(
+                        "invalid_configuration",
+                        "shared:update contention exceeded retry limit",
+                    )
                     .retryable(true),
-            )
-        });
+                )
+            },
+        );
     }
 }
 
@@ -296,17 +335,23 @@ mod tests {
     #[test]
     fn set_get_roundtrips() {
         let state = SharedState::new();
-        state.set("k".to_string(), SharedValue::Number(42.0)).unwrap();
+        state
+            .set("k".to_string(), SharedValue::Number(42.0))
+            .unwrap();
         assert_eq!(state.get("k"), Some(SharedValue::Number(42.0)));
     }
 
     #[test]
     fn compare_and_swap_fails_on_stale_version() {
         let state = SharedState::new();
-        state.set("k".to_string(), SharedValue::Number(1.0)).unwrap();
+        state
+            .set("k".to_string(), SharedValue::Number(1.0))
+            .unwrap();
         let (_, version) = state.read_for_update("k");
         // A concurrent write bumps the version.
-        state.set("k".to_string(), SharedValue::Number(2.0)).unwrap();
+        state
+            .set("k".to_string(), SharedValue::Number(2.0))
+            .unwrap();
         let ok = state
             .compare_and_swap("k", version, SharedValue::Number(3.0))
             .unwrap();
@@ -317,7 +362,9 @@ mod tests {
     #[test]
     fn compare_and_swap_succeeds_on_current_version() {
         let state = SharedState::new();
-        state.set("k".to_string(), SharedValue::Number(1.0)).unwrap();
+        state
+            .set("k".to_string(), SharedValue::Number(1.0))
+            .unwrap();
         let (_, version) = state.read_for_update("k");
         let ok = state
             .compare_and_swap("k", version, SharedValue::Number(2.0))
@@ -332,7 +379,9 @@ mod tests {
         for i in 0..MAX_STORE_KEYS {
             state.set(format!("k{i}"), SharedValue::Bool(true)).unwrap();
         }
-        let err = state.set("overflow".to_string(), SharedValue::Bool(true)).unwrap_err();
+        let err = state
+            .set("overflow".to_string(), SharedValue::Bool(true))
+            .unwrap_err();
         assert_eq!(err, SharedStateError::StoreFull);
     }
 }

@@ -21,7 +21,10 @@ fn inventory_event_to_table(lua: &Lua, event: &InventoryEvent) -> mlua::Result<T
             t.set("kind", "window_closed")?;
             t.set("window_id", *window_id)?;
         }
-        InventoryEvent::WindowSynchronized { window_id, state_id } => {
+        InventoryEvent::WindowSynchronized {
+            window_id,
+            state_id,
+        } => {
             t.set("kind", "window_synchronized")?;
             t.set("window_id", *window_id)?;
             t.set("state_id", *state_id)?;
@@ -39,7 +42,10 @@ fn inventory_event_to_table(lua: &Lua, event: &InventoryEvent) -> mlua::Result<T
         InventoryEvent::CursorUpdated => {
             t.set("kind", "cursor_updated")?;
         }
-        InventoryEvent::PropertyUpdated { window_id, property } => {
+        InventoryEvent::PropertyUpdated {
+            window_id,
+            property,
+        } => {
             t.set("kind", "property_updated")?;
             t.set("window_id", *window_id)?;
             t.set("property", *property)?;
@@ -77,7 +83,9 @@ fn inventory_event_to_table(lua: &Lua, event: &InventoryEvent) -> mlua::Result<T
     Ok(t)
 }
 
-fn inventory_outcome_to_str(outcome: &crate::minecraft::inventory::InventoryOutcome) -> &'static str {
+fn inventory_outcome_to_str(
+    outcome: &crate::minecraft::inventory::InventoryOutcome,
+) -> &'static str {
     use crate::minecraft::inventory::InventoryOutcome;
     match outcome {
         InventoryOutcome::Sent => "sent",
@@ -106,7 +114,10 @@ fn hud_event_to_table(lua: &Lua, event: &HudEvent) -> mlua::Result<Table> {
         }
         HudEvent::GameModeChanged { game_mode } => {
             t.set("kind", "game_mode_changed")?;
-            t.set("game_mode", crate::lua::convert::hud::game_mode_to_str(game_mode))?;
+            t.set(
+                "game_mode",
+                crate::lua::convert::hud::game_mode_to_str(game_mode),
+            )?;
         }
         HudEvent::AbilitiesChanged { abilities } => {
             t.set("kind", "abilities_changed")?;
@@ -124,7 +135,11 @@ fn hud_event_to_table(lua: &Lua, event: &HudEvent) -> mlua::Result<Table> {
             t.set("selected_slot", *selected_slot)?;
             t.set(
                 "held_item",
-                crate::lua::convert::items::raw_slot_to_table(lua, *selected_slot as usize, held_item)?,
+                crate::lua::convert::items::raw_slot_to_table(
+                    lua,
+                    *selected_slot as usize,
+                    held_item,
+                )?,
             )?;
             t.set("applied", *applied)?;
         }
@@ -174,7 +189,10 @@ fn hud_event_to_table(lua: &Lua, event: &HudEvent) -> mlua::Result<Table> {
         HudEvent::Death { information } => {
             t.set("kind", "death")?;
             t.set("player_id", information.player_id)?;
-            t.set("message", crate::lua::convert::text_component(lua, &information.message)?)?;
+            t.set(
+                "message",
+                crate::lua::convert::text_component(lua, &information.message)?,
+            )?;
         }
         HudEvent::Respawned { state } => {
             t.set("kind", "respawned")?;
@@ -296,7 +314,8 @@ pub fn event_to_table(lua: &Lua, event: &BotEvent) -> mlua::Result<Table> {
             t.set("reason", reason.as_str())?;
         }
         BotEvent::Presentation(inner) => {
-            let payload = crate::lua::convert::presentation::presentation_event_to_table(lua, inner)?;
+            let payload =
+                crate::lua::convert::presentation::presentation_event_to_table(lua, inner)?;
             copy_fields(&t, &payload)?;
         }
         BotEvent::Scoreboard(inner) => {
@@ -363,13 +382,19 @@ pub fn action_result_to_table(lua: &Lua, result: &ActionResult) -> mlua::Result<
         }
         ActionOutcome::Error(err) => {
             t.set("ok", false)?;
-            t.set("error", crate::lua::convert::events::script_error_to_table(lua, err)?)?;
+            t.set(
+                "error",
+                crate::lua::convert::events::script_error_to_table(lua, err)?,
+            )?;
         }
     }
     Ok(t)
 }
 
-pub fn script_error_to_table(lua: &Lua, err: &crate::lua::error::ScriptError) -> mlua::Result<Table> {
+pub fn script_error_to_table(
+    lua: &Lua,
+    err: &crate::lua::error::ScriptError,
+) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     t.set("code", err.code)?;
     t.set("message", err.message.as_str())?;

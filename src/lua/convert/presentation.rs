@@ -80,28 +80,49 @@ pub fn presentation_state_to_table(lua: &Lua, state: &PresentationState) -> mlua
         chat.set(i + 1, chat_message_to_table(lua, msg)?)?;
     }
     t.set("chat", chat)?;
-    t.set("action_bar", super::opt_text_component(lua, &state.action_bar)?)?;
+    t.set(
+        "action_bar",
+        super::opt_text_component(lua, &state.action_bar)?,
+    )?;
 
     let titles = lua.create_table()?;
-    titles.set("title", super::opt_text_component(lua, &state.titles.title)?)?;
-    titles.set("subtitle", super::opt_text_component(lua, &state.titles.subtitle)?)?;
+    titles.set(
+        "title",
+        super::opt_text_component(lua, &state.titles.title)?,
+    )?;
+    titles.set(
+        "subtitle",
+        super::opt_text_component(lua, &state.titles.subtitle)?,
+    )?;
     titles.set("fade_in", state.titles.timing.fade_in)?;
     titles.set("stay", state.titles.timing.stay)?;
     titles.set("fade_out", state.titles.timing.fade_out)?;
     t.set("titles", titles)?;
 
     let tab_list = lua.create_table()?;
-    tab_list.set("header", super::opt_text_component(lua, &state.tab_list.header)?)?;
-    tab_list.set("footer", super::opt_text_component(lua, &state.tab_list.footer)?)?;
+    tab_list.set(
+        "header",
+        super::opt_text_component(lua, &state.tab_list.header)?,
+    )?;
+    tab_list.set(
+        "footer",
+        super::opt_text_component(lua, &state.tab_list.footer)?,
+    )?;
     t.set("tab_list", tab_list)?;
 
     let boss_bars = lua.create_table()?;
     for (id, bar) in &state.boss_bars {
-        boss_bars.set(super::u128_to_hex_string(lua, *id)?, boss_bar_to_table(lua, bar)?)?;
+        boss_bars.set(
+            super::u128_to_hex_string(lua, *id)?,
+            boss_bar_to_table(lua, bar)?,
+        )?;
     }
     t.set("boss_bars", boss_bars)?;
 
-    t.set("disconnect_reason", super::opt_text_component(lua, &state.disconnect_reason)?)?;
+    t.set(
+        "disconnect_reason",
+        super::opt_text_component(lua, &state.disconnect_reason)?,
+    )?;
     Ok(t)
 }
 

@@ -112,7 +112,11 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
             sandbox: config.sandbox,
             startup_barrier: startup_barrier.clone(),
             shared_state: shared_state.clone(),
-            config_tx: if is_coordinator { Some(config_tx.clone()) } else { None },
+            config_tx: if is_coordinator {
+                Some(config_tx.clone())
+            } else {
+                None
+            },
             shutdown: shutdown.clone(),
             callback_timeout: config.callback_timeout,
         };
@@ -135,11 +139,13 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
         .map_err(|e| RuntimeError::Worker(e.to_string()))?
         .map_err(|_| {
             RuntimeError::Script(
-                "no worker ever called swarm:connect_all() as the coordinator (worker 0)".to_string(),
+                "no worker ever called swarm:connect_all() as the coordinator (worker 0)"
+                    .to_string(),
             )
         })?;
 
-    let (bot_handles, supervisor_tasks, bridge_tasks) = spawn_all_bots(&registry, &dispatcher).await?;
+    let (bot_handles, supervisor_tasks, bridge_tasks) =
+        spawn_all_bots(&registry, &dispatcher).await?;
     let bot_handles = Arc::new(bot_handles);
     let registry = Arc::new(registry);
 

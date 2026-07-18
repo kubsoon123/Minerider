@@ -115,7 +115,10 @@ pub fn fire_due(lua: &Lua, state: &Rc<WorkerState>, report: &mut WorkerReport) {
 pub fn fire_one(lua: &Lua, state: &Rc<WorkerState>, timer_id: u64, report: &mut WorkerReport) {
     let key_and_interval = {
         let timers = state.timers.borrow();
-        timers.entries.get(&timer_id).map(|e| (lua.registry_value::<mlua::Function>(&e.key), e.interval))
+        timers
+            .entries
+            .get(&timer_id)
+            .map(|e| (lua.registry_value::<mlua::Function>(&e.key), e.interval))
     };
     let Some((func_result, interval)) = key_and_interval else {
         return;

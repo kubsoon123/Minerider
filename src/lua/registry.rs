@@ -80,20 +80,24 @@ impl ProxyDef {
         match (&self.username_env, &self.password_env) {
             (None, None) => {}
             (Some(user_var), Some(pass_var)) => {
-                let username = std::env::var(user_var).map_err(|_| ProxyResolveError::MissingEnvVar {
-                    proxy: self.name.clone(),
-                    var: user_var.clone(),
-                })?;
-                let password = std::env::var(pass_var).map_err(|_| ProxyResolveError::MissingEnvVar {
-                    proxy: self.name.clone(),
-                    var: pass_var.clone(),
-                })?;
+                let username =
+                    std::env::var(user_var).map_err(|_| ProxyResolveError::MissingEnvVar {
+                        proxy: self.name.clone(),
+                        var: user_var.clone(),
+                    })?;
+                let password =
+                    std::env::var(pass_var).map_err(|_| ProxyResolveError::MissingEnvVar {
+                        proxy: self.name.clone(),
+                        var: pass_var.clone(),
+                    })?;
                 cfg = cfg.with_credentials(Socks5Credentials::new(username, password));
             }
             (Some(var), None) | (None, Some(var)) => {
                 return Err(ProxyResolveError::MissingEnvVar {
                     proxy: self.name.clone(),
-                    var: format!("{var} (both username_env and password_env are required together)"),
+                    var: format!(
+                        "{var} (both username_env and password_env are required together)"
+                    ),
                 });
             }
         }
@@ -160,8 +164,11 @@ impl RegistryError {
     /// table (see `crate::lua::api::errors`).
     pub fn code(&self) -> &'static str {
         match self {
-            Self::DuplicateServer(_) | Self::DuplicateProxy(_) | Self::DuplicateBotId(_)
-            | Self::DuplicateUsername(_) | Self::DuplicateGroup(_) => "duplicate_id",
+            Self::DuplicateServer(_)
+            | Self::DuplicateProxy(_)
+            | Self::DuplicateBotId(_)
+            | Self::DuplicateUsername(_)
+            | Self::DuplicateGroup(_) => "duplicate_id",
             Self::UnknownServer(_) => "unknown_server",
             Self::UnknownProxy(_) => "unknown_proxy",
             Self::InvalidConfiguration(_) => "invalid_configuration",

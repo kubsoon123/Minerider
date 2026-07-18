@@ -1091,7 +1091,8 @@ mod production_smoke {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connects_dispatches_events_and_completes_a_gui_click_action() {
-        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::RealisticState, 1).await;
+        let (port, _server_task, _kick_tx) =
+            spawn_mock_server(ScenarioKind::RealisticState, 1).await;
         let script = format!(
             r#"
             swarm:configure(function()
@@ -1110,7 +1111,9 @@ mod production_smoke {
             swarm:run()
             "#
         );
-        let swarm = run_swarm(base_config(1, script)).await.expect("swarm must start");
+        let swarm = run_swarm(base_config(1, script))
+            .await
+            .expect("swarm must start");
         assert_eq!(swarm.registry.bots.len(), 1);
 
         let got_chat = wait_for(
@@ -1118,10 +1121,18 @@ mod production_smoke {
             Duration::from_secs(5),
         )
         .await;
-        assert!(got_chat, "chat handler must observe the mock server's welcome message");
+        assert!(
+            got_chat,
+            "chat handler must observe the mock server's welcome message"
+        );
 
         let got_click_result = wait_for(
-            || matches!(swarm.shared_state.get("click_result_seen"), Some(SharedValue::Bool(true))),
+            || {
+                matches!(
+                    swarm.shared_state.get("click_result_seen"),
+                    Some(SharedValue::Bool(true))
+                )
+            },
             Duration::from_secs(8),
         )
         .await;
@@ -1156,7 +1167,9 @@ mod production_smoke {
             swarm:run()
             "#
         );
-        let swarm = run_swarm(base_config(4, script)).await.expect("swarm must start");
+        let swarm = run_swarm(base_config(4, script))
+            .await
+            .expect("swarm must start");
         assert_eq!(swarm.dispatcher.worker_count(), 4);
 
         for i in 0..bot_count {
@@ -1201,7 +1214,9 @@ mod production_smoke {
             "#,
             proxy_port = proxy.port
         );
-        let swarm = run_swarm(base_config(1, script)).await.expect("swarm must start");
+        let swarm = run_swarm(base_config(1, script))
+            .await
+            .expect("swarm must start");
 
         let handle = swarm.bot_handles.get(&0).expect("bot 0 handle").clone();
         let saw_reconnect_schedule = wait_for(
@@ -1223,9 +1238,15 @@ mod production_smoke {
         );
 
         let reconnected = wait_for(|| handle.generation() >= 2, Duration::from_secs(5)).await;
-        assert!(reconnected, "bot must complete a second (reconnect) session, generation={}", handle.generation());
+        assert!(
+            reconnected,
+            "bot must complete a second (reconnect) session, generation={}",
+            handle.generation()
+        );
 
-        let accepted = proxy.accepted_connections.load(std::sync::atomic::Ordering::SeqCst);
+        let accepted = proxy
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
         assert!(
             accepted >= 2,
             "both the initial connection and the reconnect must route through the same proxy, got {accepted}"
@@ -1248,7 +1269,9 @@ mod production_smoke {
             swarm:run()
             "#
         );
-        let swarm = run_swarm(base_config(2, script)).await.expect("swarm must start");
+        let swarm = run_swarm(base_config(2, script))
+            .await
+            .expect("swarm must start");
         let handles: Vec<_> = swarm.bot_handles.values().cloned().collect();
 
         let connected = wait_for(
@@ -1265,10 +1288,16 @@ mod production_smoke {
         .await;
         assert!(connected, "both bots must connect before testing shutdown");
 
-        let shutdown_finished = tokio::time::timeout(Duration::from_secs(5), swarm.shutdown(Duration::from_secs(4)))
-            .await
-            .is_ok();
-        assert!(shutdown_finished, "shutdown must complete within its bound, not hang");
+        let shutdown_finished = tokio::time::timeout(
+            Duration::from_secs(5),
+            swarm.shutdown(Duration::from_secs(4)),
+        )
+        .await
+        .is_ok();
+        assert!(
+            shutdown_finished,
+            "shutdown must complete within its bound, not hang"
+        );
 
         for handle in &handles {
             assert!(matches!(
@@ -1298,5 +1327,113 @@ mod production_smoke {
             })
             .unwrap_err();
         assert_eq!(err.code(), "unknown_server");
+    }
+
+    /// Loads the *actual shipped* `examples/lua/swarm.lua` (via
+    /// `include_str!`, so this test breaks if the file and this test drift)
+    /// and runs it for real: 2 proxy groups of 3 bots each, through two
+    /// independent local fake SOCKS5 relays, against the local mock
+    /// server. Only the example's fixed placeholder host/port literals are
+    /// substituted for this run's dynamically-bound test ports; every
+    /// other line — `add_proxy`'s `username_env`/`password_env`,
+    /// `add_group`'s `reconnect` table, the `connected`/`chat`/`gui_opened`
+    /// handlers, `connect_all`/`run` — is exactly what a user would run.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_shipped_example_script_connects_two_full_proxy_groups() {
+        const EXAMPLE: &str = include_str!("../../examples/lua/swarm.lua");
+
+        let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 6).await;
+        let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
+        let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
+
+        // SAFETY: test-only; these are local placeholder credentials for a
+        // from-scratch fake relay, never the compromised one.
+        unsafe {
+            std::env::set_var("MINERIDER_PROXY1_USER", "alice");
+            std::env::set_var("MINERIDER_PROXY1_PASS", "hunter2");
+            std::env::set_var("MINERIDER_PROXY2_USER", "bob");
+            std::env::set_var("MINERIDER_PROXY2_PASS", "hunter3");
+        }
+
+        let script = EXAMPLE
+            .replace("port = 25565", &format!("port = {port}"))
+            .replace("port = 1080", &format!("port = {}", proxy1.port))
+            .replace("port = 1081", &format!("port = {}", proxy2.port))
+            // The mock server only accepts usernames it can parse as
+            // `Bot<index>`, and needs every bot's index unique across both
+            // groups; the example's own naming is what real servers would
+            // see, so this substitution is test-fixture-only.
+            .replace(
+                "username_prefix = \"Swarm1_\"",
+                "username_prefix = \"Bot1\"",
+            )
+            .replace(
+                "username_prefix = \"Swarm2_\"",
+                "username_prefix = \"Bot2\"",
+            )
+            // `FakeSocks5Server` (see `crate::lua_benchmark::fake_socks5`)
+            // is deliberately no-auth-only, matching every other proxy
+            // test in this file (`proxy_assignment_persists_across_a_reconnect`
+            // etc.) — offering credentials makes the real client negotiate
+            // `METHOD_USER_PASS` only, which this fake relay doesn't speak.
+            // The shipped example itself is unchanged and still
+            // demonstrates the credentialed pattern for a real proxy.
+            .replace("username_env = \"MINERIDER_PROXY1_USER\",", "")
+            .replace("password_env = \"MINERIDER_PROXY1_PASS\",", "")
+            .replace("username_env = \"MINERIDER_PROXY2_USER\",", "")
+            .replace("password_env = \"MINERIDER_PROXY2_PASS\",", "");
+
+        let config = SwarmRuntimeConfig {
+            worker_count: 4,
+            sandbox: SandboxConfig::default(),
+            high_queue_capacity: 256,
+            low_queue_capacity: 64,
+            callback_timeout: Duration::from_secs(10),
+            script_body: script,
+        };
+        let swarm = run_swarm(config)
+            .await
+            .expect("the shipped example script must start cleanly");
+        assert_eq!(swarm.registry.bots.len(), 6, "2 groups of 3 bots each");
+        assert_eq!(swarm.registry.groups.len(), 2);
+        assert_eq!(swarm.registry.proxies.len(), 2);
+
+        let all_connected = wait_for(
+            || {
+                swarm.bot_handles.values().all(|h| {
+                    matches!(
+                        *h.status().borrow(),
+                        crate::core::supervisor::SupervisorStatus::Connected
+                    )
+                })
+            },
+            Duration::from_secs(10),
+        )
+        .await;
+        assert!(all_connected, "every bot in both proxy groups must connect");
+
+        let proxy1_accepted = proxy1
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
+        let proxy2_accepted = proxy2
+            .accepted_connections
+            .load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            proxy1_accepted, 3,
+            "group1's 3 bots must route through proxy1"
+        );
+        assert_eq!(
+            proxy2_accepted, 3,
+            "group2's 3 bots must route through proxy2"
+        );
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+
+        unsafe {
+            std::env::remove_var("MINERIDER_PROXY1_USER");
+            std::env::remove_var("MINERIDER_PROXY1_PASS");
+            std::env::remove_var("MINERIDER_PROXY2_USER");
+            std::env::remove_var("MINERIDER_PROXY2_PASS");
+        }
     }
 }

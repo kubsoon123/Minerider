@@ -93,7 +93,10 @@ pub fn hud_state_to_table(lua: &Lua, hud: &HudState) -> mlua::Result<Table> {
     t.set("experience", xp)?;
 
     t.set("game_mode", game_mode_to_str(&hud.game_mode))?;
-    t.set("previous_game_mode", opt_game_mode(lua, &hud.previous_game_mode)?)?;
+    t.set(
+        "previous_game_mode",
+        opt_game_mode(lua, &hud.previous_game_mode)?,
+    )?;
     t.set("hardcore", hud.hardcore)?;
 
     let abilities = lua.create_table()?;
@@ -167,7 +170,10 @@ pub fn hud_state_to_table(lua: &Lua, hud: &HudState) -> mlua::Result<Table> {
     let respawn = lua.create_table()?;
     respawn.set("count", hud.respawn.count)?;
     respawn.set("game_mode", game_mode_to_str(&hud.respawn.game_mode))?;
-    respawn.set("previous_game_mode", opt_game_mode(lua, &hud.respawn.previous_game_mode)?)?;
+    respawn.set(
+        "previous_game_mode",
+        opt_game_mode(lua, &hud.respawn.previous_game_mode)?,
+    )?;
     respawn.set("dimension_name", hud.respawn.dimension_name.as_str())?;
     respawn.set(
         "last_death_location",

@@ -90,9 +90,18 @@ fn number_format_to_value(lua: &Lua, fmt: &Option<NumberFormat>) -> mlua::Result
 pub fn objective_to_table(lua: &Lua, obj: &Objective) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     t.set("name", obj.name.as_str())?;
-    t.set("display_name", super::text_component(lua, &obj.display_name)?)?;
-    t.set("render_type", objective_render_type_to_str(&obj.render_type))?;
-    t.set("number_format", number_format_to_value(lua, &obj.number_format)?)?;
+    t.set(
+        "display_name",
+        super::text_component(lua, &obj.display_name)?,
+    )?;
+    t.set(
+        "render_type",
+        objective_render_type_to_str(&obj.render_type),
+    )?;
+    t.set(
+        "number_format",
+        number_format_to_value(lua, &obj.number_format)?,
+    )?;
     Ok(t)
 }
 
@@ -101,19 +110,40 @@ pub fn score_to_table(lua: &Lua, score: &Score) -> mlua::Result<Table> {
     t.set("owner", score.owner.as_str())?;
     t.set("objective", score.objective.as_str())?;
     t.set("value", score.value)?;
-    t.set("display_name", super::opt_text_component(lua, &score.display_name)?)?;
-    t.set("number_format", number_format_to_value(lua, &score.number_format)?)?;
+    t.set(
+        "display_name",
+        super::opt_text_component(lua, &score.display_name)?,
+    )?;
+    t.set(
+        "number_format",
+        number_format_to_value(lua, &score.number_format)?,
+    )?;
     Ok(t)
 }
 
 pub fn team_to_table(lua: &Lua, team: &Team) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     t.set("name", team.name.as_str())?;
-    t.set("display_name", super::text_component(lua, &team.display_name)?)?;
-    t.set("allows_friendly_fire", team.friendly_fire.allows_friendly_fire())?;
-    t.set("see_friendly_invisibles", team.friendly_fire.see_friendly_invisibles())?;
-    t.set("name_tag_visibility", name_tag_visibility_to_str(&team.name_tag_visibility))?;
-    t.set("collision_rule", collision_rule_to_str(&team.collision_rule))?;
+    t.set(
+        "display_name",
+        super::text_component(lua, &team.display_name)?,
+    )?;
+    t.set(
+        "allows_friendly_fire",
+        team.friendly_fire.allows_friendly_fire(),
+    )?;
+    t.set(
+        "see_friendly_invisibles",
+        team.friendly_fire.see_friendly_invisibles(),
+    )?;
+    t.set(
+        "name_tag_visibility",
+        name_tag_visibility_to_str(&team.name_tag_visibility),
+    )?;
+    t.set(
+        "collision_rule",
+        collision_rule_to_str(&team.collision_rule),
+    )?;
     t.set("color", team_color_to_str(&team.color))?;
     t.set("prefix", super::text_component(lua, &team.prefix)?)?;
     t.set("suffix", super::text_component(lua, &team.suffix)?)?;

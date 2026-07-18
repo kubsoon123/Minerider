@@ -22,7 +22,10 @@ pub fn state_snapshot_to_table(lua: &Lua, snapshot: &StateSnapshot) -> mlua::Res
     t.set("tick", snapshot.tick)?;
     t.set("player", player_to_table(lua, &snapshot.player)?)?;
     t.set("entities", entities_to_table(lua, &snapshot.entities)?)?;
-    t.set("inventory", inventory_state_to_table(lua, &snapshot.inventory)?)?;
+    t.set(
+        "inventory",
+        inventory_state_to_table(lua, &snapshot.inventory)?,
+    )?;
     t.set("players", players_to_table(lua, &snapshot.players)?)?;
     t.set(
         "presentation",
@@ -118,7 +121,10 @@ pub fn player_entry_to_table(lua: &Lua, entry: &PlayerEntry) -> mlua::Result<Tab
     t.set("gamemode", entry.gamemode)?;
     t.set("latency", entry.latency)?;
     t.set("listed", entry.listed)?;
-    t.set("display_name", super::opt_text_component(lua, &entry.display_name)?)?;
+    t.set(
+        "display_name",
+        super::opt_text_component(lua, &entry.display_name)?,
+    )?;
     t.set("list_priority", entry.list_priority)?;
     t.set("show_hat", entry.show_hat)?;
     t.set(
@@ -126,7 +132,10 @@ pub fn player_entry_to_table(lua: &Lua, entry: &PlayerEntry) -> mlua::Result<Tab
         match &entry.chat_session {
             Some(session) => {
                 let st = lua.create_table()?;
-                st.set("session_id", super::u128_to_hex_string(lua, session.session_id)?)?;
+                st.set(
+                    "session_id",
+                    super::u128_to_hex_string(lua, session.session_id)?,
+                )?;
                 st.set("expires_at_millis", session.expires_at_millis)?;
                 Value::Table(st)
             }
@@ -170,7 +179,10 @@ pub fn window_to_table(lua: &Lua, window: &Window) -> mlua::Result<Table> {
 
 pub fn inventory_state_to_table(lua: &Lua, inv: &InventoryState) -> mlua::Result<Table> {
     let t = lua.create_table()?;
-    t.set("player_inventory", window_to_table(lua, &inv.player_inventory)?)?;
+    t.set(
+        "player_inventory",
+        window_to_table(lua, &inv.player_inventory)?,
+    )?;
     t.set(
         "open_window",
         match &inv.open_window {
@@ -178,9 +190,16 @@ pub fn inventory_state_to_table(lua: &Lua, inv: &InventoryState) -> mlua::Result
             None => Value::Nil,
         },
     )?;
-    t.set("cursor", super::items::raw_slot_to_table(lua, 0, &inv.cursor)?)?;
+    t.set(
+        "cursor",
+        super::items::raw_slot_to_table(lua, 0, &inv.cursor)?,
+    )?;
     t.set("selected_hotbar_slot", inv.selected_hotbar_slot)?;
-    let pending: Vec<u64> = inv.pending_transactions.iter().map(|tx| tx.request.transaction_id).collect();
+    let pending: Vec<u64> = inv
+        .pending_transactions
+        .iter()
+        .map(|tx| tx.request.transaction_id)
+        .collect();
     t.set("pending_transaction_ids", super_u64_array(lua, &pending)?)?;
     Ok(t)
 }

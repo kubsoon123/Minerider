@@ -16,7 +16,10 @@ pub fn gui_view_to_table(lua: &Lua, view: &GuiView) -> mlua::Result<Table> {
         slots.set(i + 1, super::items::gui_slot_view_to_table(lua, slot)?)?;
     }
     t.set("slots", slots)?;
-    t.set("cursor", super::items::gui_slot_view_to_table(lua, &view.cursor)?)?;
+    t.set(
+        "cursor",
+        super::items::gui_slot_view_to_table(lua, &view.cursor)?,
+    )?;
     let properties = lua.create_table()?;
     for (k, v) in &view.properties {
         properties.set(*k, *v)?;

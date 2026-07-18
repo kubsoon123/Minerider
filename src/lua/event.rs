@@ -226,9 +226,7 @@ mod tests {
         let events = [
             BotEvent::Connecting,
             BotEvent::Connected,
-            BotEvent::Disconnected {
-                reason: "x".into(),
-            },
+            BotEvent::Disconnected { reason: "x".into() },
             BotEvent::ReconnectScheduled {
                 attempt: 1,
                 delay: Duration::from_secs(1),

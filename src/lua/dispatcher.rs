@@ -27,8 +27,12 @@ pub enum ActionOutcome {
     /// means the packet was sent (or queued to be sent), never that the
     /// server has acknowledged it.
     DeliveredSent,
-    Confirmed { state_id: i32 },
-    Corrected { state_id: i32 },
+    Confirmed {
+        state_id: i32,
+    },
+    Corrected {
+        state_id: i32,
+    },
     Error(ScriptError),
 }
 
@@ -111,7 +115,10 @@ impl WorkerQueue {
     }
 
     pub fn depth(&self) -> usize {
-        self.state.lock().expect("worker queue mutex poisoned").depth()
+        self.state
+            .lock()
+            .expect("worker queue mutex poisoned")
+            .depth()
     }
 
     pub fn peak_depth(&self) -> usize {

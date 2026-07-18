@@ -102,10 +102,11 @@ impl HandlerRegistry {
     pub fn register_global(&mut self, name: &'static str, key: RegistryKey, once: bool) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        self.global
-            .entry(name)
-            .or_default()
-            .push(Handler { id, key: Rc::new(key), once });
+        self.global.entry(name).or_default().push(Handler {
+            id,
+            key: Rc::new(key),
+            once,
+        });
         id
     }
 
@@ -121,7 +122,11 @@ impl HandlerRegistry {
         self.per_bot
             .entry((bot_id, name))
             .or_default()
-            .push(Handler { id, key: Rc::new(key), once });
+            .push(Handler {
+                id,
+                key: Rc::new(key),
+                once,
+            });
         id
     }
 
@@ -267,7 +272,8 @@ pub fn run_worker(
         callback_timeout: config.callback_timeout,
     });
 
-    crate::lua::api::install(&lua, state.clone()).map_err(|e| format!("api install failed: {e}"))?;
+    crate::lua::api::install(&lua, state.clone())
+        .map_err(|e| format!("api install failed: {e}"))?;
 
     lua.load(script_body)
         .set_name("swarm_script")
@@ -330,12 +336,25 @@ fn dispatch_one(
                     return;
                 }
             };
-            run_handlers_for(lua, state, bot_id, name, bot_value, mlua::Value::Table(event_table), report);
+            run_handlers_for(
+                lua,
+                state,
+                bot_id,
+                name,
+                bot_value,
+                mlua::Value::Table(event_table),
+                report,
+            );
         }
         WorkItem::ActionResult(result) => {
             let table = crate::lua::convert::events::action_result_to_table(lua, &result);
             if let Ok(table) = table {
-                if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&result.request_id) {
+                if let Some(callback) = state
+                    .callbacks
+                    .borrow_mut()
+                    .pending
+                    .remove(&result.request_id)
+                {
                     if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
                         if let Err(e) = func.call::<()>(table.clone()) {
                             tracing::warn!(worker = state.worker_index, error = %e, "action_result callback failed");
@@ -345,7 +364,15 @@ fn dispatch_one(
                 }
                 let bot_obj = crate::lua::api::bot::make_bot(lua, state.clone(), bot_id).ok();
                 if let Some(bot_value) = bot_obj {
-                    run_handlers_for(lua, state, bot_id, "action_result", bot_value, mlua::Value::Table(table), report);
+                    run_handlers_for(
+                        lua,
+                        state,
+                        bot_id,
+                        "action_result",
+                        bot_value,
+                        mlua::Value::Table(table),
+                        report,
+                    );
                 }
             }
         }
@@ -376,14 +403,20 @@ fn dispatch_one(
         WorkItem::TimerFired { timer_id } => {
             crate::lua::api::timers::invoke(lua, state, timer_id, report);
         }
-        WorkItem::ScriptError { event_name, message } => {
+        WorkItem::ScriptError {
+            event_name,
+            message,
+        } => {
             tracing::warn!(worker = state.worker_index, %bot_id, event = event_name, %message, "script_error");
         }
         WorkItem::ScriptDisabled { reason } => {
             tracing::warn!(worker = state.worker_index, %bot_id, %reason, "script_disabled");
         }
         WorkItem::WorkerOverloaded => {
-            tracing::error!(worker = state.worker_index, "worker_overload: critical queue saturated");
+            tracing::error!(
+                worker = state.worker_index,
+                "worker_overload: critical queue saturated"
+            );
         }
     }
 }
@@ -471,7 +504,8 @@ fn sweep_callback_timeouts(lua: &Lua, state: &Rc<WorkerState>) {
                     bot_id: cb.bot_id,
                     outcome,
                 };
-                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result) {
+                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
+                {
                     let _ = func.call::<()>(table);
                 }
             }

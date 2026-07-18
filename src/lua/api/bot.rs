@@ -40,7 +40,9 @@ fn status_to_str(status: SupervisorStatus) -> String {
         SupervisorStatus::Disconnected => "disconnected".to_string(),
         SupervisorStatus::Connecting => "connecting".to_string(),
         SupervisorStatus::Connected => "connected".to_string(),
-        SupervisorStatus::ReconnectScheduled { attempt } => format!("reconnect_scheduled:{attempt}"),
+        SupervisorStatus::ReconnectScheduled { attempt } => {
+            format!("reconnect_scheduled:{attempt}")
+        }
         SupervisorStatus::Stopped => "stopped".to_string(),
     }
 }
@@ -91,17 +93,21 @@ fn control_outcome(result: Result<(), ControlError>) -> ActionOutcome {
     }
 }
 
-fn gui_outcome(result: Result<InventoryOutcome, crate::core::supervisor::GuiActionError>) -> ActionOutcome {
+fn gui_outcome(
+    result: Result<InventoryOutcome, crate::core::supervisor::GuiActionError>,
+) -> ActionOutcome {
     match result {
         Ok(InventoryOutcome::Sent) => ActionOutcome::DeliveredSent,
         Ok(InventoryOutcome::Confirmed { state_id }) => ActionOutcome::Confirmed { state_id },
         Ok(InventoryOutcome::Corrected { state_id }) => ActionOutcome::Corrected { state_id },
-        Ok(InventoryOutcome::TimedOut) => {
-            ActionOutcome::Error(ScriptError::new("inventory_timeout", "inventory transaction timed out").retryable(true))
-        }
-        Ok(InventoryOutcome::WindowClosed) => {
-            ActionOutcome::Error(ScriptError::new("no_gui_open", "the window closed before the transaction completed"))
-        }
+        Ok(InventoryOutcome::TimedOut) => ActionOutcome::Error(
+            ScriptError::new("inventory_timeout", "inventory transaction timed out")
+                .retryable(true),
+        ),
+        Ok(InventoryOutcome::WindowClosed) => ActionOutcome::Error(ScriptError::new(
+            "no_gui_open",
+            "the window closed before the transaction completed",
+        )),
         Ok(InventoryOutcome::Rejected(e)) => ActionOutcome::Error(e.into()),
         Err(e) => ActionOutcome::Error(e.into()),
     }
@@ -136,7 +142,9 @@ pub fn parse_gui_click(mode: &str) -> mlua::Result<GuiClick> {
         None => (mode, None),
     };
     fn need_param<'a>(mode: &str, p: Option<&'a str>) -> mlua::Result<&'a str> {
-        p.ok_or_else(|| mlua::Error::RuntimeError(format!("mode \"{mode}\" requires a \":param\" suffix")))
+        p.ok_or_else(|| {
+            mlua::Error::RuntimeError(format!("mode \"{mode}\" requires a \":param\" suffix"))
+        })
     }
     Ok(match kind {
         "left" => GuiClick::Left,
@@ -144,9 +152,9 @@ pub fn parse_gui_click(mode: &str) -> mlua::Result<GuiClick> {
         "shift_left" => GuiClick::ShiftLeft,
         "shift_right" => GuiClick::ShiftRight,
         "hotbar_swap" => {
-            let n: u8 = need_param(mode, param)?
-                .parse()
-                .map_err(|_| mlua::Error::RuntimeError("hotbar_swap param must be 0..=8".to_string()))?;
+            let n: u8 = need_param(mode, param)?.parse().map_err(|_| {
+                mlua::Error::RuntimeError("hotbar_swap param must be 0..=8".to_string())
+            })?;
             GuiClick::HotbarSwap(n)
         }
         "offhand_swap" => GuiClick::OffhandSwap,
@@ -172,7 +180,13 @@ pub fn parse_gui_click(mode: &str) -> mlua::Result<GuiClick> {
 /// `crate::lua::worker::MAX_PENDING_CALLBACKS` (oldest evicted on
 /// overflow — consistent with this wrapper's overflow-drops-oldest
 /// philosophy elsewhere).
-fn register_callback(lua: &Lua, state: &Rc<WorkerState>, bot_id: u32, request_id: u64, callback: Value) -> mlua::Result<()> {
+fn register_callback(
+    lua: &Lua,
+    state: &Rc<WorkerState>,
+    bot_id: u32,
+    request_id: u64,
+    callback: Value,
+) -> mlua::Result<()> {
     if let Value::Function(f) = callback {
         let key = lua.create_registry_value(f)?;
         let mut callbacks = state.callbacks.borrow_mut();
@@ -410,67 +424,100 @@ impl UserData for LuaBot {
         // ---- State (synchronous, read-only, detached) -----------------
         methods.add_method("state", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::state::state_snapshot_to_table(lua, &handle.state().borrow()).map(Value::Table),
+                Some(handle) => crate::lua::convert::state::state_snapshot_to_table(
+                    lua,
+                    &handle.state().borrow(),
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("player", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::state::player_to_table(lua, &handle.state().borrow().player).map(Value::Table),
+                Some(handle) => crate::lua::convert::state::player_to_table(
+                    lua,
+                    &handle.state().borrow().player,
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("entities", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::state::entities_to_table(lua, &handle.state().borrow().entities).map(Value::Table),
+                Some(handle) => crate::lua::convert::state::entities_to_table(
+                    lua,
+                    &handle.state().borrow().entities,
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("players", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::state::players_to_table(lua, &handle.state().borrow().players).map(Value::Table),
+                Some(handle) => crate::lua::convert::state::players_to_table(
+                    lua,
+                    &handle.state().borrow().players,
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("inventory", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => {
-                    crate::lua::convert::state::inventory_state_to_table(lua, &handle.state().borrow().inventory).map(Value::Table)
-                }
+                Some(handle) => crate::lua::convert::state::inventory_state_to_table(
+                    lua,
+                    &handle.state().borrow().inventory,
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("hud", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::hud::hud_state_to_table(lua, &handle.state().borrow().hud).map(Value::Table),
+                Some(handle) => {
+                    crate::lua::convert::hud::hud_state_to_table(lua, &handle.state().borrow().hud)
+                        .map(Value::Table)
+                }
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("presentation", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::presentation::presentation_state_to_table(lua, &handle.state().borrow().presentation)
-                    .map(Value::Table),
+                Some(handle) => crate::lua::convert::presentation::presentation_state_to_table(
+                    lua,
+                    &handle.state().borrow().presentation,
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
         methods.add_method("scoreboard", |lua, this, ()| {
             match this.state.bot_handle(this.bot_id) {
-                Some(handle) => crate::lua::convert::scoreboard::scoreboard_state_to_table(lua, &handle.state().borrow().scoreboard)
-                    .map(Value::Table),
+                Some(handle) => crate::lua::convert::scoreboard::scoreboard_state_to_table(
+                    lua,
+                    &handle.state().borrow().scoreboard,
+                )
+                .map(Value::Table),
                 None => Ok(Value::Nil),
             }
         });
 
         // ---- GUI inspection / clicking --------------------------------
-        methods.add_method("open_gui", |lua, this, ()| match this.state.bot_handle(this.bot_id) {
-            Some(handle) => crate::lua::convert::gui::opt_gui_view_to_value(lua, handle.open_gui().as_ref()),
-            None => Ok(Value::Nil),
+        methods.add_method("open_gui", |lua, this, ()| {
+            match this.state.bot_handle(this.bot_id) {
+                Some(handle) => {
+                    crate::lua::convert::gui::opt_gui_view_to_value(lua, handle.open_gui().as_ref())
+                }
+                None => Ok(Value::Nil),
+            }
         });
         methods.add_method(
             "click_gui",
             |lua, this, (slot, mode, callback): (usize, String, Value)| {
                 let click = parse_gui_click(&mode)?;
-                let request_id = spawn_action(this, move |h| async move { gui_outcome(h.click_open_gui_slot(slot, click).await) });
+                let request_id = spawn_action(this, move |h| async move {
+                    gui_outcome(h.click_open_gui_slot(slot, click).await)
+                });
                 register_callback(lua, &this.state, this.bot_id, request_id, callback)?;
                 Ok(request_id)
             },
@@ -479,17 +526,28 @@ impl UserData for LuaBot {
             "click_inventory",
             |lua, this, (slot, mode, callback): (usize, String, Value)| {
                 let click = parse_gui_click(&mode)?;
-                let request_id = spawn_action(this, move |h| async move { gui_outcome(h.click_inventory_slot(slot, click).await) });
+                let request_id = spawn_action(this, move |h| async move {
+                    gui_outcome(h.click_inventory_slot(slot, click).await)
+                });
                 register_callback(lua, &this.state, this.bot_id, request_id, callback)?;
                 Ok(request_id)
             },
         );
 
         // ---- Timers (bot-scoped, run on this bot's own worker) --------
-        methods.add_method("set_timeout", |lua, this, (delay_ms, func): (u64, mlua::Function)| {
-            crate::lua::api::timers::schedule(&this.state, lua, func, Duration::from_millis(delay_ms), None)
+        methods.add_method(
+            "set_timeout",
+            |lua, this, (delay_ms, func): (u64, mlua::Function)| {
+                crate::lua::api::timers::schedule(
+                    &this.state,
+                    lua,
+                    func,
+                    Duration::from_millis(delay_ms),
+                    None,
+                )
                 .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
-        });
+            },
+        );
         methods.add_method(
             "set_interval",
             |lua, this, (interval_ms, func): (u64, mlua::Function)| {
@@ -508,13 +566,26 @@ impl UserData for LuaBot {
         methods.add_method("on", |lua, this, (name, func): (String, mlua::Function)| {
             let name = crate::lua::api::intern_event_name(&name)?;
             let key = lua.create_registry_value(func)?;
-            Ok(this.state.handlers.borrow_mut().register_bot(this.bot_id, name, key, false))
+            Ok(this
+                .state
+                .handlers
+                .borrow_mut()
+                .register_bot(this.bot_id, name, key, false))
         });
-        methods.add_method("once", |lua, this, (name, func): (String, mlua::Function)| {
-            let name = crate::lua::api::intern_event_name(&name)?;
-            let key = lua.create_registry_value(func)?;
-            Ok(this.state.handlers.borrow_mut().register_bot(this.bot_id, name, key, true))
+        methods.add_method(
+            "once",
+            |lua, this, (name, func): (String, mlua::Function)| {
+                let name = crate::lua::api::intern_event_name(&name)?;
+                let key = lua.create_registry_value(func)?;
+                Ok(this
+                    .state
+                    .handlers
+                    .borrow_mut()
+                    .register_bot(this.bot_id, name, key, true))
+            },
+        );
+        methods.add_method("off", |_, this, id: u64| {
+            Ok(this.state.handlers.borrow_mut().remove(id))
         });
-        methods.add_method("off", |_, this, id: u64| Ok(this.state.handlers.borrow_mut().remove(id)));
     }
 }
