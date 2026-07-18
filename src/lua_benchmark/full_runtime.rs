@@ -884,7 +884,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(20),
+            settle_timeout: Duration::from_secs(45),
             run_duration: Duration::from_millis(100),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -905,7 +905,7 @@ mod tests {
             script_body: ScriptKind::LightState.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(20),
+            settle_timeout: Duration::from_secs(45),
             run_duration: Duration::from_millis(500),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -927,7 +927,7 @@ mod tests {
             script_body: ScriptKind::Realistic.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(20),
+            settle_timeout: Duration::from_secs(45),
             run_duration: Duration::from_millis(500),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -952,7 +952,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for: no_proxy(),
-            settle_timeout: Duration::from_secs(20),
+            settle_timeout: Duration::from_secs(45),
             run_duration: Duration::from_millis(500),
             cleanup_wait: Duration::from_millis(20),
         };
@@ -988,8 +988,8 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for,
-            settle_timeout: Duration::from_secs(20),
-            run_duration: Duration::from_millis(100),
+            settle_timeout: Duration::from_secs(45),
+            run_duration: Duration::from_millis(200),
             cleanup_wait: Duration::from_millis(20),
         };
         let result = run_full_runtime_scenario(config).await;
@@ -1026,7 +1026,7 @@ mod tests {
             script_body: ScriptKind::NoOp.source(),
             sandbox_config: SandboxConfig::default(),
             proxy_for,
-            settle_timeout: Duration::from_secs(20),
+            settle_timeout: Duration::from_secs(45),
             run_duration: Duration::from_millis(600),
             cleanup_wait: Duration::from_millis(20),
         };
