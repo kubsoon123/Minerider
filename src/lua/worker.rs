@@ -35,13 +35,29 @@ pub struct StartupPayload {
     pub bot_handles: Arc<HashMap<u32, SupervisorHandle>>,
 }
 
+/// What a worker blocked in `swarm:connect_all()` is released with:
+/// either the finalized startup payload, or an abort reason if startup
+/// failed for *any* reason (another worker failed, the coordinator never
+/// called `connect_all`, the startup timeout elapsed, proxy resolution
+/// failed, or bot spawning failed). A worker released with `Aborted`
+/// surfaces it as a Lua error from `connect_all()`, which propagates out
+/// of that worker's top-level script `exec()` and ends that worker's
+/// thread cleanly — no worker is ever left blocked on a barrier that will
+/// never open.
+#[derive(Clone)]
+pub enum StartupOutcome {
+    Started(Arc<StartupPayload>),
+    Aborted(Arc<str>),
+}
+
 /// A one-time synchronization point: the coordinator publishes the
 /// finalized registry + bot handles exactly once; every worker (including
 /// the coordinator itself) blocks in `swarm:connect_all()` until it's
-/// available. This is the "wait at a startup barrier, then begin
-/// connecting" step the two-phase script-loading model requires.
+/// available (or startup is aborted). This is the "wait at a startup
+/// barrier, then begin connecting" step the two-phase script-loading model
+/// requires.
 pub struct StartupBarrier {
-    state: Mutex<Option<Arc<StartupPayload>>>,
+    state: Mutex<Option<StartupOutcome>>,
     condvar: Condvar,
 }
 
@@ -53,7 +69,7 @@ impl StartupBarrier {
         })
     }
 
-    pub fn wait(&self) -> Arc<StartupPayload> {
+    pub fn wait(&self) -> StartupOutcome {
         let mut guard = self.state.lock().expect("startup barrier poisoned");
         while guard.is_none() {
             guard = self.condvar.wait(guard).expect("startup barrier poisoned");
@@ -62,15 +78,46 @@ impl StartupBarrier {
     }
 
     /// Non-blocking poll used by `swarm:status()` before the barrier opens.
-    pub fn peek(&self) -> Option<Arc<StartupPayload>> {
+    pub fn peek(&self) -> Option<StartupOutcome> {
         self.state.lock().expect("startup barrier poisoned").clone()
     }
 
     pub fn publish(&self, payload: Arc<StartupPayload>) {
         let mut guard = self.state.lock().expect("startup barrier poisoned");
-        *guard = Some(payload);
-        self.condvar.notify_all();
+        // A barrier already resolved (e.g. aborted first by a racing
+        // failure) must never be silently overwritten — first outcome
+        // wins, exactly like `abort` below.
+        if guard.is_none() {
+            *guard = Some(StartupOutcome::Started(payload));
+            self.condvar.notify_all();
+        }
     }
+
+    /// Releases every worker currently (or later) blocked in
+    /// `connect_all()` with a typed failure instead of a payload. Safe to
+    /// call more than once or concurrently with `publish` — only the first
+    /// outcome ever takes effect.
+    pub fn abort(&self, reason: impl Into<Arc<str>>) {
+        let mut guard = self.state.lock().expect("startup barrier poisoned");
+        if guard.is_none() {
+            *guard = Some(StartupOutcome::Aborted(reason.into()));
+            self.condvar.notify_all();
+        }
+    }
+}
+
+/// What one worker reports back to the async orchestrator during startup —
+/// see `crate::lua::runtime::run_swarm`'s startup-collection loop. Sent
+/// exactly once per worker per `run_swarm` call, from that worker's own
+/// dedicated thread (never blocks: backed by an unbounded channel).
+pub enum WorkerStartupReport {
+    /// This worker's script ran to the point of calling
+    /// `swarm:connect_all()` and is now blocked on the startup barrier.
+    ReachedBarrier,
+    /// This worker's script failed before ever reaching `connect_all()`
+    /// (sandbox init, script load, or a `configure()`/handler-registration
+    /// error) — the thread is about to exit.
+    Failed(String),
 }
 
 /// One registered handler. `key` is `Rc`-wrapped since `mlua::RegistryKey`
@@ -180,6 +227,7 @@ pub struct WorkerState {
     pub config_builder: RefCell<SwarmRegistryBuilder>,
     pub config_tx: RefCell<Option<std::sync::mpsc::SyncSender<SwarmRegistry>>>,
     pub startup_barrier: Arc<StartupBarrier>,
+    pub startup_report_tx: tokio::sync::mpsc::UnboundedSender<(usize, WorkerStartupReport)>,
     pub started: RefCell<Option<Arc<StartupPayload>>>,
     pub shared_state: Arc<crate::lua::api::shared::SharedState>,
     pub pubsub: RefCell<HashMap<String, Vec<Handler>>>,
@@ -240,6 +288,7 @@ pub struct WorkerConfig {
     /// the coordinator.
     pub proxy_profile_ids: Arc<std::collections::BTreeSet<String>>,
     pub config_tx: Option<std::sync::mpsc::SyncSender<SwarmRegistry>>,
+    pub startup_report_tx: tokio::sync::mpsc::UnboundedSender<(usize, WorkerStartupReport)>,
     pub shutdown: Arc<std::sync::atomic::AtomicBool>,
     pub callback_timeout: Duration,
 }
@@ -247,13 +296,34 @@ pub struct WorkerConfig {
 /// Runs one worker to completion: loads `script_body` (defining `configure`
 /// on the coordinator only, and `on`-handlers on every worker), then loops
 /// on its queue until closed.
+///
+/// Any failure before the script reaches `swarm:connect_all()` (sandbox
+/// init, API install, script load/top-level exec) is reported via
+/// `config.startup_report_tx` as [`WorkerStartupReport::Failed`] *before*
+/// this function returns its own `Err` — the async orchestrator
+/// (`crate::lua::runtime::run_swarm`) is what actually waits on that
+/// channel, so it learns about a startup failure promptly instead of
+/// blocking forever on a coordinator that will now never call
+/// `connect_all()`. `swarm:connect_all()` itself reports
+/// [`WorkerStartupReport::ReachedBarrier`] before blocking (see
+/// `crate::lua::api::swarm`) — this function does not send that report
+/// directly.
 pub fn run_worker(
     config: WorkerConfig,
     queue: Arc<WorkerQueue>,
     script_body: &str,
 ) -> Result<WorkerReport, String> {
-    let (lua, counter) =
-        new_sandboxed_lua(&config.sandbox).map_err(|e| format!("sandbox init failed: {e}"))?;
+    let worker_index = config.worker_index;
+    let startup_report_tx = config.startup_report_tx.clone();
+    let report_startup_failure = |reason: String| {
+        let _ = startup_report_tx.send((worker_index, WorkerStartupReport::Failed(reason.clone())));
+        reason
+    };
+
+    let (lua, counter) = match new_sandboxed_lua(&config.sandbox) {
+        Ok(pair) => pair,
+        Err(e) => return Err(report_startup_failure(format!("sandbox init failed: {e}"))),
+    };
 
     let state = Rc::new(WorkerState {
         worker_index: config.worker_index,
@@ -269,6 +339,7 @@ pub fn run_worker(
         config_builder: RefCell::new(SwarmRegistryBuilder::new(config.proxy_profile_ids)),
         config_tx: RefCell::new(config.config_tx),
         startup_barrier: config.startup_barrier,
+        startup_report_tx: config.startup_report_tx,
         started: RefCell::new(None),
         shared_state: config.shared_state,
         pubsub: RefCell::new(HashMap::new()),
@@ -277,13 +348,15 @@ pub fn run_worker(
         callback_timeout: config.callback_timeout,
     });
 
-    crate::lua::api::install(&lua, state.clone())
-        .map_err(|e| format!("api install failed: {e}"))?;
+    if let Err(e) = crate::lua::api::install(&lua, state.clone()) {
+        return Err(report_startup_failure(format!("api install failed: {e}")));
+    }
 
-    lua.load(script_body)
-        .set_name("swarm_script")
-        .exec()
-        .map_err(|e| format!("script load/top-level exec failed: {e}"))?;
+    if let Err(e) = lua.load(script_body).set_name("swarm_script").exec() {
+        return Err(report_startup_failure(format!(
+            "script load/top-level exec failed: {e}"
+        )));
+    }
 
     let mut report = WorkerReport {
         events_processed: 0,
@@ -543,6 +616,7 @@ mod tests {
             config_builder: RefCell::new(SwarmRegistryBuilder::default()),
             config_tx: RefCell::new(None),
             startup_barrier: StartupBarrier::new(),
+            startup_report_tx: tokio::sync::mpsc::unbounded_channel().0,
             started: RefCell::new(None),
             shared_state: Arc::new(crate::lua::api::shared::SharedState::new()),
             pubsub: RefCell::new(HashMap::new()),

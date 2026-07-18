@@ -1111,6 +1111,7 @@ mod production_smoke {
             callback_timeout: Duration::from_secs(10),
             script_body,
             proxy_profiles: Arc::new(proxy_profiles),
+            startup_timeout: Duration::from_secs(30),
         }
     }
 

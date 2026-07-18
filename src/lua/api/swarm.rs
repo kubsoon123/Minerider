@@ -175,9 +175,25 @@ impl UserData for LuaSwarm {
                     let _ = tx.send(registry);
                 }
             }
-            let payload = this.state.startup_barrier.wait();
-            *this.state.started.borrow_mut() = Some(payload);
-            Ok(())
+            // Tell the async orchestrator this worker has reached the
+            // barrier *before* blocking on it — this is what lets
+            // `run_swarm` detect "the coordinator's script finished
+            // without ever calling connect_all" and every other startup
+            // failure mode promptly instead of waiting forever (see
+            // `crate::lua::worker::WorkerStartupReport`).
+            let _ = this.state.startup_report_tx.send((
+                this.state.worker_index,
+                crate::lua::worker::WorkerStartupReport::ReachedBarrier,
+            ));
+            match this.state.startup_barrier.wait() {
+                crate::lua::worker::StartupOutcome::Started(payload) => {
+                    *this.state.started.borrow_mut() = Some(payload);
+                    Ok(())
+                }
+                crate::lua::worker::StartupOutcome::Aborted(reason) => Err(
+                    mlua::Error::RuntimeError(format!("swarm startup aborted: {reason}")),
+                ),
+            }
         });
 
         methods.add_method("disconnect_all", |_, this, ()| {
