@@ -1,9 +1,17 @@
 # Wrapper API readiness
 
-This is **Phase 1.2**: completing and stabilizing the public Rust API, not
-the wrapper. There is no Lua, Python, JavaScript, HTTP, WebSocket, FFI, or
-dashboard layer in this repository, and none is implemented in this phase.
-Nothing here should be read as a claim that a wrapper exists yet.
+This document originates from **Phase 1.2**: completing and stabilizing
+the public Rust API ahead of any wrapper. **A Lua wrapper now exists** —
+`src/lua/` (feature `lua`), documented in `docs/lua_wrapper.md` and
+`docs/lua_api_reference.md`; this table's "Available"/"Partial"/"Not
+implemented" per-module status predates it and mostly still describes the
+underlying core API accurately, but "known limitations" that the Lua layer
+has since addressed (e.g. `proxy` merged well before the wrapper was
+built) are not all re-verified here. Treat `docs/lua_api_reference.md` as
+authoritative for what the Lua wrapper itself actually exposes today; this
+page remains useful as a module-by-module map of the underlying Rust core
+surface. There is still no Python, JavaScript, HTTP, WebSocket, FFI, or
+dashboard layer, and none is planned.
 
 The purpose of this document is narrower and more durable than a phase
 changelog: it is a map, kept up to date as the API evolves, of exactly what

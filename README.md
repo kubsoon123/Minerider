@@ -128,15 +128,25 @@ feature):
 - No chat message signing (messages are sent unsigned; servers that enforce
   secure chat will reject or kick for this).
 
-**Not implemented:**
+**Lua scripting** (behind the `lua` Cargo feature, off by default — a
+normal `cargo build`/`cargo test` never compiles it):
 
-- **Lua scripting.** The architecture anticipates a Lua automation layer
-  (`minerider-lua`, see roadmap in `docs/engineering_review.md`), but it does
-  not exist yet in this repository: there is no `src/lua`, no `.lua` files,
-  and no `mlua` dependency. Bots are currently driven directly through the
-  Rust `Client` API (`control()`, `bot_state()`, `events()`). Treat any
-  mention of Lua elsewhere in the docs as a roadmap item, not a shipped
-  feature.
+```sh
+cargo run --release --features lua --bin minerider-lua -- examples/lua/swarm.lua
+```
+
+A fixed pool of 4 persistent Lua 5.4 workers (via `mlua`, vendored — no
+system Lua needed) drives one Rust-owned swarm of bots: deterministic
+`bot_id % worker_count` assignment, one `Lua` VM per worker for that
+worker's whole lifetime, never a VM or OS thread per bot or per event.
+Full scripting surface (swarm/bot/group configuration, movement/look/
+chat/hand actions, GUI inspection and clicking, state reads, events,
+timers, bounded cross-worker shared state and pub/sub, structured errors)
+— see `docs/lua_wrapper.md` (architecture) and `docs/lua_api_reference.md`
+(the complete API). Bots can also still be driven directly through the
+Rust `Client`/`ClientSupervisor` API without Lua at all
+(`control()`/`bot_state()`/`events()`), unaffected by whether the `lua`
+feature is enabled.
 
 ## Architecture
 
@@ -388,12 +398,12 @@ retried or replayed across a reconnect.
 - No per-tick entity movement events (deliberate — see
   `docs/capability_matrix.md`'s "Events" section); poll `StateSnapshot.entities`
   instead.
-- **There is no scripting/application wrapper (Lua, Python, JavaScript,
-  HTTP, WebSocket, or otherwise) in this repository.** Bots are driven
-  directly through the Rust `SupervisorHandle`/`Client` API. A wrapper
-  covering the entire MineRider public API is planned as the next phase;
-  `docs/wrapper_api_readiness.md` tracks exactly what it will have available
-  to build on.
+- **Lua scripting exists** (see above); there is still no Python,
+  JavaScript, HTTP, or WebSocket wrapper of any kind, and none is planned.
+  Bots can also always be driven directly through the Rust
+  `SupervisorHandle`/`Client` API without Lua. `docs/wrapper_api_readiness.md`
+  tracks what the Lua layer has available to build on and what's still a
+  known gap (e.g. item registry names, on-demand block queries).
 
 ## History
 
@@ -424,8 +434,17 @@ retired. Everything worth keeping from it is documented in
 - [docs/socks5_benchmark.md](docs/socks5_benchmark.md) — SOCKS5 transport
   architecture, secret handling, test inventory and local performance
   report.
-- [docs/lua_design.md](docs/lua_design.md) — design for the planned Lua
-  scripting layer (not implemented yet; see "Not implemented" above).
+- [docs/lua_wrapper.md](docs/lua_wrapper.md) — the production Lua
+  scripting layer's architecture (4-worker pool, two-phase config,
+  shared state, action model, reconnect/proxy/chunk semantics, sandbox).
+- [docs/lua_api_reference.md](docs/lua_api_reference.md) — the complete
+  Lua scripting API, method by method.
+- [docs/lua_runtime_benchmark.md](docs/lua_runtime_benchmark.md) — the
+  architecture benchmark (shared VM vs. worker pool vs. per-bot VM) that
+  the 4-worker design above is based on.
+- [docs/lua_design.md](docs/lua_design.md) — **superseded**: the original
+  one-VM-per-bot design proposal, kept for historical context only; see
+  its banner and `docs/lua_wrapper.md` for what actually shipped.
 - [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md) — reporting
   vulnerabilities, contribution and codegen rules.
 

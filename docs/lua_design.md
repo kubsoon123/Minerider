@@ -1,10 +1,41 @@
-# Lua scripting layer — design (not implemented)
+# Lua scripting layer — design (superseded, historical only)
 
-**Status: design only.** No `mlua` dependency, no `src/lua/`, no `.lua`
-files exist in this repository yet (see `README.md`'s "Not implemented"
-section). This document exists so a later, bounded session can implement
-Phase 5a without re-deriving these decisions, and so nothing here is
-mistaken for a shipped feature.
+> **SUPERSEDED.** This document's central proposal — **one `mlua::Lua` VM
+> per bot**, using `mlua`'s `send` feature so each VM can live on that
+> bot's own tokio task — was never implemented and is **not** what shipped.
+>
+> `docs/lua_runtime_benchmark.md` measured this proposal against
+> alternatives (a single shared VM, a small fixed worker pool, and this
+> per-bot design as a control comparison) at up to 800 bots. The per-bot
+> design's memory cost (≈70 KB of Lua-only memory per bot, ≈56 MiB at 800
+> bots — memory a shared/pooled design doesn't spend at all) was accepted
+> as the honestly-measured cost of that approach, but a **fixed pool of 4
+> persistent Lua workers**, with deterministic `bot_id % worker_count`
+> assignment, was recommended instead: it meets every latency target this
+> document cared about, including under an adverse slow-handler case the
+> per-bot design was never tested against, without that memory cost, and
+> without needing `send` at all (every worker's `Lua` lives on its own
+> dedicated `std::thread` for that worker's whole lifetime, never crossing
+> an `.await`).
+>
+> The production implementation lives in `src/lua/`, is documented in
+> **`docs/lua_wrapper.md`** (architecture) and **`docs/lua_api_reference.md`**
+> (the full scripting API), and ships as the `minerider-lua` binary behind
+> the `lua` Cargo feature. Where anything below conflicts with those two
+> documents, those documents are correct and this page is not.
+>
+> The rest of this page is kept for historical context only (the security
+> model below — restricted stdlib, memory limit, instruction budget,
+> consecutive-error disabling — was carried forward largely unchanged into
+> the shipped sandbox, just applied per-worker instead of per-bot). Do not
+> use the "Proposed API" section below; it does not match what's callable
+> today.
+
+**Status: superseded design proposal, not the implementation.** This
+document predates `src/lua/`, `docs/lua_runtime_benchmark.md`, and
+`docs/lua_wrapper.md`. It is retained so the reasoning that led to the
+*rejected* one-VM-per-bot approach isn't lost, not as a description of
+current or planned behavior.
 
 This design is grounded in the actual Rust APIs as of Phase 4h:
 `core::client::Client`, `core::supervisor::ClientSupervisor`,

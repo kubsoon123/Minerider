@@ -3,9 +3,9 @@
 //! Architecture:
 //!
 //! ```text
-//!                   User Bots (Lua)
+//!                   User Bots (Lua, optional — see `lua`)
 //!                        |
-//!                 Lua API Layer          (phase 5)
+//!                 Lua API Layer          (`crate::lua`, feature = "lua")
 //!                        |
 //!               MineRider Engine
 //!                        |
@@ -18,7 +18,8 @@
 //!
 //! Rust owns everything performance critical: TCP, the async runtime, the
 //! protocol, encryption, compression, world state, physics and the tick
-//! engine. Lua (phase 5) will own bot logic only.
+//! engine. Lua (`crate::lua`, behind the `lua` feature) owns bot
+//! orchestration/behavior only — see `docs/lua_wrapper.md`.
 //!
 //! Wire-protocol primitives (VarInt, framing, compression, crypto) live in
 //! the standalone [`minerider_protocol`] crate; this crate adds the async

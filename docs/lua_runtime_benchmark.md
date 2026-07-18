@@ -1,13 +1,18 @@
 # Lua runtime architecture benchmark
 
-**Status: benchmark and architecture-validation report. Not the Lua wrapper.**
-No public wrapper API, no `src/lua/` scripting layer, and no Node.js/Python/
-JS/HTTP/WebSocket binding exists in this repository as a result of this
-work. This document exists so the wrapper's *next* implementation phase can
-pick a runtime architecture from measured evidence instead of guessing —
-see `docs/lua_design.md` for the earlier design proposal this benchmark
-was commissioned to check, and the "Correction to the old design" section
-below for exactly what changed and why.
+**Status: benchmark and architecture-validation report — now implemented.**
+This document's recommendation (a fixed pool of 4 Lua workers, deterministic
+`bot_id % worker_count` assignment, no `send` feature) is exactly what
+`src/lua/` (feature `lua`, the `minerider-lua` binary) implements — see
+`docs/lua_wrapper.md` for the architecture as shipped and
+`docs/lua_api_reference.md` for the full scripting API. This page remains
+the record of the *measurements* behind that decision (this benchmark
+harness itself, `src/lua_benchmark/`, still exists behind the
+`lua-benchmark` feature and is reused by the production wrapper's own
+integration tests — see `docs/lua_wrapper.md#testing`). See
+`docs/lua_design.md` for the earlier, since-superseded design proposal this
+benchmark was commissioned to check, and the "Correction to the old
+design" section below for exactly what changed and why.
 
 ## Purpose
 
