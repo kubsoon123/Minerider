@@ -219,6 +219,7 @@ struct Report {
     command_latency_p95_us: u128,
     command_latency_p99_us: u128,
     queue_peak_depth_total: usize,
+    queue_dropped_total: u64,
     bots_connected: Option<usize>,
     reconnects_observed: Option<u64>,
     commands_routed_to_supervisor: Option<u64>,
@@ -344,6 +345,7 @@ fn run_synthetic(args: &Args) -> Result<Report, String> {
         command_latency_p95_us: result.command_latency.p95.as_micros(),
         command_latency_p99_us: result.command_latency.p99.as_micros(),
         queue_peak_depth_total: result.queue_peak_depth_total,
+        queue_dropped_total: result.queue_dropped_total,
         bots_connected: None,
         reconnects_observed: None,
         commands_routed_to_supervisor: None,
@@ -447,7 +449,8 @@ async fn run_full_runtime(args: &Args) -> Result<Report, String> {
         command_latency_p50_us: result.command_latency.p50.as_micros(),
         command_latency_p95_us: result.command_latency.p95.as_micros(),
         command_latency_p99_us: result.command_latency.p99.as_micros(),
-        queue_peak_depth_total: 0,
+        queue_peak_depth_total: result.queue_peak_depth_total,
+        queue_dropped_total: result.queue_dropped_total,
         bots_connected: Some(result.bots_connected),
         reconnects_observed: Some(result.reconnects_observed),
         commands_routed_to_supervisor: Some(result.commands_routed_to_supervisor),
@@ -497,7 +500,10 @@ fn print_console_summary(report: &Report) {
         report.enqueue_to_complete_p95_us,
         report.enqueue_to_complete_p99_us
     );
-    println!("queue_peak_depth_total={}", report.queue_peak_depth_total);
+    println!(
+        "queue_peak_depth_total={} queue_dropped_total={}",
+        report.queue_peak_depth_total, report.queue_dropped_total
+    );
     if let Some(connected) = report.bots_connected {
         println!(
             "bots_connected={connected} reconnects_observed={:?} commands_routed_to_supervisor={:?}",
