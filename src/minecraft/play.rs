@@ -318,6 +318,13 @@ pub struct StateSnapshot {
     pub server_brand: Option<String>,
 }
 
+/// Client options needed throughout play and any mid-session reconfiguration.
+#[derive(Debug, Clone, Copy)]
+pub struct PlayClientSettings {
+    pub view_distance: i8,
+    pub accept_resource_packs: bool,
+}
+
 /// Runs the play-state loop: a `select!` between the packet stream and a
 /// 20 TPS tick. Answers keep-alives, confirms teleports, acknowledges chunk
 /// batches, folds state-only packets into [`PlayState`], reports
@@ -326,8 +333,7 @@ pub struct StateSnapshot {
 pub async fn run_play(
     conn: &mut Connection,
     mut configuration: ConfigurationData,
-    view_distance: i8,
-    accept_resource_packs: bool,
+    client_settings: PlayClientSettings,
     mut control_rx: UnboundedReceiver<BotCommand>,
     state_tx: watch::Sender<StateSnapshot>,
     event_tx: broadcast::Sender<BotEvent>,
@@ -381,7 +387,7 @@ pub async fn run_play(
                         &configuration,
                         &packet,
                         &mut warned_ids,
-                        accept_resource_packs,
+                        client_settings.accept_resource_packs,
                     ).await;
                     // Publish promptly on state-changing packets (health, death,
                     // inventory, presentation, entities) rather than waiting up
@@ -460,8 +466,8 @@ pub async fn run_play(
         // to rebuild a fresh play session on the new configuration.
         configuration = crate::minecraft::configuration::run_configuration(
             conn,
-            view_distance,
-            accept_resource_packs,
+            client_settings.view_distance,
+            client_settings.accept_resource_packs,
         )
         .await?;
         debug!("reconfiguration complete; resuming play");

@@ -361,8 +361,10 @@ impl Client {
         play::run_play(
             &mut self.conn,
             self.configuration.clone(),
-            self.view_distance,
-            self.accept_resource_packs,
+            play::PlayClientSettings {
+                view_distance: self.view_distance,
+                accept_resource_packs: self.accept_resource_packs,
+            },
             control_rx,
             state_tx,
             self.event_tx.clone(),
