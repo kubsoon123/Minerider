@@ -322,12 +322,17 @@ async fn bot_event_to_bench_event(
             name_len: name.len().min(u8::MAX as usize) as u8,
         }),
         BotEvent::Inventory(inv_event) => match inv_event.as_ref() {
-            // Fires once `window_items` has been applied to local state —
-            // unlike `WindowOpened` (fires on `open_window`, before any
-            // slot contents have arrived), so `handle.open_gui()` here
-            // always sees the real slot array, not an empty placeholder.
+            // Mirrors the production `gui_opened` mapping exactly (see
+            // `crate::lua::event::inventory_event_name`): fires once per
+            // window, on its *first* full synchronization — so
+            // `handle.open_gui()` sees the real slot array (not the empty
+            // placeholder of the raw `open_window` arrival) and a script
+            // isn't handed two openings for one GUI. Later refreshes carry
+            // `first_sync = false` and are not GUI openings.
             crate::minecraft::inventory::InventoryEvent::WindowSynchronized {
-                window_id, ..
+                window_id,
+                first_sync: true,
+                ..
             } => {
                 let slots: Vec<BenchGuiSlot> = handle
                     .open_gui()

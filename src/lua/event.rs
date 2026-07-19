@@ -168,9 +168,25 @@ fn hud_event_name(event: &HudEvent) -> &'static str {
 
 fn inventory_event_name(event: &InventoryEvent) -> &'static str {
     match event {
-        InventoryEvent::WindowOpened { .. } => "gui_opened",
+        // `gui_opened` fires exactly once per opened GUI: on its first
+        // full slot synchronization, when its contents are real. The
+        // raw `open_window` arrival (slots still empty) and later full
+        // refreshes (server corrections, player-inventory snapshots)
+        // are delivered as ordinary `inventory` bookkeeping events —
+        // their tables still carry `kind = "window_opened"` /
+        // `"window_synchronized"` for scripts that want them.
+        // Previously both variants mapped to `gui_opened`, so a handler
+        // fired twice per GUI, the first time before any slot data —
+        // a script that clicked on the first firing clicked an empty,
+        // unsynchronized window.
+        InventoryEvent::WindowOpened { .. } => "inventory",
         InventoryEvent::WindowClosed { .. } => "gui_closed",
-        InventoryEvent::WindowSynchronized { .. } => "gui_opened",
+        InventoryEvent::WindowSynchronized {
+            first_sync: true, ..
+        } => "gui_opened",
+        InventoryEvent::WindowSynchronized {
+            first_sync: false, ..
+        } => "inventory",
         InventoryEvent::SlotUpdated { .. } => "inventory",
         InventoryEvent::CursorUpdated => "inventory",
         InventoryEvent::PropertyUpdated { .. } => "inventory",
@@ -216,9 +232,16 @@ fn bot_event_priority(event: &BotEvent) -> Priority {
         },
 
         BotEvent::Inventory(inner) => match **inner {
-            InventoryEvent::WindowOpened { .. }
-            | InventoryEvent::WindowClosed { .. }
-            | InventoryEvent::WindowSynchronized { .. }
+            // Only the events on the critical-delivery list are High:
+            // `gui_opened` (a window's first synchronization), `gui_closed`,
+            // and transaction outcomes. The raw `WindowOpened` arrival and
+            // non-first refreshes are `inventory` bookkeeping (Low) — a
+            // correction that resolves a click still delivers its own
+            // `TransactionFinished`, which stays High.
+            InventoryEvent::WindowClosed { .. }
+            | InventoryEvent::WindowSynchronized {
+                first_sync: true, ..
+            }
             | InventoryEvent::TransactionFinished { .. }
             | InventoryEvent::TransactionRejected { .. } => Priority::High,
             _ => Priority::Low,
@@ -293,11 +316,33 @@ mod tests {
             bot_event_name(&BotEvent::Kicked { reason: "x".into() }),
             "kicked"
         );
+        // The raw open_window arrival is bookkeeping; `gui_opened` is the
+        // window's first full synchronization, when slot data is real.
         assert_eq!(
             bot_event_name(&BotEvent::Inventory(Box::new(
                 InventoryEvent::WindowOpened { window_id: 1 }
             ))),
+            "inventory"
+        );
+        assert_eq!(
+            bot_event_name(&BotEvent::Inventory(Box::new(
+                InventoryEvent::WindowSynchronized {
+                    window_id: 1,
+                    state_id: 1,
+                    first_sync: true,
+                }
+            ))),
             "gui_opened"
+        );
+        assert_eq!(
+            bot_event_name(&BotEvent::Inventory(Box::new(
+                InventoryEvent::WindowSynchronized {
+                    window_id: 1,
+                    state_id: 2,
+                    first_sync: false,
+                }
+            ))),
+            "inventory"
         );
         assert_eq!(
             bot_event_name(&BotEvent::Inventory(Box::new(

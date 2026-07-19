@@ -268,6 +268,11 @@ pub enum InventoryEvent {
     WindowSynchronized {
         window_id: i32,
         state_id: i32,
+        /// True only for a window's first full snapshot after it was
+        /// opened — the moment the GUI is actually ready to interact
+        /// with. False for later full refreshes (server corrections) and
+        /// for every player-inventory snapshot.
+        first_sync: bool,
     },
     SlotUpdated {
         window_id: i32,
@@ -338,6 +343,13 @@ pub struct Window {
     /// Container properties (furnace burn/cook progress, enchanting-table
     /// levels and costs, ...), keyed by the vanilla property index.
     pub properties: BTreeMap<i16, i16>,
+    /// Whether this window has received its first full `window_items`
+    /// snapshot yet. Distinguishes the one "GUI is now ready to interact
+    /// with" synchronization from later full refreshes (server
+    /// corrections), so consumers get exactly one ready signal per opened
+    /// window. The player's own inventory starts `true`: its join-time
+    /// snapshot is bookkeeping, never a GUI opening.
+    pub synchronized_once: bool,
 }
 
 impl Window {
@@ -350,6 +362,7 @@ impl Window {
             slots: Vec::new(),
             slots_truncated: false,
             properties: BTreeMap::new(),
+            synchronized_once: true,
         }
     }
 
@@ -362,6 +375,7 @@ impl Window {
             slots: Vec::new(),
             slots_truncated: false,
             properties: BTreeMap::new(),
+            synchronized_once: false,
         }
     }
 
@@ -482,10 +496,13 @@ impl InventoryState {
     /// recognize (already closed/replaced) is ignored rather than fatal.
     pub fn window_items(&mut self, p: &PacketWindowItems) -> Vec<InventoryEvent> {
         let mut applied = false;
+        let mut first_sync = false;
         if let Some(window) = self.window_mut(p.window_id) {
             window.slots_truncated = p.items.len() > MAX_WINDOW_SLOTS;
             window.slots = p.items.iter().take(MAX_WINDOW_SLOTS).cloned().collect();
             window.state_id = p.state_id;
+            first_sync = !window.synchronized_once;
+            window.synchronized_once = true;
             applied = true;
         }
         self.cursor = p.carried_item.clone();
@@ -494,6 +511,7 @@ impl InventoryState {
             events.push(InventoryEvent::WindowSynchronized {
                 window_id: p.window_id,
                 state_id: p.state_id,
+                first_sync,
             });
             events.extend(self.finish_window_transactions(
                 p.window_id,
@@ -949,6 +967,85 @@ mod tests {
             7,
             "opening a new window replaces the old one"
         );
+    }
+
+    #[test]
+    fn first_window_synchronization_is_flagged_and_later_refreshes_are_not() {
+        let mut inv = InventoryState::new();
+        inv.open_window(&PacketOpenWindow {
+            window_id: 5,
+            inventory_type: 2,
+            window_title: Nbt::Compound(vec![]),
+        });
+
+        // First full snapshot for this window: `first_sync = true` — the
+        // one "GUI is ready to interact with" signal.
+        let events = inv.window_items(&PacketWindowItems {
+            window_id: 5,
+            state_id: 1,
+            items: vec![item(1, 1); 3],
+            carried_item: empty_slot(),
+        });
+        let first: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, InventoryEvent::WindowSynchronized { .. }))
+            .collect();
+        assert_eq!(first.len(), 1);
+        assert!(matches!(
+            first[0],
+            InventoryEvent::WindowSynchronized {
+                window_id: 5,
+                first_sync: true,
+                ..
+            }
+        ));
+
+        // A later full refresh of the same window (a server correction) is
+        // `first_sync = false`: real, but not a fresh GUI opening.
+        let events = inv.window_items(&PacketWindowItems {
+            window_id: 5,
+            state_id: 2,
+            items: vec![item(2, 1); 3],
+            carried_item: empty_slot(),
+        });
+        let second: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, InventoryEvent::WindowSynchronized { .. }))
+            .collect();
+        assert_eq!(second.len(), 1);
+        assert!(matches!(
+            second[0],
+            InventoryEvent::WindowSynchronized {
+                window_id: 5,
+                first_sync: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn player_inventory_snapshots_are_never_a_first_sync() {
+        // The player's own inventory is synchronized at join time as
+        // bookkeeping; it must never masquerade as a GUI opening.
+        let mut inv = InventoryState::new();
+        let events = inv.window_items(&PacketWindowItems {
+            window_id: PLAYER_INVENTORY_WINDOW_ID,
+            state_id: 1,
+            items: vec![item(1, 1); 2],
+            carried_item: empty_slot(),
+        });
+        let sync: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, InventoryEvent::WindowSynchronized { .. }))
+            .collect();
+        assert_eq!(sync.len(), 1);
+        assert!(matches!(
+            sync[0],
+            InventoryEvent::WindowSynchronized {
+                first_sync: false,
+                ..
+            }
+        ));
     }
 
     #[test]

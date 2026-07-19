@@ -24,10 +24,12 @@ fn inventory_event_to_table(lua: &Lua, event: &InventoryEvent) -> mlua::Result<T
         InventoryEvent::WindowSynchronized {
             window_id,
             state_id,
+            first_sync,
         } => {
             t.set("kind", "window_synchronized")?;
             t.set("window_id", *window_id)?;
             t.set("state_id", *state_id)?;
+            t.set("first_sync", *first_sync)?;
         }
         InventoryEvent::SlotUpdated {
             window_id,

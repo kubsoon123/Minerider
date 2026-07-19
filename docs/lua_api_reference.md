@@ -373,9 +373,9 @@ as the handler's two arguments: `function(bot, event) ... end`.
 | `scoreboard` | Objective/score/display-slot changes | `kind` (`"objective_changed"`/`"display_slot_changed"`/`"score_changed"`), plus kind-specific fields |
 | `team` | Team create/remove/update/membership | `kind = "team_changed"`, `name`, `action`, `current`, `affected_members`, `rejected_members`, `applied` |
 | `hud` | Every other HUD sub-change (vitals, xp, game mode, abilities, hotbar, cooldowns, effects, attributes, respawn, world border, difficulty, spawn position) | `kind` names each sub-variant, e.g. `"vitals_changed"`, `"hotbar_changed"` |
-| `gui_opened` | A non-player window opens (fires on the *synchronized*, slot-data-populated event, not the earlier open-with-no-items one) | `window_id` |
+| `gui_opened` | A non-player window is ready to interact with — fires **exactly once** per opened window, on its *first* full slot synchronization (never on the earlier slot-less `open_window` arrival, never on later refresh corrections, never for the player's own inventory) | `window_id`, `state_id`, `first_sync = true` |
 | `gui_closed` | A non-player window closes | `window_id` |
-| `inventory` | Slot/cursor/property/hotbar-selection/transaction-lifecycle changes not covered above | `kind` names each sub-variant |
+| `inventory` | Slot/cursor/property/hotbar-selection/transaction-lifecycle changes not covered above — including the raw `open_window` arrival (`kind = "window_opened"`, slots not yet populated) and non-first full refreshes (`kind = "window_synchronized"`, `first_sync = false`) | `kind` names each sub-variant |
 | `action_result` | Completion of a previously-enqueued action | See [Action results](#action-results) |
 | `worker_overload` | This worker's critical queue is saturated | — |
 | `script_error` | A script handler raised an error | (currently log-only; see `docs/lua_wrapper.md#sandbox`) |
