@@ -172,6 +172,13 @@ pub struct RunningSwarm {
     worker_tasks: tokio::task::JoinSet<(usize, Result<WorkerReport, String>)>,
     supervisor_tasks: tokio::task::JoinSet<()>,
     bridge_tasks: tokio::task::JoinSet<()>,
+    /// One per worker — every `crate::lua::api::bot::spawn_action` task
+    /// that worker's bots have spawned holds a permit from it for exactly
+    /// that action's lifetime. `shutdown` waits for every one of these to
+    /// return to full capacity (bounded by its own `timeout`) so an
+    /// in-flight action task can never outlive the `RunningSwarm` that
+    /// spawned it.
+    action_task_semaphores: Vec<Arc<tokio::sync::Semaphore>>,
 }
 
 fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
@@ -204,6 +211,17 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
         .collect();
     let dispatcher = DispatcherHandle::new(queues.clone());
     let runtime_handle = tokio::runtime::Handle::current();
+    // One semaphore per worker, constructed here (not inside `run_worker`)
+    // specifically so `RunningSwarm::shutdown` can observe when every
+    // action task that worker's bots have spawned has actually finished —
+    // see `RunningSwarm::shutdown`'s doc comment.
+    let action_task_semaphores: Vec<Arc<tokio::sync::Semaphore>> = (0..worker_count)
+        .map(|_| {
+            Arc::new(tokio::sync::Semaphore::new(
+                crate::lua::worker::MAX_CONCURRENT_ACTION_TASKS,
+            ))
+        })
+        .collect();
     let (config_tx, config_rx) = std::sync::mpsc::sync_channel(1);
     let (startup_report_tx, mut startup_report_rx) =
         tokio::sync::mpsc::unbounded_channel::<(usize, WorkerStartupReport)>();
@@ -236,6 +254,7 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
             startup_report_tx: startup_report_tx.clone(),
             shutdown: shutdown.clone(),
             callback_timeout: config.callback_timeout,
+            action_task_semaphore: action_task_semaphores[worker_index].clone(),
         };
         let queue = queue.clone();
         let script = config.script_body.clone();
@@ -359,6 +378,7 @@ pub async fn run_swarm(config: SwarmRuntimeConfig) -> Result<RunningSwarm, Runti
         worker_tasks,
         supervisor_tasks,
         bridge_tasks,
+        action_task_semaphores,
     })
 }
 
@@ -545,10 +565,21 @@ impl RunningSwarm {
         self.shutdown.load(Ordering::Acquire)
     }
 
-    /// Graceful shutdown: stop every bot's supervisor, close every
-    /// worker's queue (unblocking its dispatch loop), wait (bounded by
-    /// `timeout`) for the event-bridge and supervisor tasks to finish,
-    /// then join every worker task.
+    /// Graceful shutdown, bounded by one `timeout` covering the *entire*
+    /// sequence, not each step separately: stop every bot's supervisor,
+    /// close every worker's queue (unblocking its dispatch loop and
+    /// rejecting any further push — see `WorkerQueue::push`), wait for the
+    /// event-bridge and supervisor tasks to finish, wait for every
+    /// in-flight action task (`crate::lua::api::bot::spawn_action`) to
+    /// actually complete — proven by every permit its worker's
+    /// `action_task_semaphore` handed out being returned, via
+    /// `acquire_many` rather than a busy-poll — and only then join every
+    /// worker thread. By the time a worker thread exits on its own (see
+    /// `crate::lua::worker::run_worker`'s `shutdown_cleanup` call), every
+    /// callback still pending *at that point* was already resolved with a
+    /// typed `shutdown` error and every timer cleared; this additionally
+    /// guarantees no action task spawned *before* that point is still
+    /// running when `shutdown` returns.
     pub async fn shutdown(mut self, timeout: Duration) {
         self.shutdown.store(true, Ordering::Release);
         for handle in self.bot_handles.values() {
@@ -556,9 +587,15 @@ impl RunningSwarm {
         }
         self.dispatcher.close_all();
 
+        let action_task_semaphores = std::mem::take(&mut self.action_task_semaphores);
         let _ = tokio::time::timeout(timeout, async {
             while self.supervisor_tasks.join_next().await.is_some() {}
             while self.bridge_tasks.join_next().await.is_some() {}
+            for semaphore in &action_task_semaphores {
+                let _ = semaphore
+                    .acquire_many(crate::lua::worker::MAX_CONCURRENT_ACTION_TASKS as u32)
+                    .await;
+            }
             while self.worker_tasks.join_next().await.is_some() {}
         })
         .await;

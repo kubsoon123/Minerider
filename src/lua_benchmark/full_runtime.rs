@@ -1170,6 +1170,72 @@ mod production_smoke {
         swarm.shutdown(Duration::from_secs(5)).await;
     }
 
+    /// The core Fix 8 regression: an action's one-shot callback must never
+    /// be silently dropped by shutdown, even when it's still in flight the
+    /// moment `shutdown()` is called — either it completes normally first,
+    /// or `RunningSwarm::shutdown`'s wait for every in-flight action task
+    /// (via each worker's `action_task_semaphore`) blocks shutdown from
+    /// returning until it does, and the callback function itself always
+    /// runs (with a normal or a typed `shutdown`-error result) — never
+    /// neither. Deliberately shuts down as soon as the action is known to
+    /// have been *issued* (not waiting for it to naturally resolve first),
+    /// to actually exercise the in-flight race rather than only the
+    /// already-settled case `connects_dispatches_events_and_completes_a_gui_click_action`
+    /// above covers.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shutdown_never_silently_drops_an_in_flight_action_callback() {
+        let (port, _server_task, _kick_tx) =
+            spawn_mock_server(ScenarioKind::RealisticState, 1).await;
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                swarm:add_bot({{username = "Bot0", server = "main"}})
+            end)
+            swarm:on("gui_opened", function(bot, event)
+                swarm.shared:set("click_issued", true)
+                bot:click_gui(0, "left", function(result)
+                    swarm.shared:set("callback_ran", true)
+                    swarm.shared:set("callback_ok", result.ok)
+                end)
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+        let swarm = run_swarm(base_config(1, script))
+            .await
+            .expect("swarm must start");
+        let shared_state = swarm.shared_state.clone();
+
+        let issued = wait_for(
+            || {
+                matches!(
+                    shared_state.get("click_issued"),
+                    Some(SharedValue::Bool(true))
+                )
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+        assert!(
+            issued,
+            "the click action must have been issued before shutdown is tested against it"
+        );
+
+        swarm.shutdown(Duration::from_secs(5)).await;
+
+        assert!(
+            matches!(
+                shared_state.get("callback_ran"),
+                Some(SharedValue::Bool(true))
+            ),
+            "the action's one-shot callback must have run by the time shutdown() returns \
+             — it must never be silently dropped, regardless of whether it completed \
+             normally or was resolved with a shutdown error"
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn default_four_workers_assign_bots_deterministically_by_id() {
         let bot_count = 6u32;
@@ -1434,6 +1500,71 @@ mod production_smoke {
                 crate::core::supervisor::SupervisorStatus::Stopped
             ));
         }
+    }
+
+    /// Fix 8's "no surviving tasks or worker threads" guarantee, proven
+    /// the same way `crate::lua::runtime::tests::repeated_failed_startups_each_return_promptly_and_do_not_accumulate_state`
+    /// proves it for *failed* startups: repeated full start → connect →
+    /// action → shutdown cycles must not progressively slow down. If
+    /// worker threads, supervisor/bridge tasks, or action tasks leaked
+    /// across cycles (instead of `shutdown` actually joining/waiting for
+    /// all of them, bounded, every time), later iterations would tend to
+    /// get slower under the growing resource pressure — a black-box smoke
+    /// check, not a precise benchmark.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn repeated_start_connect_shutdown_cycles_do_not_accumulate_state() {
+        let mut durations = Vec::new();
+        for _ in 0..5 {
+            let (port, _server_task, _kick_tx) =
+                spawn_mock_server(ScenarioKind::RealisticState, 1).await;
+            let script = format!(
+                r#"
+                swarm:configure(function()
+                    swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}}})
+                    swarm:add_bot({{username = "Bot0", server = "main"}})
+                end)
+                swarm:on("gui_opened", function(bot, event)
+                    bot:click_gui(0, "left", function(result) end)
+                end)
+                swarm:connect_all()
+                swarm:run()
+                "#
+            );
+            let start = std::time::Instant::now();
+            let swarm = run_swarm(base_config(1, script))
+                .await
+                .expect("swarm must start");
+            let handle = swarm.bot_handles.get(&0).expect("bot 0 handle").clone();
+            wait_for(
+                || {
+                    matches!(
+                        *handle.status().borrow(),
+                        crate::core::supervisor::SupervisorStatus::Connected
+                    )
+                },
+                Duration::from_secs(5),
+            )
+            .await;
+            let shutdown_finished = tokio::time::timeout(
+                Duration::from_secs(5),
+                swarm.shutdown(Duration::from_secs(4)),
+            )
+            .await
+            .is_ok();
+            assert!(
+                shutdown_finished,
+                "shutdown must complete within its bound on every cycle"
+            );
+            durations.push(start.elapsed());
+        }
+
+        let first = durations.first().copied().unwrap();
+        let last = durations.last().copied().unwrap();
+        assert!(
+            last < first * 3 + Duration::from_secs(2),
+            "iterations should not progressively slow down (leak smoke check): \
+             first={first:?} last={last:?} all={durations:?}"
+        );
     }
 
     /// The pure-Rust registry layer used by `swarm:configure` refuses

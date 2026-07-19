@@ -332,6 +332,13 @@ pub struct WorkerConfig {
     pub startup_report_tx: tokio::sync::mpsc::UnboundedSender<(usize, WorkerStartupReport)>,
     pub shutdown: Arc<std::sync::atomic::AtomicBool>,
     pub callback_timeout: Duration,
+    /// Constructed once, by `crate::lua::runtime::run_swarm`, and handed
+    /// to the one worker that will own it — not created fresh here — so
+    /// `RunningSwarm::shutdown` can observe when every action task this
+    /// worker's bots have spawned has actually finished (all permits
+    /// returned to the semaphore), the same instance `spawn_action`
+    /// acquires a permit from.
+    pub action_task_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 /// Runs one worker to completion: loads `script_body` (defining `configure`
@@ -387,7 +394,7 @@ pub fn run_worker(
         timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
         shutdown: config.shutdown,
         callback_timeout: config.callback_timeout,
-        action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_ACTION_TASKS)),
+        action_task_semaphore: config.action_task_semaphore,
     });
 
     if let Err(e) = crate::lua::api::install(&lua, state.clone()) {
@@ -424,7 +431,44 @@ pub fn run_worker(
         crate::lua::api::timers::fire_due(&lua, &state, &mut report);
     }
 
+    // Nothing this worker's Lua VM registered is left dangling once this
+    // thread returns: a pending one-shot action callback would otherwise
+    // simply be dropped (its Lua function's registry entry freed, but the
+    // script never told), and every timer would otherwise just stop
+    // firing with no `clear_timer`/completion the script can observe.
+    shutdown_cleanup(&lua, &state, &mut report);
+
     Ok(report)
+}
+
+/// Resolves every still-pending one-shot action callback with a typed
+/// `shutdown` error (the same delivery path `resolve_overflowed_callbacks`
+/// uses for a lost/rejected action), and clears every timer
+/// (`crate::lua::api::timers::clear_all`). Called exactly once, from
+/// [`run_worker`], immediately before this worker's thread returns.
+fn shutdown_cleanup(lua: &Lua, state: &Rc<WorkerState>, report: &mut WorkerReport) {
+    let pending_ids: Vec<u64> = state.callbacks.borrow().pending.keys().copied().collect();
+    for request_id in pending_ids {
+        if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+            if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
+                let result = crate::lua::dispatcher::ActionResult {
+                    request_id,
+                    bot_id: callback.bot_id,
+                    outcome: ActionOutcome::Error(crate::lua::error::ScriptError::shutdown()),
+                };
+                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
+                {
+                    report.handlers_run += 1;
+                    if let Err(e) = invoke_top_level(state, &func, table) {
+                        report.handler_errors += 1;
+                        tracing::warn!(worker = state.worker_index, error = %e, "shutdown callback itself failed");
+                    }
+                }
+            }
+            let _ = lua.remove_registry_value(callback.key);
+        }
+    }
+    crate::lua::api::timers::clear_all(state, lua);
 }
 
 /// The result of one [`invoke_top_level`] call: either a genuine sandbox
@@ -1366,6 +1410,66 @@ mod tests {
         assert!(
             displayed.ends_with('…'),
             "truncation must be visibly marked"
+        );
+    }
+
+    /// The core Fix 8 regression: `shutdown_cleanup` must resolve every
+    /// still-pending action callback with a typed `shutdown` error (not
+    /// just silently drop it — the previous behavior, since nothing ever
+    /// touched `state.callbacks`/`state.timers` before a worker thread
+    /// returned) and clear every timer.
+    #[tokio::test]
+    async fn shutdown_cleanup_resolves_pending_callbacks_with_shutdown_and_clears_timers() {
+        let state = test_state(SandboxConfig::default());
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        state.callbacks.borrow_mut().pending.insert(
+            1,
+            PendingCallback {
+                key,
+                bot_id: 0,
+                registered_at: Instant::now(),
+            },
+        );
+
+        let timer_func: mlua::Function = lua.load("function() end").eval().unwrap();
+        let timer_id = crate::lua::api::timers::schedule(
+            &state,
+            &lua,
+            timer_func,
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(state.timers.borrow().entries.contains_key(&timer_id));
+
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        shutdown_cleanup(&lua, &state, &mut report);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "shutdown");
+        assert!(
+            state.callbacks.borrow().pending.is_empty(),
+            "the callback must be removed after resolving"
+        );
+        assert!(
+            state.timers.borrow().entries.is_empty(),
+            "every timer must be cleared"
         );
     }
 }
