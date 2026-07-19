@@ -661,6 +661,175 @@ async fn select_hotbar_slot_rejects_an_out_of_range_slot() {
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }
 
+/// `use_item_on_block` sends vanilla's `block_place` with the target block,
+/// face, hand and cursor position, plus a per-session sequence.
+#[tokio::test]
+async fn use_item_on_block_sends_block_place_with_the_target_and_cursor() {
+    let port = start_and_run(|mut conn| async move {
+        let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("block_place did not arrive in time")
+            .expect("read block_place");
+        assert_eq!(packet.id, play::SERVERBOUND_BLOCK_PLACE_ID);
+        let decoded = play::PacketBlockPlace::decode(&mut PacketReader::new(&packet.payload))
+            .expect("decode block_place");
+        assert_eq!(decoded.hand, 0, "main hand");
+        assert_eq!(decoded.location.x, 10);
+        assert_eq!(decoded.location.y, 64);
+        assert_eq!(decoded.location.z, -3);
+        assert_eq!(decoded.direction, 1, "up face");
+        assert_eq!(decoded.cursor_x, 0.5);
+        assert_eq!(decoded.sequence, 1, "first action is sequence 1");
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "PlaceBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .use_item_on_block(minerider::minecraft::control::BlockPlacement {
+            x: 10,
+            y: 64,
+            z: -3,
+            face: 1,
+            hand: Hand::Main,
+            cursor_x: 0.5,
+            cursor_y: 0.5,
+            cursor_z: 0.5,
+            inside_block: false,
+        })
+        .await
+        .expect("use_item_on_block accepted while connected");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// `use_item_on_block` rejects a face outside 0..=5 before anything is sent.
+#[tokio::test]
+async fn use_item_on_block_rejects_an_out_of_range_face() {
+    let port =
+        start_and_run(|mut conn| async move { while conn.read_packet().await.is_ok() {} }).await;
+    let cfg = ClientConfig::new("127.0.0.1", port, "BadPlaceBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    let result = handle
+        .use_item_on_block(minerider::minecraft::control::BlockPlacement {
+            x: 0,
+            y: 0,
+            z: 0,
+            face: 6,
+            hand: Hand::Main,
+            cursor_x: 0.5,
+            cursor_y: 0.5,
+            cursor_z: 0.5,
+            inside_block: false,
+        })
+        .await;
+    assert!(result.is_err(), "face 6 is out of the 0..=5 range");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// `interact_entity` sends `use_entity` in its INTERACT form (mouse type 0)
+/// with the target id, hand and sneaking flag.
+#[tokio::test]
+async fn interact_entity_sends_use_entity_interact() {
+    let port = start_and_run(|mut conn| async move {
+        let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("use_entity did not arrive in time")
+            .expect("read use_entity");
+        assert_eq!(packet.id, play::SERVERBOUND_USE_ENTITY_ID);
+        let decoded = play::PacketUseEntity::decode(&mut PacketReader::new(&packet.payload))
+            .expect("decode use_entity");
+        assert_eq!(decoded.target, 4242);
+        assert_eq!(decoded.mouse, 0, "INTERACT type");
+        assert!(decoded.sneaking);
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "InteractBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .interact_entity(4242, Hand::Main, true)
+        .await
+        .expect("interact_entity accepted while connected");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// `close_gui` closes the currently open window: it sends `close_window`
+/// carrying that window's id (not window 0) and drops the local open window.
+#[tokio::test]
+async fn close_gui_sends_close_window_for_the_open_window() {
+    let port = start_and_run(|mut conn| async move {
+        send_open_window(&mut conn, 5, 27).await;
+        let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("close_window did not arrive in time")
+            .expect("read close_window");
+        assert_eq!(packet.id, play::SERVERBOUND_CLOSE_WINDOW_ID);
+        let decoded = play::PacketCloseWindow::decode(&mut PacketReader::new(&packet.payload))
+            .expect("decode close_window");
+        assert_eq!(decoded.window_id, 5, "must close the open window, not 0");
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "CloseGuiBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    wait_until_gui_open(&handle, 5).await;
+    handle.close_gui().await.expect("close_gui accepted");
+
+    // The local open window is dropped after the close.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if handle.state().borrow().inventory.open_window.is_none() {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "open window was not cleared after close_gui"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// `release_item` sends `block_dig` with the RELEASE_USE_ITEM status (5).
+#[tokio::test]
+async fn release_item_sends_block_dig_release_status() {
+    let port = start_and_run(|mut conn| async move {
+        let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("block_dig did not arrive in time")
+            .expect("read block_dig");
+        assert_eq!(packet.id, play::SERVERBOUND_BLOCK_DIG_ID);
+        let decoded = play::PacketBlockDig::decode(&mut PacketReader::new(&packet.payload))
+            .expect("decode block_dig");
+        assert_eq!(decoded.status, 5, "RELEASE_USE_ITEM");
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "ReleaseBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .release_item()
+        .await
+        .expect("release_item accepted while connected");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 async fn wait_until_gui_open(
     handle: &minerider::core::supervisor::SupervisorHandle,
     window_id: i32,

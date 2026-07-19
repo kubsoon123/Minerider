@@ -13,17 +13,18 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
-    PacketArmAnimation, PacketBlockChange, PacketChatCommand, PacketChatMessage,
-    PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow,
-    PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
-    PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
-    PacketGameStateChange, PacketHeldItemSlot, PacketHeldItemSlotServerbound, PacketKeepAlive,
-    PacketLogin, PacketMapChunk, PacketMultiBlockChange, PacketOpenWindow, PacketPing,
-    PacketPlayerInfo, PacketPlayerInput, PacketPlayerInputInputs, PacketPlayerRemove, PacketPong,
-    PacketPosition, PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn,
+    PacketArmAnimation, PacketBlockChange, PacketBlockDig, PacketBlockPlace, PacketChatCommand,
+    PacketChatMessage, PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand,
+    PacketCloseWindow, PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation,
+    PacketEntityLook, PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity,
+    PacketExperience, PacketGameStateChange, PacketHeldItemSlot, PacketHeldItemSlotServerbound,
+    PacketKeepAlive, PacketLogin, PacketMapChunk, PacketMultiBlockChange, PacketOpenWindow,
+    PacketPing, PacketPlayerInfo, PacketPlayerInput, PacketPlayerInputInputs, PacketPlayerRemove,
+    PacketPong, PacketPosition, PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn,
     PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
     PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
-    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseItem, PacketWindowItems,
+    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseEntity, PacketUseEntityHand,
+    PacketUseEntityX, PacketUseEntityY, PacketUseEntityZ, PacketUseItem, PacketWindowItems,
     CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
     CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CHUNK_BATCH_START_ID,
     CLIENTBOUND_CLOSE_WINDOW_ID, CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
@@ -39,15 +40,16 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_TILE_ENTITY_DATA_ID,
     CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_LIGHT_ID,
     CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_ARM_ANIMATION_ID,
-    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
-    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_HELD_ITEM_SLOT_ID,
-    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_INPUT_ID,
-    SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID, SERVERBOUND_POSITION_ID,
-    SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
-    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_TICK_END_ID, SERVERBOUND_USE_ITEM_ID,
-    SERVERBOUND_WINDOW_CLICK_ID,
+    SERVERBOUND_BLOCK_DIG_ID, SERVERBOUND_BLOCK_PLACE_ID, SERVERBOUND_CHAT_COMMAND_ID,
+    SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_CLOSE_WINDOW_ID, SERVERBOUND_FLYING_ID,
+    SERVERBOUND_HELD_ITEM_SLOT_ID, SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID,
+    SERVERBOUND_PLAYER_INPUT_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID,
+    SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_TICK_END_ID, SERVERBOUND_USE_ENTITY_ID,
+    SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
-use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Vec2f};
+use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Position, Vec2f};
 use minerider_protocol::packet::RawPacket;
 use minerider_protocol::traits::{Decode, Encode};
 use tracing::{debug, warn};
@@ -370,6 +372,16 @@ pub async fn run_play(
                     Some(BotCommand::SelectHotbarSlot(slot)) => {
                         send_select_hotbar_slot(conn, &mut state, slot).await?
                     }
+                    Some(BotCommand::UseItemOnBlock(placement)) => {
+                        send_use_item_on_block(conn, &mut state, placement).await?
+                    }
+                    Some(BotCommand::InteractEntity {
+                        entity_id,
+                        hand,
+                        sneaking,
+                    }) => send_interact_entity(conn, entity_id, hand, sneaking).await?,
+                    Some(BotCommand::ReleaseItem) => send_release_item(conn, &mut state).await?,
+                    Some(BotCommand::CloseGui) => send_close_gui(conn, &mut state).await?,
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
@@ -542,6 +554,121 @@ async fn send_select_hotbar_slot(
     let event = state.inventory.select_hotbar_slot(slot);
     state.emit_inventory(event);
     debug!(slot, "selected hotbar slot");
+    Ok(())
+}
+
+/// Vanilla `block_dig` status for "release the item currently in use" (finish
+/// eating, release a drawn bow). Values match `ServerboundPlayerActionPacket.Action`.
+const BLOCK_DIG_RELEASE_USE_ITEM: i32 = 5;
+
+/// Vanilla `use_entity` interaction type for a plain right-click interact
+/// (not attack, not interact-at).
+const USE_ENTITY_INTERACT: i32 = 0;
+
+/// Sends `block_place`: right-click a block with the held item (place a
+/// block, open a container, press a button). The `sequence` is this
+/// session's next value, like `use_item`; `world_border_hit` is always
+/// false (the bot never targets a block outside the border). No dedicated
+/// acknowledgement exists, so `Ok(())` means only "the packet was sent".
+async fn send_use_item_on_block(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    placement: crate::minecraft::control::BlockPlacement,
+) -> Result<()> {
+    let packet = PacketBlockPlace {
+        hand: placement.hand.wire_value(),
+        location: Position {
+            x: placement.x,
+            y: placement.y as i16,
+            z: placement.z,
+        },
+        direction: placement.face,
+        cursor_x: placement.cursor_x,
+        cursor_y: placement.cursor_y,
+        cursor_z: placement.cursor_z,
+        inside_block: placement.inside_block,
+        world_border_hit: false,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_PLACE_ID, &output.freeze())
+        .await?;
+    debug!(
+        x = placement.x,
+        y = placement.y,
+        z = placement.z,
+        face = placement.face,
+        "used item on block"
+    );
+    Ok(())
+}
+
+/// Sends `use_entity` in its INTERACT (right-click) form: `x/y/z` are absent
+/// (those belong to the INTERACT_AT form) and the hand is carried.
+async fn send_interact_entity(
+    conn: &mut Connection,
+    entity_id: i32,
+    hand: Hand,
+    sneaking: bool,
+) -> Result<()> {
+    let packet = PacketUseEntity {
+        target: entity_id,
+        mouse: USE_ENTITY_INTERACT,
+        x: PacketUseEntityX::Default,
+        y: PacketUseEntityY::Default,
+        z: PacketUseEntityZ::Default,
+        hand: PacketUseEntityHand::V0(hand.wire_value()),
+        sneaking,
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
+        .await?;
+    debug!(entity_id, sneaking, "interacted with entity");
+    Ok(())
+}
+
+/// Sends `block_dig` with the RELEASE_USE_ITEM status to finish an in-progress
+/// item use. Vanilla sends a zero position and the DOWN face for this status
+/// (they are meaningless for a release), plus this session's next sequence.
+async fn send_release_item(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let packet = PacketBlockDig {
+        status: BLOCK_DIG_RELEASE_USE_ITEM,
+        location: Position { x: 0, y: 0, z: 0 },
+        face: 0,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!("released item in use");
+    Ok(())
+}
+
+/// Sends `close_window` for the currently open container, folding the close
+/// into local inventory state (cancelling pending transactions, emitting
+/// events). A no-op on the wire when nothing is open — there is nothing to
+/// close, and closing the player inventory (window 0) unprompted is not what
+/// a `close_gui` caller means.
+async fn send_close_gui(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let Some(window_id) = state.inventory.open_window.as_ref().map(|w| w.id) else {
+        debug!("close_gui: no open window");
+        return Ok(());
+    };
+    // Serverbound and clientbound close_window share the same one-field
+    // struct; only the packet id differs.
+    let packet = PacketCloseWindow { window_id };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_CLOSE_WINDOW_ID, &output.freeze())
+        .await?;
+    let events = state
+        .inventory
+        .close_window(&PacketCloseWindow { window_id });
+    state.emit_inventory_events(events);
+    debug!(window_id, "closed window");
     Ok(())
 }
 

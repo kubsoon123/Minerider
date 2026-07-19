@@ -164,6 +164,43 @@ fn parse_hand(s: &str) -> mlua::Result<Hand> {
     }
 }
 
+/// Parses a `use_item_on_block` options table:
+/// `{x, y, z, face, hand?, cursor_x?, cursor_y?, cursor_z?, inside_block?}`.
+/// `x/y/z` and `face` are required; `hand` defaults to `"main"`, the cursor
+/// to the face centre (0.5), `inside_block` to false. Range checks are left
+/// to `BotCommand::validate`, but a coordinate that doesn't fit an `i32` is
+/// rejected here.
+fn parse_block_placement(t: &Table) -> mlua::Result<crate::minecraft::control::BlockPlacement> {
+    let required_i32 = |key: &str| -> mlua::Result<i32> {
+        let value: i64 = t.get::<Option<i64>>(key)?.ok_or_else(|| {
+            mlua::Error::RuntimeError(format!("use_item_on_block requires integer field `{key}`"))
+        })?;
+        i32::try_from(value).map_err(|_| {
+            mlua::Error::RuntimeError(format!(
+                "use_item_on_block field `{key}` does not fit an i32"
+            ))
+        })
+    };
+    let face_i64: i64 = t.get::<Option<i64>>("face")?.ok_or_else(|| {
+        mlua::Error::RuntimeError("use_item_on_block requires integer field `face` (0..=5)".into())
+    })?;
+    let hand = parse_hand(
+        &t.get::<Option<String>>("hand")?
+            .unwrap_or_else(|| "main".into()),
+    )?;
+    Ok(crate::minecraft::control::BlockPlacement {
+        x: required_i32("x")?,
+        y: required_i32("y")?,
+        z: required_i32("z")?,
+        face: i32::try_from(face_i64).unwrap_or(i32::MAX),
+        hand,
+        cursor_x: t.get::<Option<f32>>("cursor_x")?.unwrap_or(0.5),
+        cursor_y: t.get::<Option<f32>>("cursor_y")?.unwrap_or(0.5),
+        cursor_z: t.get::<Option<f32>>("cursor_z")?.unwrap_or(0.5),
+        inside_block: t.get::<Option<bool>>("inside_block")?.unwrap_or(false),
+    })
+}
+
 fn parse_drag_button(s: &str) -> mlua::Result<DragButton> {
     match s {
         "left" => Ok(DragButton::Left),
@@ -479,6 +516,43 @@ impl UserData for LuaBot {
             let slot = slot as i16;
             Ok(spawn_action(this, move |h| async move {
                 control_outcome(h.select_hotbar_slot(slot).await)
+            }))
+        });
+        methods.add_method("use_item_on_block", |_, this, opts: Table| {
+            let placement = parse_block_placement(&opts)?;
+            Ok(spawn_action(this, move |h| async move {
+                control_outcome(h.use_item_on_block(placement).await)
+            }))
+        });
+        methods.add_method(
+            "interact_entity",
+            |_, this, (entity_id, opts): (i64, Option<Table>)| {
+                let entity_id = i32::try_from(entity_id).map_err(|_| {
+                    mlua::Error::RuntimeError(format!("entity_id {entity_id} does not fit an i32"))
+                })?;
+                let (hand, sneaking) = match &opts {
+                    Some(t) => (
+                        parse_hand(
+                            &t.get::<Option<String>>("hand")?
+                                .unwrap_or_else(|| "main".into()),
+                        )?,
+                        t.get::<Option<bool>>("sneaking")?.unwrap_or(false),
+                    ),
+                    None => (crate::minecraft::control::Hand::Main, false),
+                };
+                Ok(spawn_action(this, move |h| async move {
+                    control_outcome(h.interact_entity(entity_id, hand, sneaking).await)
+                }))
+            },
+        );
+        methods.add_method("release_item", |_, this, ()| {
+            Ok(spawn_action(this, |h| async move {
+                control_outcome(h.release_item().await)
+            }))
+        });
+        methods.add_method("close_gui", |_, this, ()| {
+            Ok(spawn_action(this, |h| async move {
+                control_outcome(h.close_gui().await)
             }))
         });
 

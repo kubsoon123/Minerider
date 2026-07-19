@@ -256,7 +256,9 @@ pub enum SupervisorOutcome {
 /// its convenience wrappers) did not complete. Typed and centralized —
 /// never a loose string — so a caller (including the future workflow/action
 /// layer) can match on exactly what happened instead of guessing from text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: it wraps `ActionValidationError`, which carries an `f32`
+// (only `PartialEq`). `PartialEq` is all callers and tests use.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum ControlError {
     /// The action was rejected before queueing because its text cannot be
     /// represented as a valid protocol-769 chat/command action.
@@ -289,7 +291,9 @@ pub enum ControlError {
     SupervisorStopped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: wraps `ControlError`, which is only `PartialEq` (it can carry a
+// validation error holding an `f32`).
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum InventoryActionError {
     #[error(transparent)]
     Control(ControlError),
@@ -308,7 +312,8 @@ pub enum InventoryActionError {
 /// doesn't fit the wire format" are typed separately from the underlying
 /// transaction failure modes — in particular, a missing GUI is never
 /// silently redirected to the player's own inventory window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: transitively wraps `ControlError`, which is only `PartialEq`.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum GuiActionError {
     #[error("no non-player GUI is currently open")]
     NoGuiOpen,
@@ -517,6 +522,47 @@ impl SupervisorHandle {
     /// the newly held item — send this first when switching items.
     pub async fn select_hotbar_slot(&self, slot: i16) -> Result<(), ControlError> {
         self.send_command(BotCommand::SelectHotbarSlot(slot)).await
+    }
+
+    /// Right-clicks a block with the held item (vanilla `block_place`).
+    /// `placement`'s `face` (0..=5) and `cursor_*` (0.0..=1.0) are validated
+    /// before anything is sent. Like [`Self::use_item`], success means only
+    /// "the packet was sent", not that the server accepted the interaction.
+    pub async fn use_item_on_block(
+        &self,
+        placement: crate::minecraft::control::BlockPlacement,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::UseItemOnBlock(placement))
+            .await
+    }
+
+    /// Right-clicks (interacts with) an entity by its id — vanilla
+    /// `use_entity`'s INTERACT form (not attack). Success means only "the
+    /// packet was sent".
+    pub async fn interact_entity(
+        &self,
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::InteractEntity {
+            entity_id,
+            hand,
+            sneaking,
+        })
+        .await
+    }
+
+    /// Releases the item currently being used (finish eating, release a
+    /// drawn bow): vanilla `block_dig` with the RELEASE_USE_ITEM status.
+    pub async fn release_item(&self) -> Result<(), ControlError> {
+        self.send_command(BotCommand::ReleaseItem).await
+    }
+
+    /// Closes the currently open container/window (vanilla `close_window`).
+    /// A no-op on the wire if nothing is open.
+    pub async fn close_gui(&self) -> Result<(), ControlError> {
+        self.send_command(BotCommand::CloseGui).await
     }
 
     /// A read-only view of the currently open non-player window, or `None`
