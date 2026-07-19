@@ -147,7 +147,7 @@ class RuntimeManager extends EventEmitter {
     this.persistRawLine(source, line);
     const markerIndex = line.indexOf(PANEL_MARKER);
     if (markerIndex >= 0) {
-      const payload = line.slice(markerIndex + PANEL_MARKER.length).trim();
+      const payload = extractPanelJson(line, markerIndex + PANEL_MARKER.length);
       try {
         this.handlePanelEvent(JSON.parse(payload));
         return;
@@ -310,6 +310,32 @@ function stripAnsi(value) {
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
+// tracing appends structured fields (for example `worker=0`) after the Lua
+// message. Extract exactly the first complete JSON object after @panel: so
+// those fields do not become accidental input to JSON.parse. The scanner is
+// string/escape aware because event messages may legitimately contain braces.
+function extractPanelJson(line, offset) {
+  const start = line.indexOf('{', offset);
+  if (start < 0) return line.slice(offset).trim();
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < line.length; index += 1) {
+    const character = line[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === '{') depth += 1;
+    else if (character === '}' && --depth === 0) return line.slice(start, index + 1);
+  }
+  return line.slice(start).trim();
+}
+
 function safeLogName(value) {
   return String(value || 'unknown').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64) || 'unknown';
 }
@@ -318,4 +344,4 @@ function formatDiagnostic(at, source, message) {
   return `[${at}] [${source}] ${redact(String(message || ''))}\n`;
 }
 
-module.exports = { PANEL_MARKER, RuntimeManager, attachLineReader, redact, resolveExecutable, safeLogName, stripAnsi };
+module.exports = { PANEL_MARKER, RuntimeManager, attachLineReader, extractPanelJson, redact, resolveExecutable, safeLogName, stripAnsi };
