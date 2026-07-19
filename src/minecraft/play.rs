@@ -13,6 +13,7 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
+    clientbound_packet_name,
     PacketArmAnimation, PacketBlockChange, PacketBlockDig, PacketBlockPlace, PacketChatCommand,
     PacketChatMessage, PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand,
     PacketCloseWindow, PacketCraftProgressBar, PacketCustomPayload, PacketEntityDestroy,
@@ -394,7 +395,7 @@ pub async fn run_play(
                     // to one tick. Publish disconnect state before returning its
                     // terminal error as well.
                     let _ = state_tx.send(state.snapshot(state.clock.current()));
-                    result?;
+                    result.map_err(|error| with_clientbound_context(error, &packet))?;
                 }
             command = control_rx.recv(), if control_open => {
                 match command {
@@ -1253,17 +1254,50 @@ fn apply_state_packet(
     id: i32,
     payload: &[u8],
 ) -> Result<bool> {
-    if let Some(update) = decode_update(id, payload)? {
-        state.apply_presentation(update);
-        return Ok(true);
+    match decode_update(id, payload) {
+        Ok(Some(update)) => {
+            state.apply_presentation(update);
+            return Ok(true);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return Ok(ignore_malformed_optional_packet(
+                id,
+                payload.len(),
+                "presentation",
+                error,
+            ));
+        }
     }
-    if let Some(update) = decode_scoreboard_update(id, payload)? {
-        state.apply_scoreboard(update);
-        return Ok(true);
+    match decode_scoreboard_update(id, payload) {
+        Ok(Some(update)) => {
+            state.apply_scoreboard(update);
+            return Ok(true);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return Ok(ignore_malformed_optional_packet(
+                id,
+                payload.len(),
+                "scoreboard",
+                error,
+            ));
+        }
     }
-    if let Some(update) = decode_hud_update(id, payload)? {
-        state.apply_hud(update);
-        return Ok(true);
+    match decode_hud_update(id, payload) {
+        Ok(Some(update)) => {
+            state.apply_hud(update);
+            return Ok(true);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return Ok(ignore_malformed_optional_packet(
+                id,
+                payload.len(),
+                "HUD",
+                error,
+            ));
+        }
     }
     let mut r = PacketReader::new(payload);
     match id {
@@ -1521,6 +1555,48 @@ fn apply_state_packet(
     Ok(true)
 }
 
+/// Cosmetic server packets are not allowed to tear down an otherwise healthy
+/// session. Proxy networks and server plugins occasionally emit scoreboard,
+/// title or HUD payloads that do not exactly match the negotiated vanilla
+/// schema. Vanilla can continue without this client-side display state, and a
+/// headless bot should do the same while leaving a precise diagnostic behind.
+fn ignore_malformed_optional_packet(
+    id: i32,
+    len: usize,
+    subsystem: &'static str,
+    error: MineRiderError,
+) -> bool {
+    warn!(
+        id = format_args!("0x{id:02x}"),
+        name = clientbound_packet_name(id).unwrap_or("unknown"),
+        len,
+        subsystem,
+        error = %error,
+        "ignored malformed optional clientbound play packet"
+    );
+    true
+}
+
+fn with_clientbound_context(error: MineRiderError, packet: &RawPacket) -> MineRiderError {
+    match error {
+        MineRiderError::Wire(source) => MineRiderError::Protocol(format!(
+            "clientbound play packet id=0x{:02x} name={} len={} failed: {}",
+            packet.id,
+            clientbound_packet_name(packet.id).unwrap_or("unknown"),
+            packet.payload.len(),
+            source
+        )),
+        MineRiderError::Protocol(message) => MineRiderError::Protocol(format!(
+            "clientbound play packet id=0x{:02x} name={} len={} failed: {}",
+            packet.id,
+            clientbound_packet_name(packet.id).unwrap_or("unknown"),
+            packet.payload.len(),
+            message
+        )),
+        other => other,
+    }
+}
+
 /// Logs a clientbound play packet that has no handler, per its coverage
 /// class: `IntentionallyIgnored`/`StoredForLater` warn once then drop to
 /// debug; `Unsupported` warns every time; `Handled` (already dispatched
@@ -1695,6 +1771,36 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(player_input_flags(&sneak), PacketPlayerInputInputs::SHIFT);
+    }
+
+    #[test]
+    fn malformed_cosmetic_packet_does_not_disconnect_the_session() {
+        let (event_tx, _rx) = broadcast::channel(crate::minecraft::event::EVENT_CHANNEL_CAPACITY);
+        let mut state = PlayState::new(event_tx);
+        // Team name: one byte follows, but 0xff is not valid UTF-8. Some
+        // proxy/plugin combinations produce similarly malformed scoreboard
+        // packets while transferring a player between lobby sectors.
+        let handled = apply_state_packet(
+            &mut state,
+            &ConfigurationData::default(),
+            minerider_protocol::generated::v1_21_4::play::CLIENTBOUND_TEAMS_ID,
+            &[0x01, 0xff],
+        )
+        .expect("cosmetic decode failure must be non-fatal");
+        assert!(handled);
+    }
+
+    #[test]
+    fn strict_packet_errors_include_id_name_and_length() {
+        let packet = RawPacket::new(CLIENTBOUND_SET_PLAYER_INVENTORY_ID, vec![0xff, 0x00]);
+        let error = with_clientbound_context(
+            MineRiderError::Wire(minerider_protocol::ProtocolError::InvalidUtf8),
+            &packet,
+        );
+        let message = error.to_string();
+        assert!(message.contains("id=0x66"));
+        assert!(message.contains("name=set_player_inventory"));
+        assert!(message.contains("len=2"));
     }
 
     #[test]

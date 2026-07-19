@@ -23,6 +23,27 @@ test('parser zdarzeń aktualizuje status konta', () => {
   assert.equal(runtime.accounts.get('Bot01').workerId, 2);
 });
 
+test('parser zdarzeń ignoruje pola tracing po JSON-ie', () => {
+  const runtime = new RuntimeManager();
+  runtime.accounts.set('Bot01', {
+    username: 'Bot01',
+    mode: 'afk',
+    status: 'starting',
+    message: '',
+    updatedAt: null,
+    workerId: null,
+    reconnectAttempt: null
+  });
+  runtime.handleLine(
+    'stdout',
+    'INFO [lua] @panel:{"username":"Bot01","status":"preparing","message":"tekst z { klamrą } i \\\"cytatem\\\"","worker_id":0} worker=0'
+  );
+  assert.equal(runtime.accounts.get('Bot01').status, 'preparing');
+  assert.equal(runtime.accounts.get('Bot01').message, 'tekst z { klamrą } i "cytatem"');
+  assert.equal(runtime.accounts.get('Bot01').workerId, 0);
+  assert.equal(runtime.logs.some((entry) => entry.message.includes('Nieprawidłowe zdarzenie panelu')), false);
+});
+
 test('redakcja usuwa hasło z logu', () => {
   const previous = process.env.MINERIDER_BOT_PASSWORD;
   process.env.MINERIDER_BOT_PASSWORD = 'tajnehaslo';
