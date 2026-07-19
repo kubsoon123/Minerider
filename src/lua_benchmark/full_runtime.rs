@@ -1115,6 +1115,162 @@ mod production_smoke {
         }
     }
 
+    // ---- Shared infrastructure for the manual, ignored production-wrapper
+    // benchmarks below (`production_wrapper_scale_100_400_800`,
+    // `production_wrapper_combined_proxy_groups_reconnect_shared_chunks`) --
+
+    /// Every number these benchmarks produce comes from a **local loopback
+    /// mock Minecraft server and local fake SOCKS5 relays**
+    /// (`spawn_mock_server`/`crate::lua_benchmark::fake_socks5::FakeSocks5Server`
+    /// — never an external server or a real proxy). They reflect this
+    /// machine's local scheduling/memory/allocator behavior only — never
+    /// real-world public-proxy latency/throughput, or real Minecraft
+    /// server behavior. Do not extrapolate wall-clock or RSS numbers here
+    /// to a deployment using a real, network-distant proxy.
+    const LOOPBACK_DISCLAIMER: &str =
+        "Local loopback mock server + local fake SOCKS5 relays only — \
+        does not represent real-world public proxy or Minecraft server performance.";
+
+    #[derive(Debug, Clone, Default, serde::Serialize)]
+    struct StageRss {
+        baseline_kib: Option<u64>,
+        connected_kib: Option<u64>,
+        scenario_kib: Option<u64>,
+        shutdown_kib: Option<u64>,
+        cleanup_kib: Option<u64>,
+    }
+
+    #[derive(Debug, serde::Serialize)]
+    struct TimingStatsMs {
+        median: f64,
+        min: f64,
+        max: f64,
+        samples: Vec<f64>,
+    }
+
+    /// Median and min/max of `samples_ms`, not a single arbitrary
+    /// timing — local loopback wall-clock still varies run to run (OS
+    /// scheduling jitter, allocator/GC-adjacent behavior in the Lua/tokio
+    /// runtimes), and one sample can't distinguish a fluke from a real
+    /// regression. `samples_ms` must be non-empty.
+    fn compute_timing_stats(mut samples_ms: Vec<f64>) -> TimingStatsMs {
+        samples_ms.sort_by(|a, b| a.partial_cmp(b).expect("wall-clock ms is always finite"));
+        let min = *samples_ms.first().expect("at least one sample");
+        let max = *samples_ms.last().expect("at least one sample");
+        let mid = samples_ms.len() / 2;
+        let median = if samples_ms.len() % 2 == 0 {
+            (samples_ms[mid - 1] + samples_ms[mid]) / 2.0
+        } else {
+            samples_ms[mid]
+        };
+        TimingStatsMs {
+            median,
+            min,
+            max,
+            samples: samples_ms,
+        }
+    }
+
+    /// Writes `value` as pretty-printed JSON to
+    /// `docs/lua_wrapper_benchmark_results/<name>.json` — raw,
+    /// machine-readable output a PR reviewing a benchmark run can diff
+    /// against a previous one, rather than only a human-readable log
+    /// line. Best-effort: a write failure (e.g. a read-only checkout) is
+    /// logged, never a test failure — the benchmark's own measurement is
+    /// the point, not the act of persisting it.
+    fn write_benchmark_json(name: &str, value: &impl serde::Serialize) {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("docs")
+            .join("lua_wrapper_benchmark_results");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("[benchmark] could not create {}: {e}", dir.display());
+            return;
+        }
+        let path = dir.join(format!("{name}.json"));
+        match serde_json::to_string_pretty(value) {
+            Ok(json) => match std::fs::write(&path, json) {
+                Ok(()) => println!("[benchmark] wrote {}", path.display()),
+                Err(e) => eprintln!("[benchmark] could not write {}: {e}", path.display()),
+            },
+            Err(e) => eprintln!("[benchmark] could not serialize result: {e}"),
+        }
+    }
+
+    /// Runs one full start → connect → settle → shutdown → cleanup cycle
+    /// for `bot_count` bots under `scenario` (`Idle` or a real
+    /// `Chunks{..}` scenario — the mock server sends genuine synthetic
+    /// chunk packets for the latter, not just a `shared_chunks = true`
+    /// server flag with nothing behind it), returning the wall-clock time
+    /// to all-connected and process RSS at all five stages.
+    async fn run_one_scale_cycle(bot_count: u32, scenario: ScenarioKind) -> (Duration, StageRss) {
+        let (port, _server_task, _kick_tx) = spawn_mock_server(scenario, bot_count).await;
+        let mut add_bots = String::new();
+        for i in 0..bot_count {
+            add_bots.push_str(&format!(
+                "swarm:add_bot({{id = {i}, username = \"Bot{i}\", server = \"main\"}})\n"
+            ));
+        }
+        let script = format!(
+            r#"
+            swarm:configure(function()
+                swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}, shared_chunks = true}})
+                {add_bots}
+            end)
+            swarm:connect_all()
+            swarm:run()
+            "#
+        );
+
+        let baseline_kib = crate::lua_benchmark::metrics::process_rss_kib();
+        let start = std::time::Instant::now();
+        let mut config = base_config(4, script);
+        config.high_queue_capacity = 4096;
+        config.low_queue_capacity = 1024;
+        let swarm = run_swarm(config).await.expect("swarm must start");
+
+        let all_connected = wait_for(
+            || {
+                swarm.bot_handles.values().all(|h| {
+                    matches!(
+                        *h.status().borrow(),
+                        crate::core::supervisor::SupervisorStatus::Connected
+                    )
+                })
+            },
+            Duration::from_secs(120),
+        )
+        .await;
+        assert!(all_connected, "all {bot_count} bots must reach Connected");
+        let elapsed = start.elapsed();
+        let connected_kib = crate::lua_benchmark::metrics::process_rss_kib();
+
+        // Real synthetic packets for `scenario` (chunks in particular) are
+        // sent by the mock server *after* the connection settles (see
+        // `serve_one`), not as part of reaching `Connected` — a bounded
+        // settle delay, not a signal this harness can poll for, is what
+        // actually lets this process observe that traffic's memory
+        // effect before measuring.
+        tokio::time::sleep(Duration::from_millis(800)).await;
+        let scenario_kib = crate::lua_benchmark::metrics::process_rss_kib();
+
+        swarm.shutdown(Duration::from_secs(15)).await;
+        let shutdown_kib = crate::lua_benchmark::metrics::process_rss_kib();
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let cleanup_kib = crate::lua_benchmark::metrics::process_rss_kib();
+
+        (
+            elapsed,
+            StageRss {
+                baseline_kib,
+                connected_kib,
+                scenario_kib,
+                shutdown_kib,
+                cleanup_kib,
+            },
+        )
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn connects_dispatches_events_and_completes_a_gui_click_action() {
         let (port, _server_task, _kick_tx) =
@@ -1502,18 +1658,22 @@ mod production_smoke {
         }
     }
 
-    /// Fix 8's "no surviving tasks or worker threads" guarantee, proven
-    /// the same way `crate::lua::runtime::tests::repeated_failed_startups_each_return_promptly_and_do_not_accumulate_state`
-    /// proves it for *failed* startups: repeated full start → connect →
-    /// action → shutdown cycles must not progressively slow down. If
-    /// worker threads, supervisor/bridge tasks, or action tasks leaked
-    /// across cycles (instead of `shutdown` actually joining/waiting for
-    /// all of them, bounded, every time), later iterations would tend to
-    /// get slower under the growing resource pressure — a black-box smoke
-    /// check, not a precise benchmark.
+    /// Fix 8's "no surviving tasks or worker threads" guarantee, proven two
+    /// ways: the same timing-based inference
+    /// `crate::lua::runtime::tests::repeated_failed_startups_each_return_promptly_and_do_not_accumulate_state`
+    /// uses for *failed* startups (repeated cycles must not progressively
+    /// slow down), plus a direct cleanup invariant this Fix 10 adds —
+    /// `crate::lua_benchmark::metrics::process_thread_count` (OS thread
+    /// count on Linux, total handle count on Windows — either way, a
+    /// leaked worker thread, socket, or task shows up here) must not grow
+    /// materially across cycles. Timing alone can't distinguish "genuinely
+    /// slower" from "resources leaking" as the cause of a flake; this
+    /// gives a direct, platform-level signal instead of only inferring one
+    /// from wall-clock variance.
     #[tokio::test(flavor = "multi_thread")]
     async fn repeated_start_connect_shutdown_cycles_do_not_accumulate_state() {
         let mut durations = Vec::new();
+        let mut thread_counts_after_shutdown = Vec::new();
         for _ in 0..5 {
             let (port, _server_task, _kick_tx) =
                 spawn_mock_server(ScenarioKind::RealisticState, 1).await;
@@ -1556,6 +1716,8 @@ mod production_smoke {
                 "shutdown must complete within its bound on every cycle"
             );
             durations.push(start.elapsed());
+            thread_counts_after_shutdown
+                .push(crate::lua_benchmark::metrics::process_thread_count());
         }
 
         let first = durations.first().copied().unwrap();
@@ -1565,6 +1727,25 @@ mod production_smoke {
             "iterations should not progressively slow down (leak smoke check): \
              first={first:?} last={last:?} all={durations:?}"
         );
+
+        // Cleanup invariant: compares steady state *after* the first
+        // cycle's shutdown against *after* the last — not "must return to
+        // exactly its pre-loop value every single cycle", since tokio's
+        // blocking-pool threads are pooled/reused rather than necessarily
+        // reaped immediately after one `spawn_blocking` task returns (that
+        // reuse is expected, correct behavior, not a leak). Growth
+        // *without bound* across cycles is what a real leak looks like.
+        if let (Some(first_threads), Some(last_threads)) = (
+            thread_counts_after_shutdown.first().copied().flatten(),
+            thread_counts_after_shutdown.last().copied().flatten(),
+        ) {
+            assert!(
+                last_threads <= first_threads + 8,
+                "OS thread/handle count must not grow across repeated cycles \
+                 (cleanup-invariant leak check): after_first_cycle={first_threads} \
+                 after_last_cycle={last_threads} all={thread_counts_after_shutdown:?}"
+            );
+        }
     }
 
     /// The pure-Rust registry layer used by `swarm:configure` refuses
@@ -2146,12 +2327,41 @@ mod production_smoke {
         swarm.shutdown(Duration::from_secs(5)).await;
     }
 
+    #[derive(serde::Serialize)]
+    struct ScaleBenchmarkResult {
+        disclaimer: &'static str,
+        bots: u32,
+        lua_workers: usize,
+        scenario: &'static str,
+        warmup_runs: usize,
+        measured_runs: usize,
+        time_to_all_connected_ms: TimingStatsMs,
+        rss_kib: StageRss,
+    }
+
+    const SCALE_WARMUP_RUNS: usize = 1;
+    const SCALE_MEASURED_RUNS: usize = 5;
+
     /// Production-wrapper scale measurement: 100/400/800 bots through the
-    /// *real* `crate::lua::runtime::run_swarm` (4 workers, shared chunks
-    /// enabled), reporting wall-clock time-to-all-connected and process RSS
-    /// at each stage. Not run in normal CI (too slow, and the mission is
-    /// explicit that the full-scale benchmark should be manual, not
-    /// per-commit) — run explicitly with:
+    /// *real* `crate::lua::runtime::run_swarm` (4 workers), measured
+    /// separately for an idle connection and a real loaded-chunk scenario
+    /// (genuine synthetic chunk packets from the mock server — the
+    /// previous version of this benchmark set `shared_chunks = true` on
+    /// the server but only ever ran `ScenarioKind::Idle`, so no chunk ever
+    /// actually flowed through the chunk-sharing code path it claimed to
+    /// measure). One discarded warm-up run, then
+    /// `SCALE_MEASURED_RUNS` (≥5) measured runs per (bot count, scenario)
+    /// pair, reporting median/min/max wall-clock time-to-all-connected —
+    /// never a single arbitrary sample — plus baseline/connected/scenario/
+    /// shutdown/cleanup process RSS from the last measured run. Raw
+    /// results are also written as JSON under
+    /// `docs/lua_wrapper_benchmark_results/`. See `LOOPBACK_DISCLAIMER`:
+    /// every number here comes from a local loopback mock server, never a
+    /// real Minecraft server or real-world proxy.
+    ///
+    /// Not run in normal CI (too slow, and the mission is explicit that
+    /// the full-scale benchmark should be manual, not per-commit) — run
+    /// explicitly with:
     /// `cargo test --release --features lua-benchmark --lib \
     ///   lua_benchmark::full_runtime::production_smoke::production_wrapper_scale_100_400_800 \
     ///   -- --ignored --nocapture --test-threads=1`
@@ -2159,69 +2369,71 @@ mod production_smoke {
     #[ignore = "manual production-wrapper scale benchmark; see doc comment for the exact invocation"]
     async fn production_wrapper_scale_100_400_800() {
         for &bot_count in &[100u32, 400, 800] {
-            let (port, _server_task, _kick_tx) =
-                spawn_mock_server(ScenarioKind::Idle, bot_count).await;
-            let mut add_bots = String::new();
-            for i in 0..bot_count {
-                add_bots.push_str(&format!(
-                    "swarm:add_bot({{id = {i}, username = \"Bot{i}\", server = \"main\"}})\n"
-                ));
+            for (scenario_name, scenario) in [
+                ("idle", ScenarioKind::Idle),
+                (
+                    "chunks",
+                    ScenarioKind::Chunks {
+                        chunk_count: 25,
+                        personalize: true,
+                    },
+                ),
+            ] {
+                for _ in 0..SCALE_WARMUP_RUNS {
+                    let _ = run_one_scale_cycle(bot_count, scenario).await;
+                }
+
+                let mut samples_ms = Vec::with_capacity(SCALE_MEASURED_RUNS);
+                let mut last_rss = StageRss::default();
+                for _ in 0..SCALE_MEASURED_RUNS {
+                    let (elapsed, rss) = run_one_scale_cycle(bot_count, scenario).await;
+                    samples_ms.push(elapsed.as_secs_f64() * 1000.0);
+                    last_rss = rss;
+                }
+                let timing = compute_timing_stats(samples_ms);
+
+                println!(
+                    "[production_wrapper_scale] bots={bot_count} scenario={scenario_name} \
+                     median_ms={:.1} min_ms={:.1} max_ms={:.1} rss={last_rss:?}",
+                    timing.median, timing.min, timing.max
+                );
+
+                let result = ScaleBenchmarkResult {
+                    disclaimer: LOOPBACK_DISCLAIMER,
+                    bots: bot_count,
+                    lua_workers: 4,
+                    scenario: scenario_name,
+                    warmup_runs: SCALE_WARMUP_RUNS,
+                    measured_runs: SCALE_MEASURED_RUNS,
+                    time_to_all_connected_ms: timing,
+                    rss_kib: last_rss,
+                };
+                write_benchmark_json(&format!("scale_{bot_count}_{scenario_name}"), &result);
             }
-            let script = format!(
-                r#"
-                swarm:configure(function()
-                    swarm:add_server({{name = "main", host = "127.0.0.1", port = {port}, shared_chunks = true}})
-                    {add_bots}
-                end)
-                swarm:connect_all()
-                swarm:run()
-                "#
-            );
-            let rss_before = crate::lua_benchmark::metrics::process_rss_kib();
-            let start = std::time::Instant::now();
-            let mut config = base_config(4, script);
-            config.high_queue_capacity = 4096;
-            config.low_queue_capacity = 1024;
-            let swarm = run_swarm(config).await.expect("swarm must start");
-
-            let all_connected = wait_for(
-                || {
-                    swarm.bot_handles.values().all(|h| {
-                        matches!(
-                            *h.status().borrow(),
-                            crate::core::supervisor::SupervisorStatus::Connected
-                        )
-                    })
-                },
-                Duration::from_secs(120),
-            )
-            .await;
-            let elapsed = start.elapsed();
-            let rss_after = crate::lua_benchmark::metrics::process_rss_kib();
-
-            println!(
-                "[production_wrapper_scale] bots={bot_count} all_connected={all_connected} \
-                 elapsed={elapsed:?} rss_before_kib={rss_before:?} rss_after_kib={rss_after:?} \
-                 marginal_kib={:?}",
-                rss_after.zip(rss_before).map(|(a, b)| a.saturating_sub(b))
-            );
-
-            assert!(all_connected, "all {bot_count} bots must reach Connected");
-            swarm.shutdown(Duration::from_secs(15)).await;
         }
     }
 
-    /// The "representative" combined production-wrapper benchmark the
-    /// mission asks for in one run: 100 bots, 4 workers, 2 local proxy
-    /// groups (50 bots each), a reconnect subset (20% of bots get one
-    /// deliberate kick and must reconnect through their *same* proxy),
-    /// shared chunks enabled. Manual — see the invocation in
-    /// `production_wrapper_scale_100_400_800`'s doc comment (same pattern,
-    /// different test name).
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "manual production-wrapper combined benchmark; see doc comment for the exact invocation"]
-    async fn production_wrapper_combined_proxy_groups_reconnect_shared_chunks() {
-        let bot_count = 100u32;
+    struct CombinedCycleResult {
+        elapsed_to_initial_connect_ms: f64,
+        elapsed_total_ms: f64,
+        rss: StageRss,
+        proxy1_accepted: usize,
+        proxy2_accepted: usize,
+        reconnected_count: usize,
+    }
+
+    /// One full cycle of the combined benchmark: 100 bots, 4 workers, 2
+    /// local proxy groups (50 bots each, alternating even/odd id), a
+    /// `ReconnectStorm{percent: 20}` — which targets *exactly* bots
+    /// `0..19` for `bot_count = 100` (`bot_index % 100 < 20`), split
+    /// evenly 10 on proxy1 (even ids) / 10 on proxy2 (odd ids) — shared
+    /// chunks enabled. Asserts the *exact* expected reconnect and
+    /// per-proxy connection counts inline (not just a lower bound): every
+    /// one of the 20 targeted bots must reconnect exactly once (generation
+    /// reaches exactly 2, never more — the mock server only ever kicks a
+    /// bot's *first* connection), giving exactly 60 accepted connections
+    /// on each proxy (50 initial + 10 reconnects).
+    async fn run_one_combined_cycle(bot_count: u32) -> CombinedCycleResult {
         let (port, _server_task, kick_tx) =
             spawn_mock_server(ScenarioKind::ReconnectStorm { percent: 20 }, bot_count).await;
         let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(64).await;
@@ -2256,7 +2468,7 @@ mod production_smoke {
             Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy2.port)),
         );
 
-        let rss_before = crate::lua_benchmark::metrics::process_rss_kib();
+        let baseline_kib = crate::lua_benchmark::metrics::process_rss_kib();
         let start = std::time::Instant::now();
         let mut config = base_config_with_proxies(4, script, proxy_profiles);
         config.high_queue_capacity = 4096;
@@ -2275,11 +2487,12 @@ mod production_smoke {
             Duration::from_secs(60),
         )
         .await;
-        let elapsed_to_initial_connect = start.elapsed();
         assert!(
             all_connected,
             "all {bot_count} bots must reach Connected initially"
         );
+        let elapsed_to_initial_connect = start.elapsed();
+        let connected_kib = crate::lua_benchmark::metrics::process_rss_kib();
 
         // The mock server's targeted-bot kick logic waits for this signal
         // before dropping each targeted bot's first connection (see
@@ -2287,24 +2500,44 @@ mod production_smoke {
         // sending it, no reconnect is ever triggered.
         let _ = kick_tx.send(true);
 
-        // The 20% targeted subset reconnects asynchronously after the mock
-        // server's kick; wait for every bot to reach generation >= 1 (first
-        // connect) and give the targeted ~20 bots time to complete a
-        // second (reconnect) session.
-        let reconnected = wait_for(
+        let expected_reconnects = (bot_count as usize * 20) / 100;
+        let reconnected_exactly = wait_for(
             || {
                 swarm
                     .bot_handles
                     .values()
                     .filter(|h| h.generation() >= 2)
                     .count()
-                    >= (bot_count as usize) / 10
+                    >= expected_reconnects
             },
             Duration::from_secs(30),
         )
         .await;
         let elapsed_total = start.elapsed();
-        let rss_after = crate::lua_benchmark::metrics::process_rss_kib();
+        let scenario_kib = crate::lua_benchmark::metrics::process_rss_kib();
+
+        let reconnected_count = swarm
+            .bot_handles
+            .values()
+            .filter(|h| h.generation() >= 2)
+            .count();
+        assert!(
+            reconnected_exactly,
+            "all {expected_reconnects} targeted bots must reconnect, only {reconnected_count} did \
+             within the bound"
+        );
+        assert_eq!(
+            reconnected_count, expected_reconnects,
+            "exactly {expected_reconnects} bots must reconnect — no more, no fewer"
+        );
+        for handle in swarm.bot_handles.values() {
+            assert!(
+                handle.generation() <= 2,
+                "the mock server only ever kicks a bot's first connection — no bot should \
+                 reconnect more than once, but bot reached generation {}",
+                handle.generation()
+            );
+        }
 
         let proxy1_accepted = proxy1
             .accepted_connections
@@ -2312,33 +2545,127 @@ mod production_smoke {
         let proxy2_accepted = proxy2
             .accepted_connections
             .load(std::sync::atomic::Ordering::SeqCst);
-        let generation_ge_2 = swarm
-            .bot_handles
-            .values()
-            .filter(|h| h.generation() >= 2)
-            .count();
-
-        println!(
-            "[production_wrapper_combined] bots={bot_count} all_connected={all_connected} \
-             reconnected_at_least_10pct={reconnected} bots_with_generation_ge_2={generation_ge_2} \
-             elapsed_to_initial_connect={elapsed_to_initial_connect:?} elapsed_total={elapsed_total:?} \
-             proxy1_accepted={proxy1_accepted} proxy2_accepted={proxy2_accepted} \
-             rss_before_kib={rss_before:?} rss_after_kib={rss_after:?}"
+        // Half of `bot_count` bots (even ids) use proxy1, half (odd ids)
+        // use proxy2; among the 20 targeted (lowest-id) bots the same
+        // even/odd split applies, so each proxy sees exactly half the
+        // reconnects too.
+        let expected_per_proxy_initial = (bot_count as usize) / 2;
+        let expected_per_proxy_reconnects = expected_reconnects / 2;
+        let expected_per_proxy = expected_per_proxy_initial + expected_per_proxy_reconnects;
+        assert_eq!(
+            proxy1_accepted, expected_per_proxy,
+            "proxy1 must see exactly {expected_per_proxy} accepted connections \
+             ({expected_per_proxy_initial} initial + {expected_per_proxy_reconnects} reconnects)"
         );
-
-        assert!(
-            proxy1_accepted >= 50,
-            "proxy1's 50 bots must all connect through it at least once"
-        );
-        assert!(
-            proxy2_accepted >= 50,
-            "proxy2's 50 bots must all connect through it at least once"
-        );
-        assert!(
-            reconnected,
-            "at least 10% of bots must complete a reconnect (targeted 20%)"
+        assert_eq!(
+            proxy2_accepted, expected_per_proxy,
+            "proxy2 must see exactly {expected_per_proxy} accepted connections \
+             ({expected_per_proxy_initial} initial + {expected_per_proxy_reconnects} reconnects)"
         );
 
         swarm.shutdown(Duration::from_secs(15)).await;
+        let shutdown_kib = crate::lua_benchmark::metrics::process_rss_kib();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let cleanup_kib = crate::lua_benchmark::metrics::process_rss_kib();
+
+        CombinedCycleResult {
+            elapsed_to_initial_connect_ms: elapsed_to_initial_connect.as_secs_f64() * 1000.0,
+            elapsed_total_ms: elapsed_total.as_secs_f64() * 1000.0,
+            rss: StageRss {
+                baseline_kib,
+                connected_kib,
+                scenario_kib,
+                shutdown_kib,
+                cleanup_kib,
+            },
+            proxy1_accepted,
+            proxy2_accepted,
+            reconnected_count,
+        }
+    }
+
+    #[derive(serde::Serialize)]
+    struct CombinedBenchmarkResult {
+        disclaimer: &'static str,
+        bots: u32,
+        lua_workers: usize,
+        warmup_runs: usize,
+        measured_runs: usize,
+        expected_reconnects: usize,
+        expected_per_proxy_accepted: usize,
+        time_to_initial_connect_ms: TimingStatsMs,
+        time_to_total_ms: TimingStatsMs,
+        rss_kib: StageRss,
+    }
+
+    const COMBINED_WARMUP_RUNS: usize = 1;
+    const COMBINED_MEASURED_RUNS: usize = 5;
+
+    /// The "representative" combined production-wrapper benchmark the
+    /// mission asks for in one run: 100 bots, 4 workers, 2 local proxy
+    /// groups, a reconnect subset, shared chunks enabled — see
+    /// `run_one_combined_cycle`'s doc comment for the exact scenario and
+    /// the *exact* (not lower-bound) reconnect/per-proxy-connection counts
+    /// it asserts on every one of `COMBINED_MEASURED_RUNS` (≥5) runs,
+    /// after one discarded warm-up run. Reports median/min/max wall-clock
+    /// timing and RSS from the last measured run, and writes raw JSON
+    /// under `docs/lua_wrapper_benchmark_results/`. See
+    /// `LOOPBACK_DISCLAIMER`. Manual — see the invocation in
+    /// `production_wrapper_scale_100_400_800`'s doc comment (same
+    /// pattern, different test name).
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "manual production-wrapper combined benchmark; see doc comment for the exact invocation"]
+    async fn production_wrapper_combined_proxy_groups_reconnect_shared_chunks() {
+        let bot_count = 100u32;
+
+        for _ in 0..COMBINED_WARMUP_RUNS {
+            let _ = run_one_combined_cycle(bot_count).await;
+        }
+
+        let mut initial_connect_samples_ms = Vec::with_capacity(COMBINED_MEASURED_RUNS);
+        let mut total_samples_ms = Vec::with_capacity(COMBINED_MEASURED_RUNS);
+        let mut last_rss = StageRss::default();
+        let mut last = None;
+        for _ in 0..COMBINED_MEASURED_RUNS {
+            let result = run_one_combined_cycle(bot_count).await;
+            initial_connect_samples_ms.push(result.elapsed_to_initial_connect_ms);
+            total_samples_ms.push(result.elapsed_total_ms);
+            last_rss = result.rss.clone();
+            last = Some((
+                result.proxy1_accepted,
+                result.proxy2_accepted,
+                result.reconnected_count,
+            ));
+        }
+        let (proxy1_accepted, proxy2_accepted, reconnected_count) = last.expect(
+            "COMBINED_MEASURED_RUNS must be at least 1 (currently 5), so `last` is always set",
+        );
+
+        let initial_connect_timing = compute_timing_stats(initial_connect_samples_ms);
+        let total_timing = compute_timing_stats(total_samples_ms);
+
+        println!(
+            "[production_wrapper_combined] bots={bot_count} \
+             reconnected={reconnected_count} proxy1_accepted={proxy1_accepted} \
+             proxy2_accepted={proxy2_accepted} \
+             median_initial_connect_ms={:.1} median_total_ms={:.1} rss={last_rss:?}",
+            initial_connect_timing.median, total_timing.median
+        );
+
+        let expected_reconnects = (bot_count as usize * 20) / 100;
+        let expected_per_proxy_accepted = (bot_count as usize) / 2 + expected_reconnects / 2;
+        let result = CombinedBenchmarkResult {
+            disclaimer: LOOPBACK_DISCLAIMER,
+            bots: bot_count,
+            lua_workers: 4,
+            warmup_runs: COMBINED_WARMUP_RUNS,
+            measured_runs: COMBINED_MEASURED_RUNS,
+            expected_reconnects,
+            expected_per_proxy_accepted,
+            time_to_initial_connect_ms: initial_connect_timing,
+            time_to_total_ms: total_timing,
+            rss_kib: last_rss,
+        };
+        write_benchmark_json("combined_proxy_groups_reconnect_shared_chunks", &result);
     }
 }

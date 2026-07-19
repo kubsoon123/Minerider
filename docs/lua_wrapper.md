@@ -513,31 +513,65 @@ not a stable contract).
 ## Graceful shutdown
 
 `swarm:stop()` (from Lua) or `RunningSwarm::shutdown(timeout)` (from the
-CLI's Ctrl+C handler) both: stop every bot's supervisor
+CLI's Ctrl+C handler): stop every bot's supervisor
 (`SupervisorHandle::stop()`), close every worker's queue (unblocking its
-dispatch loop's next `wait_for_batch`), wait — bounded by `timeout` — for
-every event-bridge and supervisor task to finish, then join every worker
-thread. `minerider-lua`'s Ctrl+C handling: the first Ctrl+C starts this
-graceful sequence; a second Ctrl+C forces immediate process exit rather
-than waiting on a shutdown that might be stuck — the OS reclaims every
-thread on process exit regardless, so this is safe. See
+dispatch loop's next `wait_for_batch` and rejecting any further push — see
+`crate::lua::dispatcher::WorkerQueue::push`), then wait — bounded by one
+overall `timeout`, not a separate bound per step — for every event-bridge
+task, every supervisor task, and every in-flight action task
+(`crate::lua::api::bot::spawn_action`) to actually finish, before joining
+every worker thread. A worker thread itself, on its way out, resolves
+every action callback still pending *at that point* with a typed
+`shutdown` error and clears every timer — nothing a script registered is
+ever silently dropped. `minerider-lua`'s Ctrl+C handling: the first
+Ctrl+C starts this graceful sequence; a second Ctrl+C forces immediate
+process exit rather than waiting on a shutdown that might be stuck — the
+OS reclaims every thread on process exit regardless, so this is safe. See
 `production_smoke::graceful_shutdown_completes_within_the_bound_and_stops_every_bot`
-for an end-to-end proof this actually completes (not just compiles).
+and `production_smoke::shutdown_never_silently_drops_an_in_flight_action_callback`
+for end-to-end proof this actually completes and actually resolves
+in-flight work (not just compiles).
 
 ## Performance expectations
 
 No per-bot Lua VM or OS thread; no task or event-queue-entry explosion
-under normal load (bounded queues, bounded callback/timer counts); no full
-world/chunk payload ever copied into Lua (`bot:state()` and friends return
-bounded, already-tracked state — never chunk data); command routing never
-blocks core packet processing (every action is a `tokio::spawn`, never an
-inline await on the Lua thread); Lua worker count has no effect on
-process-wide chunk sharing (`SharedChunkStore` is keyed by `ServerIdentity`
-alone). See `docs/lua_runtime_benchmark.md` for the architecture-level
-numbers this design is based on; a dedicated production-wrapper overhead
-benchmark comparing this real implementation against the prototype is
-tracked separately (see the final report for what was and wasn't run in
-this session, and why).
+under normal load (bounded queues, bounded callback/timer counts, bounded
+concurrent action tasks — see `crate::lua::worker::MAX_CONCURRENT_ACTION_TASKS`);
+no full world/chunk payload ever copied into Lua (`bot:state()` and
+friends return bounded, already-tracked state — never chunk data);
+command routing never blocks core packet processing (every action is a
+`tokio::spawn`, never an inline await on the Lua thread); Lua worker
+count has no effect on process-wide chunk sharing (`SharedChunkStore` is
+keyed by `ServerIdentity` alone). See `docs/lua_runtime_benchmark.md` for
+the architecture-level numbers this design is based on.
+
+**Production-wrapper scale benchmarks.** Two manual, `#[ignore]`d tests in
+`production_smoke` measure the *real* `run_swarm`/`RunningSwarm`
+end to end, entirely over a local loopback mock Minecraft server and
+local fake SOCKS5 relays — never an external server or a real proxy (see
+each result's `disclaimer` field: none of these numbers represent
+real-world public-proxy or Minecraft-server performance):
+
+- `production_wrapper_scale_100_400_800` — 100/400/800 bots, measured
+  separately for an idle connection and a real loaded-chunk scenario
+  (genuine synthetic chunk packets, not just a `shared_chunks = true`
+  server flag with nothing behind it). One discarded warm-up run, then 5
+  measured runs per (bot count, scenario) pair, reporting median/min/max
+  wall-clock time-to-all-connected — never a single sample.
+- `production_wrapper_combined_proxy_groups_reconnect_shared_chunks` — the
+  representative single-run scenario: 100 bots, 2 local proxy groups,
+  a targeted reconnect subset, shared chunks. Asserts the *exact*
+  reconnect count and *exact* per-proxy accepted-connection count on
+  every measured run, not a lower bound.
+
+Both report baseline/connected/scenario/shutdown/cleanup process RSS from
+their last measured run, and write raw, machine-readable JSON under
+`docs/lua_wrapper_benchmark_results/` — committed as evidence of the most
+recent run, regenerated (and re-committed) by whoever runs them again;
+see that directory for the exact invocation of each. Not run in CI: no
+RSS or wall-clock threshold from these is ever asserted in a way that
+could make a CI run flaky — every number is printed/recorded, never
+gated on.
 
 ## Testing
 
@@ -553,7 +587,9 @@ this session, and why).
   bot- and swarm-scoped timers, one-bad-handler isolation, graceful
   shutdown, and — loaded via `include_str!` so it can't silently drift
   from the shipped file — `examples/lua/swarm.lua` itself, running both
-  full proxy groups end to end. Requires `--features lua-benchmark`.
+  full proxy groups end to end. Requires `--features lua-benchmark`. Two
+  tests in this module are `#[ignore]`d manual scale benchmarks, not run
+  as part of this suite — see "Performance expectations" above.
 
 ## Limitations
 
