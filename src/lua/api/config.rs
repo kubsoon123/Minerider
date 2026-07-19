@@ -135,6 +135,11 @@ pub fn parse_server_def(table: &Table) -> mlua::Result<ServerDef> {
     def.write_timeout = get_ms(table, "write_timeout_ms", def.write_timeout)?;
     def.connect_deadline = get_ms(table, "connect_deadline_ms", def.connect_deadline)?;
     def.shared_chunks = get_bool(table, "shared_chunks", def.shared_chunks)?;
+    def.accept_resource_packs = get_bool(
+        table,
+        "accept_resource_packs",
+        def.accept_resource_packs,
+    )?;
     Ok(def)
 }
 

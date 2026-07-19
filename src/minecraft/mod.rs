@@ -25,6 +25,7 @@ pub mod play;
 pub mod player;
 pub mod players;
 pub mod presentation;
+pub mod resource_pack;
 pub mod scoreboard;
 pub mod shared_world;
 pub mod text;
@@ -36,14 +37,6 @@ pub const CLIENT_BRAND: &str = "vanilla";
 
 /// The `minecraft:brand` plugin-message channel.
 pub const BRAND_CHANNEL: &str = "minecraft:brand";
-
-/// Vanilla `ResourcePackStatus.DECLINED`: the client chose not to download an
-/// offered pack. MineRider has no renderer to apply a pack to, so declining
-/// is the honest response — exactly what a real player who unchecks "Server
-/// Resource Packs" in their options does, not a fabricated "loaded" claim.
-/// A server that force-kicks players for declining a *required* pack will
-/// still kick MineRider, precisely as it would a real player who declines.
-pub const RESOURCE_PACK_STATUS_DECLINED: i32 = 1;
 
 /// The out-of-box vanilla render distance (matches a fresh install).
 pub const DEFAULT_VIEW_DISTANCE: i8 = 12;

@@ -67,6 +67,9 @@ pub struct ServerDef {
     /// `host`/`port` only (see `crate::minecraft::shared_world::ServerIdentity`)
     /// — proxy assignment can never affect which bots share payloads.
     pub shared_chunks: bool,
+    /// Whether bots accept and validate server resource packs. Mirrors the
+    /// vanilla client option and defaults to enabled.
+    pub accept_resource_packs: bool,
 }
 
 impl Default for ServerDef {
@@ -79,6 +82,7 @@ impl Default for ServerDef {
             write_timeout: Duration::from_secs(10),
             connect_deadline: Duration::from_secs(15),
             shared_chunks: true,
+            accept_resource_packs: true,
         }
     }
 }

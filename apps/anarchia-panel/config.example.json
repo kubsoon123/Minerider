@@ -1,0 +1,34 @@
+{
+  "server": {
+    "name": "authorized-server",
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 8,
+    "sharedChunks": true,
+    "acceptResourcePacks": true
+  },
+  "accounts": [
+    {
+      "username": "TestBot01",
+      "mode": "afk",
+      "enabled": true
+    }
+  ],
+  "runtime": {
+    "binary": "../../target/release/minerider-lua",
+    "workers": 1,
+    "logLevel": "info",
+    "reconnect": {
+      "enabled": true,
+      "maxRetries": "unlimited",
+      "initialDelayMs": 8000,
+      "maxDelayMs": 300000,
+      "multiplier": 1.5,
+      "stableSessionResetMs": 60000
+    }
+  },
+  "panel": {
+    "host": "127.0.0.1",
+    "port": 3000
+  }
+}

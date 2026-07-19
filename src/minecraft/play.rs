@@ -21,7 +21,7 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketHeldItemSlotServerbound, PacketKeepAlive, PacketLogin, PacketMapChunk,
     PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
     PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
-    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
+    PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
     PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
     PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
     PacketUpdateTime, PacketUseEntity, PacketUseEntityHand, PacketUseEntityX, PacketUseEntityY,
@@ -79,7 +79,6 @@ use crate::minecraft::presentation::{
 use crate::minecraft::scoreboard::{decode_update as decode_scoreboard_update, ScoreboardState};
 use crate::minecraft::shared_world::SharedWorldContext;
 use crate::minecraft::world::World;
-use crate::minecraft::RESOURCE_PACK_STATUS_DECLINED;
 
 /// Vanilla `game_state_change` reasons this client acts on. Values match the
 /// declaration order of `ClientboundGameEventPacket.Type` in the 1.21.4
@@ -329,6 +328,7 @@ pub async fn run_play(
     conn: &mut Connection,
     mut configuration: ConfigurationData,
     view_distance: i8,
+    accept_resource_packs: bool,
     mut control_rx: UnboundedReceiver<BotCommand>,
     state_tx: watch::Sender<StateSnapshot>,
     event_tx: broadcast::Sender<BotEvent>,
@@ -382,6 +382,7 @@ pub async fn run_play(
                         &configuration,
                         &packet,
                         &mut warned_ids,
+                        accept_resource_packs,
                     ).await;
                     // Publish promptly on state-changing packets (health, death,
                     // inventory, presentation, entities) rather than waiting up
@@ -459,7 +460,12 @@ pub async fn run_play(
         // registry/finish, and leaves the connection back in Play — then loop
         // to rebuild a fresh play session on the new configuration.
         configuration =
-            crate::minecraft::configuration::run_configuration(conn, view_distance).await?;
+            crate::minecraft::configuration::run_configuration(
+                conn,
+                view_distance,
+                accept_resource_packs,
+            )
+            .await?;
         debug!("reconfiguration complete; resuming play");
     }
 }
@@ -1042,6 +1048,7 @@ async fn handle_clientbound(
     configuration: &ConfigurationData,
     packet: &RawPacket,
     warned_ids: &mut std::collections::HashSet<i32>,
+    accept_resource_packs: bool,
 ) -> Result<()> {
     match packet.id {
         CLIENTBOUND_KEEP_ALIVE_ID => {
@@ -1188,15 +1195,13 @@ async fn handle_clientbound(
         CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
             let mut r = PacketReader::new(&packet.payload);
             let pack = PacketCommonAddResourcePack::decode(&mut r)?;
-            debug!(uuid = %pack.uuid, forced = pack.forced, "declining offered resource pack");
-            let response = PacketResourcePackReceive {
-                uuid: pack.uuid,
-                result: RESOURCE_PACK_STATUS_DECLINED,
-            };
-            let mut w = PacketWriter::new();
-            response.encode(&mut w)?;
-            conn.send_packet(SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, &w.freeze())
-                .await?;
+            crate::minecraft::resource_pack::handle_offer(
+                conn,
+                SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+                pack,
+                accept_resource_packs,
+            )
+            .await?;
         }
         CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
             // No client-side pack state to remove and no wire response.

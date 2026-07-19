@@ -1,0 +1,37 @@
+MINE RIDER + ANARCHIA PANEL
+==========================
+
+Nie musisz klonowac zadnego repozytorium. Pelne zrodla sa juz w tym
+katalogu.
+
+PIERWSZE URUCHOMIENIE:
+
+1. Rozpakuj caly ZIP do zwyklego katalogu, np. C:\Minerider.
+2. Kliknij prawym przyciskiem INSTALUJ.cmd i wybierz
+   "Uruchom jako administrator".
+3. Poczekaj na instalacje narzedzi i zbudowanie silnika.
+4. Uruchom START_PANEL.cmd.
+5. Podaj haslo botow. Nie bedzie ono zapisane na dysku.
+6. Otworz http://127.0.0.1:3000.
+
+KOLEJNE URUCHOMIENIA:
+
+Uruchamiaj tylko START_PANEL.cmd.
+
+Konfiguracja serwera i lista 40 kont znajduja sie w:
+apps\anarchia-panel\config.local.json
+
+Paczka uzywa 1 workera Lua. Akceptacja resource packow jest domyslnie
+wlaczona i mozna ja wylaczyc w Konfiguracji panelu.
+
+Po uruchomieniu uzyj przycisku "Pobierz logi". Pelne logi sa tez w:
+apps\anarchia-panel\logs
+
+Panel wymaga Windows 10/11 64-bit i dostepu do internetu podczas pierwszej
+instalacji. Skrypt moze zainstalowac Node.js, Rust oraz Microsoft C++ Build
+Tools przez winget. Kompilacja Rust przy pierwszym uruchomieniu moze trwac
+kilkanascie minut.
+
+Automatyczne obchodzenie weryfikacji anti-AFK i farmienie ekonomii nie sa
+wykonywane. Taka sytuacja pojawi sie w panelu jako verification_required.
+Uzywaj tylko na serwerze, na ktorym masz zgode operatora.

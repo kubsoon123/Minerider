@@ -31,6 +31,7 @@ swarm:configure(function()
         port = 25565,
         view_distance = 10,
         shared_chunks = true,
+        accept_resource_packs = true,
     })
 
     local reconnect = {

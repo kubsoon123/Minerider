@@ -525,7 +525,8 @@ async fn spawn_all_bots(
             .with_view_distance(server.view_distance)
             .with_write_timeout(server.write_timeout)
             .with_connect_deadline(server.connect_deadline)
-            .with_chunk_sharing(server.shared_chunks);
+            .with_chunk_sharing(server.shared_chunks)
+            .with_resource_pack_acceptance(server.accept_resource_packs);
         if let Some(profile_id) = &bot_def.proxy {
             let proxy_cfg = proxy_profiles
                 .get(profile_id)

@@ -113,6 +113,11 @@ pub struct ClientConfig {
     /// this process when server, world, dimension, position, and content all
     /// match. Each client still owns its position visibility and updates.
     pub share_chunk_payloads: bool,
+    /// Whether server resource packs are downloaded and acknowledged using
+    /// the vanilla status sequence. Enabled by default; disabling it makes
+    /// MineRider answer DECLINED like the vanilla "Server Resource Packs:
+    /// Disabled" option.
+    pub accept_resource_packs: bool,
 }
 
 impl ClientConfig {
@@ -131,6 +136,7 @@ impl ClientConfig {
             connect_deadline: DEFAULT_CONNECT_DEADLINE,
             proxy: None,
             share_chunk_payloads: true,
+            accept_resource_packs: true,
         }
     }
 
@@ -176,6 +182,12 @@ impl ClientConfig {
         self.share_chunk_payloads = enabled;
         self
     }
+
+    /// Enables or disables server resource-pack downloads.
+    pub fn with_resource_pack_acceptance(mut self, enabled: bool) -> Self {
+        self.accept_resource_packs = enabled;
+        self
+    }
 }
 
 /// A connected Minecraft client in [`ConnectionState::Play`].
@@ -189,6 +201,7 @@ pub struct Client {
     /// The render distance sent in `client_information`; retained so the play
     /// loop can re-run configuration on a server reconfiguration request.
     view_distance: i8,
+    accept_resource_packs: bool,
     control_tx: ControlHandle,
     control_rx: Option<UnboundedReceiver<BotCommand>>,
     state_tx: Option<watch::Sender<StateSnapshot>>,
@@ -277,7 +290,12 @@ impl Client {
         info!("entering configuration state");
 
         stage.store(ConnectStage::Configuration as u8, Ordering::Relaxed);
-        let configuration = configuration::run_configuration(&mut conn, cfg.view_distance).await?;
+        let configuration = configuration::run_configuration(
+            &mut conn,
+            cfg.view_distance,
+            cfg.accept_resource_packs,
+        )
+        .await?;
         info!("entering play state");
 
         let (control_tx, control_rx) = channel();
@@ -292,6 +310,7 @@ impl Client {
             username: success.username,
             configuration,
             view_distance: cfg.view_distance,
+            accept_resource_packs: cfg.accept_resource_packs,
             control_tx,
             control_rx: Some(control_rx),
             state_tx: Some(state_tx),
@@ -343,6 +362,7 @@ impl Client {
             &mut self.conn,
             self.configuration.clone(),
             self.view_distance,
+            self.accept_resource_packs,
             control_rx,
             state_tx,
             self.event_tx.clone(),

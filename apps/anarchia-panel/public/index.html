@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MineRider Control</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><p class="eyebrow">SWARM OPERATIONS</p><h1>MineRider <em>Control</em></h1></div>
+      </div>
+      <div class="topbar-actions">
+        <span id="connectionBadge" class="connection-badge"><i></i> Panel offline</span>
+        <button id="settingsButton" class="button ghost" type="button">Konfiguracja</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-card">
+        <div>
+          <p class="eyebrow">RUNTIME LUA / MINECRAFT 1.21.4</p>
+          <h2>Jedno miejsce do kontroli całego swarmu.</h2>
+          <p id="serverLabel" class="muted">Wczytywanie konfiguracji serwera…</p>
+        </div>
+        <div class="run-actions">
+          <button id="startSelectedButton" class="button primary" type="button">Start wybranych</button>
+          <button id="startAllButton" class="button secondary" type="button">Start wszystkich</button>
+          <button id="stopButton" class="button danger" type="button" disabled>Zatrzymaj runtime</button>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="Podsumowanie">
+        <article><span class="metric-dot green"></span><div><strong id="metricOnline">0</strong><small>online</small></div></article>
+        <article><span class="metric-dot blue"></span><div><strong id="metricConnecting">0</strong><small>w trakcie</small></div></article>
+        <article><span class="metric-dot amber"></span><div><strong id="metricAttention">0</strong><small>wymaga uwagi</small></div></article>
+        <article><span class="metric-dot slate"></span><div><strong id="metricOffline">0</strong><small>offline</small></div></article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel accounts-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">FLOTA</p><h3>Konta</h3></div>
+            <div class="filters">
+              <input id="searchInput" type="search" placeholder="Szukaj nicku…" autocomplete="off">
+              <button id="selectAllButton" class="mini-button" type="button">Zaznacz wszystkie</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th class="check-col"><input id="masterCheckbox" type="checkbox" aria-label="Zaznacz wszystkie"></th><th>Konto</th><th>Tryb</th><th>Status</th><th>Ostatnie zdarzenie</th></tr></thead>
+              <tbody id="accountsBody"></tbody>
+            </table>
+            <div id="emptyAccounts" class="empty-state" hidden>Dodaj konta w konfiguracji, aby rozpocząć.</div>
+          </div>
+        </article>
+
+        <article class="panel log-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">TELEMETRIA</p><h3>Log runtime</h3></div>
+            <div class="filters">
+              <a id="downloadLogsButton" class="mini-button" href="/api/logs/download">Pobierz logi</a>
+              <button id="clearLogsButton" class="mini-button" type="button">Wyczyść widok</button>
+            </div>
+          </div>
+          <div id="logOutput" class="log-output" role="log" aria-live="polite"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">USTAWIENIA</p><h3>Konfiguracja swarmu</h3></div><button id="closeSettingsButton" class="icon-button" type="button" aria-label="Zamknij">×</button></div>
+      <div class="form-grid">
+        <label class="span-2">Adres serwera<input id="serverHost" required></label>
+        <label>Port<input id="serverPort" type="number" min="1" max="65535" required></label>
+        <label>View distance<input id="viewDistance" type="number" min="2" max="32" required></label>
+        <label class="span-2">Ścieżka do minerider-lua<input id="runtimeBinary" required></label>
+        <label>Workery Lua<input id="runtimeWorkers" type="number" min="1" max="32" required></label>
+        <label class="toggle-label"><input id="sharedChunks" type="checkbox"><span>Współdziel chunki</span></label>
+        <label class="toggle-label"><input id="acceptResourcePacks" type="checkbox"><span>Akceptuj resource packi serwera</span></label>
+        <label class="span-2">Konta <small>jeden wpis na linię: <code>Nick:afk</code> lub <code>Nick:register</code></small><textarea id="accountsInput" rows="10" spellcheck="false"></textarea></label>
+      </div>
+      <p class="secret-note">Hasło nie trafia do konfiguracji ani przeglądarki. Ustaw je w zmiennej <code>MINERIDER_BOT_PASSWORD</code> przed startem panelu.</p>
+      <div class="dialog-actions"><button id="cancelSettingsButton" class="button ghost" type="button">Anuluj</button><button class="button primary" type="submit">Zapisz konfigurację</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
