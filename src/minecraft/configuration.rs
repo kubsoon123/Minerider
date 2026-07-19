@@ -60,14 +60,12 @@ impl DimensionType {
     }
 }
 
-/// Sends the two packets a vanilla client emits on entering configuration:
-/// `client_information` (settings) and the `minecraft:brand` plugin message.
+/// Sends the two packets a vanilla client emits on entering configuration,
+/// in vanilla's order: the `minecraft:brand` plugin message first, then
+/// `client_information` (settings). The order is a wire-observable
+/// fingerprint — the official 1.21.4 client sends brand before settings,
+/// and this client previously sent them reversed.
 async fn send_client_configuration(conn: &mut Connection, view_distance: i8) -> Result<()> {
-    let mut w = PacketWriter::new();
-    vanilla_client_information(view_distance).encode(&mut w)?;
-    conn.send_packet(SERVERBOUND_SETTINGS_ID, &w.freeze())
-        .await?;
-
     let brand = PacketCustomPayload {
         channel: BRAND_CHANNEL.to_string(),
         data: brand_payload()?,
@@ -76,7 +74,12 @@ async fn send_client_configuration(conn: &mut Connection, view_distance: i8) -> 
     brand.encode(&mut w)?;
     conn.send_packet(SERVERBOUND_CUSTOM_PAYLOAD_ID, &w.freeze())
         .await?;
-    debug!("sent client_information and brand");
+
+    let mut w = PacketWriter::new();
+    vanilla_client_information(view_distance).encode(&mut w)?;
+    conn.send_packet(SERVERBOUND_SETTINGS_ID, &w.freeze())
+        .await?;
+    debug!("sent brand and client_information");
     Ok(())
 }
 
@@ -169,7 +172,7 @@ fn store_registry(data: &mut ConfigurationData, packet: PacketRegistryData) -> R
 /// Runs the configuration state until the server sends Finish
 /// Configuration, leaving the connection in [`ConnectionState::Play`].
 ///
-/// On entry the client sends its settings and brand, exactly as vanilla
+/// On entry the client sends its brand then settings, exactly as vanilla
 /// does, before processing the server's configuration packets.
 pub async fn run_configuration(
     conn: &mut Connection,

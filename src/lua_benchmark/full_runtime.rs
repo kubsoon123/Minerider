@@ -512,13 +512,15 @@ async fn serve_one(
         return Err(format!("expected login acknowledged, got 0x{:02x}", ack.id));
     }
 
-    let settings = conn.read_packet().await.map_err(|e| e.to_string())?;
-    if settings.id != configuration::SERVERBOUND_SETTINGS_ID {
-        return Err(format!("expected settings, got 0x{:02x}", settings.id));
-    }
+    // Brand first, then settings — the vanilla client's order, asserted
+    // strictly so a regression in `send_client_configuration` fails here.
     let brand = conn.read_packet().await.map_err(|e| e.to_string())?;
     if brand.id != configuration::SERVERBOUND_CUSTOM_PAYLOAD_ID {
         return Err(format!("expected brand, got 0x{:02x}", brand.id));
+    }
+    let settings = conn.read_packet().await.map_err(|e| e.to_string())?;
+    if settings.id != configuration::SERVERBOUND_SETTINGS_ID {
+        return Err(format!("expected settings, got 0x{:02x}", settings.id));
     }
 
     send_dimension_registry(&mut conn).await?;

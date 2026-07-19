@@ -226,18 +226,19 @@ async fn run_server(
     )?;
     ensure(ack.payload.is_empty(), "login acknowledged must be empty")?;
 
-    // On entering configuration a vanilla client sends client_information
-    // (settings, C2S 0x00) then the minecraft:brand plugin message
-    // (custom_payload, C2S 0x02).
-    let settings = conn.read_packet().await?;
-    ensure(
-        settings.id == configuration::SERVERBOUND_SETTINGS_ID,
-        format!("expected settings 0x00, got 0x{:02x}", settings.id),
-    )?;
+    // On entering configuration a vanilla client sends the minecraft:brand
+    // plugin message (custom_payload, C2S 0x02) first, then
+    // client_information (settings, C2S 0x00) — order asserted strictly,
+    // as it is a wire-observable fingerprint of the official client.
     let brand = conn.read_packet().await?;
     ensure(
         brand.id == configuration::SERVERBOUND_CUSTOM_PAYLOAD_ID,
         format!("expected brand custom_payload 0x02, got 0x{:02x}", brand.id),
+    )?;
+    let settings = conn.read_packet().await?;
+    ensure(
+        settings.id == configuration::SERVERBOUND_SETTINGS_ID,
+        format!("expected settings 0x00, got 0x{:02x}", settings.id),
     )?;
     {
         let mut r = PacketReader::new(&brand.payload);
