@@ -35,6 +35,8 @@ pub const MAX_COOLDOWNS: usize = 1_024;
 pub const MAX_EFFECTS: usize = 256;
 pub const MAX_ATTRIBUTES: usize = 128;
 pub const MAX_ATTRIBUTE_MODIFIERS: usize = 64;
+const PLAYER_INVENTORY_HOTBAR_START: i32 = 36;
+const PLAYER_INVENTORY_HOTBAR_END: i32 = 44;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HudState {
@@ -154,10 +156,13 @@ impl HudState {
     }
 
     pub(crate) fn on_player_inventory(&mut self, packet: &PacketSetPlayerInventory) -> HudEvent {
-        let applied = (0..=8).contains(&packet.slot_id);
-        if applied {
-            self.hotbar.insert(packet.slot_id, packet.contents.clone());
-            if packet.slot_id == self.selected_hotbar_slot {
+        let hotbar_slot = (PLAYER_INVENTORY_HOTBAR_START..=PLAYER_INVENTORY_HOTBAR_END)
+            .contains(&packet.slot_id)
+            .then_some(packet.slot_id - PLAYER_INVENTORY_HOTBAR_START);
+        let applied = hotbar_slot.is_some();
+        if let Some(hotbar_slot) = hotbar_slot {
+            self.hotbar.insert(hotbar_slot, packet.contents.clone());
+            if hotbar_slot == self.selected_hotbar_slot {
                 self.held_item = packet.contents.clone();
             }
         }
@@ -1236,7 +1241,7 @@ mod tests {
             HudEvent::HotbarChanged { applied: false, .. }
         ));
         state.on_player_inventory(&PacketSetPlayerInventory {
-            slot_id: 4,
+            slot_id: PLAYER_INVENTORY_HOTBAR_START + 4,
             contents: item,
         });
         state.on_selected_hotbar(&PacketHeldItemSlot { slot: 4 });
