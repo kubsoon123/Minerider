@@ -133,18 +133,15 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         let policy = ReconnectPolicy {
             enabled: true,
             // Unlimited within this scenario's own `settle_timeout` (the real
-            // bound) rather than a fixed count. A fixed `Count(3)` was the last
-            // remaining cause of the Windows-CI-only "one bot never connects"
-            // flake in `proxy_groups_...`: on a contended 2-core runner a bot's
-            // first few connects (especially the SOCKS5-relayed ones) can each
-            // be slow/refused, so it hit RetriesExhausted and gave up *before*
-            // the settle window elapsed — leaving `bots_connected` one short
-            // with no way to recover. The mock server and fake SOCKS5 both now
-            // accept unboundedly (see their comments), so retrying for the whole
-            // window is safe and lets a transiently-unlucky bot still arrive.
-            // Every assertion over this scenario is a lower bound (`>=`), and
-            // the exact-count combined benchmark uses a different config path,
-            // so more attempts can't over-count anything.
+            // bound), rather than a fixed count, so a transiently-slow bot on a
+            // contended CI runner keeps trying for the whole window instead of
+            // giving up early with RetriesExhausted. This is a resilience
+            // margin, not the fix for the Windows-CI-only `proxy_groups_...`
+            // flake — that was `connected_bots` over-counting reconnect blips
+            // (see its comment); reconnect churn from these retries no longer
+            // inflates the metric now that it dedupes by bot id. The mock
+            // server and fake SOCKS5 both accept unboundedly, so retrying the
+            // whole window is safe.
             max_retries: RetryLimit::Unlimited,
             initial_delay: Duration::from_millis(50),
             max_delay: Duration::from_millis(200),
@@ -157,7 +154,17 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
 
     // One bridge task per bot: tracks connect/reconnect and forwards every
     // relevant BotEvent into the shared Dispatcher.
-    let connected_count = Arc::new(AtomicUsize::new(0));
+    //
+    // `connected_bots` is a *set of distinct bot ids* that have reached
+    // Connected, not a cumulative count of Connected events: a bot that blips
+    // and reconnects (easy on a contended CI runner) fires Connected more than
+    // once, so a plain counter overshoots `bot_count` and made
+    // `assert_eq!(bots_connected, bot_count)` flake with e.g. 7 == 4. A set
+    // dedupes by bot id, so the metric is exactly "how many distinct bots
+    // connected" regardless of reconnect churn.
+    let connected_bots = Arc::new(std::sync::Mutex::new(
+        std::collections::HashSet::<u32>::new(),
+    ));
     let reconnects_observed = Arc::new(AtomicUsize::new(0));
     let mut bridge_tasks: Vec<JoinHandle<()>> = Vec::with_capacity(handles.len());
     for (&bot, handle) in &handles {
@@ -165,7 +172,7 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
             BotId(bot),
             handle.clone(),
             dispatcher.clone(),
-            connected_count.clone(),
+            connected_bots.clone(),
             reconnects_observed.clone(),
         ));
     }
@@ -187,9 +194,9 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         .await;
     });
 
-    // Settle: wait until every bot reports Connected (or the timeout).
+    // Settle: wait until every distinct bot reports Connected (or the timeout).
     let _ = timeout(config.settle_timeout, async {
-        while connected_count.load(Ordering::Relaxed) < config.bot_count as usize {
+        while connected_bots.lock().unwrap().len() < config.bot_count as usize {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })
@@ -247,10 +254,11 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
     let enqueue_to_start = metrics.enqueue_to_start.lock().unwrap().summary();
     let enqueue_to_complete = metrics.enqueue_to_complete.lock().unwrap().summary();
     let command_latency = metrics.command_latency.lock().unwrap().summary();
+    let bots_connected = connected_bots.lock().unwrap().len();
 
     FullRuntimeResult {
         bot_count: config.bot_count,
-        bots_connected: connected_count.load(Ordering::Relaxed),
+        bots_connected,
         rss_baseline,
         rss_after_connect,
         rss_after_scenario,
@@ -276,7 +284,7 @@ fn spawn_event_bridge(
     bot_id: BotId,
     handle: SupervisorHandle,
     dispatcher: Arc<Dispatcher>,
-    connected_count: Arc<AtomicUsize>,
+    connected_bots: Arc<std::sync::Mutex<std::collections::HashSet<u32>>>,
     reconnects_observed: Arc<AtomicUsize>,
 ) -> JoinHandle<()> {
     let mut events = handle.events();
@@ -285,7 +293,7 @@ fn spawn_event_bridge(
             match events.recv().await {
                 Ok(event) => {
                     if matches!(event, BotEvent::Connected) {
-                        connected_count.fetch_add(1, Ordering::Relaxed);
+                        connected_bots.lock().unwrap().insert(bot_id.0);
                     }
                     if matches!(event, BotEvent::ReconnectScheduled { .. }) {
                         reconnects_observed.fetch_add(1, Ordering::Relaxed);
