@@ -209,6 +209,20 @@ pub enum BotCommand {
         hand: Hand,
         sneaking: bool,
     },
+    /// Attack (left-click) an entity by its id — vanilla `use_entity` in its
+    /// ATTACK form. Carries no hand (the attack always uses the main hand).
+    AttackEntity { entity_id: i32, sneaking: bool },
+    /// Interact with an entity at a specific point on its hitbox — vanilla
+    /// `use_entity` in its INTERACT_AT form (e.g. clicking a precise part of
+    /// an armor stand). `x/y/z` are relative to the entity's position.
+    InteractAtEntity {
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+        x: f32,
+        y: f32,
+        z: f32,
+    },
     /// Release the item currently being used (finish eating, release a
     /// drawn bow): vanilla `block_dig` with the RELEASE_USE_ITEM status.
     ReleaseItem,
@@ -474,6 +488,8 @@ impl Controller {
             | BotCommand::SelectHotbarSlot(_)
             | BotCommand::UseItemOnBlock(_)
             | BotCommand::InteractEntity { .. }
+            | BotCommand::AttackEntity { .. }
+            | BotCommand::InteractAtEntity { .. }
             | BotCommand::ReleaseItem
             | BotCommand::CloseGui => {}
             BotCommand::Stop => {

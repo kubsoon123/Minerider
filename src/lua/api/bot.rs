@@ -545,6 +545,44 @@ impl UserData for LuaBot {
                 }))
             },
         );
+        methods.add_method(
+            "attack_entity",
+            |_, this, (entity_id, opts): (i64, Option<Table>)| {
+                let entity_id = i32::try_from(entity_id).map_err(|_| {
+                    mlua::Error::RuntimeError(format!("entity_id {entity_id} does not fit an i32"))
+                })?;
+                let sneaking = match &opts {
+                    Some(t) => t.get::<Option<bool>>("sneaking")?.unwrap_or(false),
+                    None => false,
+                };
+                Ok(spawn_action(this, move |h| async move {
+                    control_outcome(h.attack_entity(entity_id, sneaking).await)
+                }))
+            },
+        );
+        methods.add_method(
+            "interact_at_entity",
+            |_, this, (entity_id, opts): (i64, Table)| {
+                let entity_id = i32::try_from(entity_id).map_err(|_| {
+                    mlua::Error::RuntimeError(format!("entity_id {entity_id} does not fit an i32"))
+                })?;
+                let hand = parse_hand(
+                    &opts
+                        .get::<Option<String>>("hand")?
+                        .unwrap_or_else(|| "main".into()),
+                )?;
+                let sneaking = opts.get::<Option<bool>>("sneaking")?.unwrap_or(false);
+                let x = opts.get::<Option<f32>>("x")?.unwrap_or(0.0);
+                let y = opts.get::<Option<f32>>("y")?.unwrap_or(0.0);
+                let z = opts.get::<Option<f32>>("z")?.unwrap_or(0.0);
+                Ok(spawn_action(this, move |h| async move {
+                    control_outcome(
+                        h.interact_at_entity(entity_id, hand, sneaking, x, y, z)
+                            .await,
+                    )
+                }))
+            },
+        );
         methods.add_method("release_item", |_, this, ()| {
             Ok(spawn_action(this, |h| async move {
                 control_outcome(h.release_item().await)

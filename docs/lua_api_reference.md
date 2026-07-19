@@ -253,7 +253,9 @@ rejects these messages, as it would any client without a signing key.
 | `bot:swing(hand) -> request_id` |
 | `bot:select_hotbar_slot(slot) -> request_id` — `slot` is `0..=8`; sends `held_item_slot` and updates the tracked selection so a following `use_item`/`swing` acts on the newly held item. A slot outside `0..=8` raises immediately. |
 | `bot:use_item_on_block({x, y, z, face, hand?, cursor_x?, cursor_y?, cursor_z?, inside_block?}) -> request_id` — right-click a block (place, open container, press button). `x/y/z` and `face` (0..=5) required; `hand` defaults `"main"`, cursor defaults to face centre (0.5), `inside_block` false. |
-| `bot:interact_entity(entity_id, {hand?, sneaking?}?) -> request_id` — right-click (interact with) an entity; `hand` defaults `"main"`, `sneaking` false. Not the attack form. |
+| `bot:interact_entity(entity_id, {hand?, sneaking?}?) -> request_id` — right-click (interact with) an entity; `hand` defaults `"main"`, `sneaking` false. |
+| `bot:attack_entity(entity_id, {sneaking?}?) -> request_id` — left-click (attack) an entity. |
+| `bot:interact_at_entity(entity_id, {hand?, sneaking?, x?, y?, z?}) -> request_id` — right-click a precise point (`x/y/z` relative to the entity) on its hitbox. |
 | `bot:release_item() -> request_id` — release the item currently in use (finish eating, release a drawn bow). |
 | `bot:close_gui() -> request_id` — close the currently open container; a no-op on the wire if nothing is open. |
 

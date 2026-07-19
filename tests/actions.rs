@@ -872,6 +872,66 @@ async fn close_gui_sends_close_window_for_the_open_window() {
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }
 
+/// `attack_entity` sends `use_entity` in its ATTACK form (mouse type 1),
+/// with the target id and sneaking flag, and no hand.
+#[tokio::test]
+async fn attack_entity_sends_use_entity_attack() {
+    let port = start_and_run(|mut conn| async move {
+        let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("use_entity did not arrive in time")
+            .expect("read use_entity");
+        assert_eq!(packet.id, play::SERVERBOUND_USE_ENTITY_ID);
+        let decoded = play::PacketUseEntity::decode(&mut PacketReader::new(&packet.payload))
+            .expect("decode use_entity");
+        assert_eq!(decoded.target, 77);
+        assert_eq!(decoded.mouse, 1, "ATTACK type");
+        assert!(!decoded.sneaking);
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "AttackBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .attack_entity(77, false)
+        .await
+        .expect("attack_entity accepted while connected");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// `interact_at_entity` sends `use_entity` in its INTERACT_AT form (mouse
+/// type 2) carrying the hit point and hand.
+#[tokio::test]
+async fn interact_at_entity_sends_use_entity_interact_at() {
+    let port = start_and_run(|mut conn| async move {
+        let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("use_entity did not arrive in time")
+            .expect("read use_entity");
+        assert_eq!(packet.id, play::SERVERBOUND_USE_ENTITY_ID);
+        let decoded = play::PacketUseEntity::decode(&mut PacketReader::new(&packet.payload))
+            .expect("decode use_entity");
+        assert_eq!(decoded.target, 88);
+        assert_eq!(decoded.mouse, 2, "INTERACT_AT type");
+        assert!(decoded.sneaking);
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "InteractAtBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .interact_at_entity(88, Hand::Main, true, 0.1, 1.5, -0.2)
+        .await
+        .expect("interact_at_entity accepted while connected");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 /// `release_item` sends `block_dig` with the RELEASE_USE_ITEM status (5).
 #[tokio::test]
 async fn release_item_sends_block_dig_release_status() {

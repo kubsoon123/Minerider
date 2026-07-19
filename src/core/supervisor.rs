@@ -553,6 +553,39 @@ impl SupervisorHandle {
         .await
     }
 
+    /// Attacks (left-clicks) an entity by its id — vanilla `use_entity`'s
+    /// ATTACK form. Success means only "the packet was sent".
+    pub async fn attack_entity(&self, entity_id: i32, sneaking: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::AttackEntity {
+            entity_id,
+            sneaking,
+        })
+        .await
+    }
+
+    /// Interacts with an entity at a specific point on its hitbox — vanilla
+    /// `use_entity`'s INTERACT_AT form. `x/y/z` are relative to the entity's
+    /// position. Success means only "the packet was sent".
+    pub async fn interact_at_entity(
+        &self,
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+        x: f32,
+        y: f32,
+        z: f32,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::InteractAtEntity {
+            entity_id,
+            hand,
+            sneaking,
+            x,
+            y,
+            z,
+        })
+        .await
+    }
+
     /// Releases the item currently being used (finish eating, release a
     /// drawn bow): vanilla `block_dig` with the RELEASE_USE_ITEM status.
     pub async fn release_item(&self) -> Result<(), ControlError> {

@@ -404,6 +404,20 @@ pub async fn run_play(
                         hand,
                         sneaking,
                     }) => send_interact_entity(conn, entity_id, hand, sneaking).await?,
+                    Some(BotCommand::AttackEntity {
+                        entity_id,
+                        sneaking,
+                    }) => send_attack_entity(conn, entity_id, sneaking).await?,
+                    Some(BotCommand::InteractAtEntity {
+                        entity_id,
+                        hand,
+                        sneaking,
+                        x,
+                        y,
+                        z,
+                    }) => {
+                        send_interact_at_entity(conn, entity_id, hand, sneaking, x, y, z).await?
+                    }
                     Some(BotCommand::ReleaseItem) => send_release_item(conn, &mut state).await?,
                     Some(BotCommand::CloseGui) => send_close_gui(conn, &mut state).await?,
                     Some(command) => apply_command(&mut state, command),
@@ -616,9 +630,12 @@ async fn send_select_hotbar_slot(
 /// eating, release a drawn bow). Values match `ServerboundPlayerActionPacket.Action`.
 const BLOCK_DIG_RELEASE_USE_ITEM: i32 = 5;
 
-/// Vanilla `use_entity` interaction type for a plain right-click interact
-/// (not attack, not interact-at).
+/// Vanilla `use_entity` interaction types (`ServerboundInteractPacket.Action`):
+/// `INTERACT` (right-click), `ATTACK` (left-click), `INTERACT_AT` (right-click
+/// a specific point on the hitbox).
 const USE_ENTITY_INTERACT: i32 = 0;
+const USE_ENTITY_ATTACK: i32 = 1;
+const USE_ENTITY_INTERACT_AT: i32 = 2;
 
 /// Sends `block_place`: right-click a block with the held item (place a
 /// block, open a container, press a button). The `sequence` is this
@@ -681,6 +698,55 @@ async fn send_interact_entity(
     conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
         .await?;
     debug!(entity_id, sneaking, "interacted with entity");
+    Ok(())
+}
+
+/// Sends `use_entity` in its ATTACK (left-click) form: no `x/y/z` and no hand
+/// (an attack always uses the main hand), just the target and sneaking flag.
+async fn send_attack_entity(conn: &mut Connection, entity_id: i32, sneaking: bool) -> Result<()> {
+    let packet = PacketUseEntity {
+        target: entity_id,
+        mouse: USE_ENTITY_ATTACK,
+        x: PacketUseEntityX::Default,
+        y: PacketUseEntityY::Default,
+        z: PacketUseEntityZ::Default,
+        hand: PacketUseEntityHand::Default,
+        sneaking,
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
+        .await?;
+    debug!(entity_id, sneaking, "attacked entity");
+    Ok(())
+}
+
+/// Sends `use_entity` in its INTERACT_AT form: the hit point `x/y/z` (relative
+/// to the entity) plus the hand — used to interact with a specific part of an
+/// entity's hitbox (e.g. an armor stand).
+async fn send_interact_at_entity(
+    conn: &mut Connection,
+    entity_id: i32,
+    hand: Hand,
+    sneaking: bool,
+    x: f32,
+    y: f32,
+    z: f32,
+) -> Result<()> {
+    let packet = PacketUseEntity {
+        target: entity_id,
+        mouse: USE_ENTITY_INTERACT_AT,
+        x: PacketUseEntityX::V2(x),
+        y: PacketUseEntityY::V2(y),
+        z: PacketUseEntityZ::V2(z),
+        hand: PacketUseEntityHand::V2(hand.wire_value()),
+        sneaking,
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
+        .await?;
+    debug!(entity_id, sneaking, "interacted at entity");
     Ok(())
 }
 
