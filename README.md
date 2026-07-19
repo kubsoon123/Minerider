@@ -201,6 +201,28 @@ owns its own connection, player state and chunk-position map.
 | [`minerider-protocol`](crates/minerider-protocol) | Standalone wire-protocol library (no game logic, no tokio): VarInt/VarLong, framing, zlib, RSA + AES-128-CFB8, NBT, generated packets |
 | [`minerider-codegen`](crates/minerider-codegen) | Build-time generator: vendored `minecraft-data` → Rust, with a drift gate |
 
+### Modules
+
+MineRider is a **single engine**, not a constellation of packages — but
+internally it is organized into focused components, roughly mirroring the
+Node/prismarine module family that [mineflayer](https://github.com/PrismarineJS/mineflayer)
+is built from. If you know that ecosystem, this is the map:
+
+| Component | Description | ≈ mineflayer / prismarine |
+|-----------|-------------|---------------------------|
+| `minerider-protocol` | Parse & serialize packets, framing, zlib compression, RSA/AES encryption | `minecraft-protocol` |
+| `minerider-protocol` (`nbt`) | NBT parser/serializer | `prismarine-nbt` |
+| `minerider-codegen` | `minecraft-data` → Rust protocol generator (build-time) | `minecraft-data` |
+| `minecraft::physics` + `player` | Vanilla-shaped player physics (gravity, friction, step-up, jump, knockback) | `prismarine-physics` |
+| `minecraft::world` | Chunk/section storage, block state queries, collision boxes | `prismarine-chunk` + `prismarine-world` + `prismarine-block` |
+| `minecraft::inventory` | Windows, slots, cursor, hotbar, server-authoritative transactions | `prismarine-windows` + `prismarine-item` |
+| `minecraft::entity` | Entity spawn/move/despawn tracking | `prismarine-entity` |
+| `minecraft::presentation` | Structured chat / title / tab-list parsing | `prismarine-chat` |
+| `auth` | Microsoft / Xbox Live / Minecraft Services login | `node-yggdrasil` (Microsoft-era) |
+| `core::supervisor` | Reconnect-with-backoff lifecycle, retry classification, cancellation | *(mineflayer bot lifecycle)* |
+| `lua` | Embedded Lua scripting runtime (4-worker swarm, sandbox) | *(mineflayer plugins, in-process)* |
+| `trace` | Packet capture, normalization and semantic diffing | *(no direct equivalent)* |
+
 ### Repository layout
 
 ```text
