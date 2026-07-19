@@ -51,6 +51,17 @@ fn status_to_str(status: SupervisorStatus) -> String {
 /// back into this bot's worker as a high-priority `action_result` event
 /// (see `crate::lua::dispatcher::DispatcherHandle::dispatch_action_result`).
 /// Never blocks the calling Lua thread.
+///
+/// Bounded by `WorkerState::action_task_semaphore`: a permit is acquired
+/// *before* spawning (never inside the spawned task, which would just
+/// move the same unbounded-spawn problem one step later) and held for
+/// that action's whole lifetime. A script that issues actions faster than
+/// they can complete — e.g. from a tight loop, or a `set_interval` timer
+/// firing far more often than actions resolve — eventually exhausts the
+/// semaphore; `try_acquire_owned` never blocks waiting for a permit, so
+/// that action is instead resolved immediately with a typed
+/// `worker_overloaded` error, entirely synchronously, spawning no task at
+/// all.
 fn spawn_action<F, Fut>(this: &LuaBot, op: F) -> u64
 where
     F: FnOnce(SupervisorHandle) -> Fut + Send + 'static,
@@ -65,9 +76,26 @@ where
     // regardless of who owns the bot (see `DispatcherHandle::dispatch_action_result`).
     let origin_worker = this.state.worker_index;
     let dispatcher = this.state.dispatcher.clone();
+
+    let permit = match this.state.action_task_semaphore.clone().try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => {
+            dispatcher.dispatch_action_result(
+                origin_worker,
+                ActionResult {
+                    request_id,
+                    bot_id,
+                    outcome: ActionOutcome::Error(ScriptError::worker_overloaded()),
+                },
+            );
+            return request_id;
+        }
+    };
+
     match this.state.bot_handle(bot_id) {
         Some(handle) => {
             this.state.runtime_handle.spawn(async move {
+                let _permit = permit;
                 let outcome = op(handle).await;
                 dispatcher.dispatch_action_result(
                     origin_worker,
@@ -81,6 +109,7 @@ where
         }
         None => {
             this.state.runtime_handle.spawn(async move {
+                let _permit = permit;
                 dispatcher.dispatch_action_result(
                     origin_worker,
                     ActionResult {
@@ -610,5 +639,111 @@ impl UserData for LuaBot {
         methods.add_method("off", |_, this, id: u64| {
             Ok(this.state.handlers.borrow_mut().remove(id))
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lua::dispatcher::{DispatcherHandle, WorkerQueue};
+    use crate::lua::queue::{PriorityQueue, QueueDesign};
+    use crate::lua::sandbox::{new_sandboxed_lua, SandboxConfig};
+    use std::cell::RefCell;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::sync::Arc;
+
+    fn test_state(action_task_capacity: usize) -> Rc<WorkerState> {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(64, 64)));
+        let dispatcher = DispatcherHandle::new(vec![queue]);
+        Rc::new(WorkerState {
+            worker_index: 0,
+            is_coordinator: true,
+            dispatcher,
+            runtime_handle: tokio::runtime::Handle::current(),
+            instruction_counter: RefCell::new(Arc::new(AtomicU64::new(0))),
+            sandbox: SandboxConfig::default(),
+            handlers: RefCell::new(crate::lua::worker::HandlerRegistry::default()),
+            callbacks: RefCell::new(crate::lua::worker::CallbackRegistry::default()),
+            disabled_bots: RefCell::new(HashSet::new()),
+            consecutive_errors: RefCell::new(HashMap::new()),
+            config_builder: RefCell::new(crate::lua::registry::SwarmRegistryBuilder::default()),
+            config_tx: RefCell::new(None),
+            startup_barrier: crate::lua::worker::StartupBarrier::new(),
+            startup_report_tx: tokio::sync::mpsc::unbounded_channel().0,
+            started: RefCell::new(None),
+            shared_state: Arc::new(crate::lua::api::shared::SharedState::new()),
+            pubsub: RefCell::new(HashMap::new()),
+            timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            callback_timeout: crate::lua::worker::DEFAULT_CALLBACK_TIMEOUT,
+            action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(action_task_capacity)),
+        })
+    }
+
+    /// The core Fix 6 regression: an exhausted action-task semaphore must
+    /// resolve the action immediately (entirely synchronously, no task
+    /// spawned) with a typed `worker_overloaded` error, never block the
+    /// calling Lua thread waiting for a permit and never spawn an
+    /// unbounded number of tasks past the configured cap.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn spawn_action_resolves_immediately_with_worker_overloaded_when_the_semaphore_is_exhausted(
+    ) {
+        let state = test_state(0); // zero permits: every action must be rejected
+        let (_lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        let bot = LuaBot {
+            state: state.clone(),
+            bot_id: 0,
+        };
+
+        let request_id = spawn_action(&bot, |_handle| async { ActionOutcome::DeliveredSent });
+
+        // Resolved synchronously: the result must already be sitting in
+        // this worker's own queue, with no `.await`/task-yield needed.
+        let queue = state.dispatcher.queue(0);
+        let batch = queue.wait_for_batch();
+        assert_eq!(batch.len(), 1);
+        match &batch[0].event {
+            crate::lua::event::WorkItem::ActionResult(result) => {
+                assert_eq!(result.request_id, request_id);
+                match &result.outcome {
+                    ActionOutcome::Error(e) => assert_eq!(e.code, "worker_overloaded"),
+                    other => panic!("expected Error(worker_overloaded), got {other:?}"),
+                }
+            }
+            other => panic!("expected ActionResult, got {other:?}"),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn spawn_action_succeeds_normally_when_the_semaphore_has_capacity() {
+        let state = test_state(4);
+        let (_lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        let bot = LuaBot {
+            state: state.clone(),
+            bot_id: 0,
+        };
+
+        // No bot handle registered — resolves as `not_connected`, but the
+        // point here is that it goes through the normal spawn path (a
+        // permit was available), not the semaphore-exhausted short
+        // circuit.
+        let request_id = spawn_action(&bot, |_handle| async { ActionOutcome::DeliveredSent });
+
+        let queue = state.dispatcher.queue(0);
+        let batch = queue.wait_for_batch();
+        assert_eq!(batch.len(), 1);
+        match &batch[0].event {
+            crate::lua::event::WorkItem::ActionResult(result) => {
+                assert_eq!(result.request_id, request_id);
+                match &result.outcome {
+                    ActionOutcome::Error(e) => assert_eq!(e.code, "not_connected"),
+                    other => panic!("expected Error(not_connected), got {other:?}"),
+                }
+            }
+            other => panic!("expected ActionResult, got {other:?}"),
+        }
     }
 }

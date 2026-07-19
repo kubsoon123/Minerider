@@ -22,6 +22,14 @@ use crate::lua::shared_value::{
 
 /// Total number of distinct keys the shared store will hold.
 pub const MAX_STORE_KEYS: usize = 4096;
+/// Maximum bytes for one shared-state key. The *value* a key maps to is
+/// already bounded end-to-end by `crate::lua::shared_value`'s own limits
+/// (`MAX_STRING_LEN`/`MAX_TOTAL_SIZE`/…) via `lua_value_to_shared`, but
+/// the key itself is a plain `String` `set`/`compare_and_swap` never ran
+/// through that conversion, so it needs its own explicit bound — without
+/// one, `swarm.shared:set(string.rep("x", 1e8), true)` would insert an
+/// unboundedly large `HashMap` key.
+pub const MAX_KEY_LEN: usize = 256;
 
 struct Versioned {
     value: SharedValue,
@@ -39,6 +47,8 @@ pub enum SharedStateError {
     Value(#[from] SharedValueError),
     #[error("shared store is full (max {MAX_STORE_KEYS} keys)")]
     StoreFull,
+    #[error("shared-state key exceeds the {MAX_KEY_LEN}-byte limit")]
+    KeyTooLong,
     #[error("update was retried too many times under concurrent writers")]
     UpdateContention,
 }
@@ -57,6 +67,9 @@ impl SharedState {
     }
 
     pub fn set(&self, key: String, value: SharedValue) -> Result<(), SharedStateError> {
+        if key.len() > MAX_KEY_LEN {
+            return Err(SharedStateError::KeyTooLong);
+        }
         let mut guard = self.store.lock().expect("shared state poisoned");
         if !guard.contains_key(&key) && guard.len() >= MAX_STORE_KEYS {
             return Err(SharedStateError::StoreFull);
@@ -87,6 +100,9 @@ impl SharedState {
         expected_version: u64,
         new_value: SharedValue,
     ) -> Result<bool, SharedStateError> {
+        if key.len() > MAX_KEY_LEN {
+            return Err(SharedStateError::KeyTooLong);
+        }
         let mut guard = self.store.lock().expect("shared state poisoned");
         let current_version = guard.get(key).map(|v| v.version).unwrap_or(0);
         if current_version != expected_version {
@@ -339,6 +355,31 @@ mod tests {
             .set("k".to_string(), SharedValue::Number(42.0))
             .unwrap();
         assert_eq!(state.get("k"), Some(SharedValue::Number(42.0)));
+    }
+
+    #[test]
+    fn set_rejects_a_key_over_the_length_limit() {
+        let state = SharedState::new();
+        let huge_key = "x".repeat(MAX_KEY_LEN + 1);
+        let err = state.set(huge_key, SharedValue::Bool(true)).unwrap_err();
+        assert_eq!(err, SharedStateError::KeyTooLong);
+    }
+
+    #[test]
+    fn compare_and_swap_rejects_a_key_over_the_length_limit() {
+        let state = SharedState::new();
+        let huge_key = "x".repeat(MAX_KEY_LEN + 1);
+        let err = state
+            .compare_and_swap(&huge_key, 0, SharedValue::Bool(true))
+            .unwrap_err();
+        assert_eq!(err, SharedStateError::KeyTooLong);
+    }
+
+    #[test]
+    fn a_key_at_exactly_the_length_limit_is_accepted() {
+        let state = SharedState::new();
+        let key = "x".repeat(MAX_KEY_LEN);
+        assert!(state.set(key, SharedValue::Bool(true)).is_ok());
     }
 
     #[test]

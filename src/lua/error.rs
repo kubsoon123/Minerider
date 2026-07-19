@@ -9,6 +9,33 @@ use crate::core::supervisor::{ControlError, GuiActionError, InventoryActionError
 use crate::lua::registry::RegistryError;
 use crate::minecraft::inventory::InventoryError;
 
+/// Maximum bytes of a Lua-controlled string kept in a log line — a script
+/// can raise `error(huge_string)` or otherwise produce arbitrarily long
+/// text that ends up in a `tracing::*!` call; without a bound, that text
+/// (not anything Rust controls) determines the size of the log output.
+pub const MAX_LOG_MESSAGE_BYTES: usize = 2048;
+
+/// Truncates `s` to at most `max_bytes` bytes for logging, without ever
+/// splitting a multi-byte UTF-8 character — slicing a `&str` at a
+/// non-char-boundary byte index panics, and `max_bytes` is a completely
+/// arbitrary byte count with no relationship to where any particular
+/// character in `s` actually ends. Steps backward from `max_bytes` to the
+/// nearest preceding character boundary instead. Appends `"…"` whenever
+/// truncation actually happened, so a truncated log line is never
+/// mistaken for a naturally short, complete one.
+pub fn truncate_for_log(s: &str, max_bytes: usize) -> std::borrow::Cow<'_, str> {
+    if s.len() <= max_bytes {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut truncated = s[..end].to_string();
+    truncated.push('…');
+    std::borrow::Cow::Owned(truncated)
+}
+
 /// The complete set of stable error codes a script can key logic off of.
 pub const ERROR_CODES: &[&str] = &[
     "invalid_configuration",
@@ -213,6 +240,52 @@ pub fn classify_sandbox_abort(err: &mlua::Error) -> Option<ScriptError> {
 mod tests {
     use super::*;
     use crate::lua::sandbox::{new_sandboxed_lua, SandboxConfig};
+
+    #[test]
+    fn truncate_for_log_leaves_short_strings_untouched() {
+        let s = "short message";
+        assert_eq!(truncate_for_log(s, 2048), std::borrow::Cow::Borrowed(s));
+    }
+
+    #[test]
+    fn truncate_for_log_never_splits_a_multibyte_character_on_text_over_2048_bytes() {
+        // "🦀" is 4 UTF-8 bytes; repeating it well past the 2048-byte
+        // budget guarantees the naive byte offset 2048 falls *inside* a
+        // character (2048 is not a multiple of 4), which would panic on a
+        // plain `&s[..2048]` slice.
+        let s = "🦀".repeat(600); // 2400 bytes, no byte boundary at 2048
+        assert!(
+            s.len() > 2048,
+            "test fixture must exceed the truncation budget"
+        );
+
+        // Must not panic — this is the actual regression being guarded.
+        let truncated = truncate_for_log(&s, 2048);
+
+        assert!(
+            truncated.len() <= 2048 + "…".len(),
+            "truncated output must not exceed the budget (plus the added ellipsis marker)"
+        );
+        assert!(
+            truncated.ends_with('…'),
+            "truncation must be visibly marked, never silently shortened"
+        );
+        // Every character up to the cut must be a real, complete "🦀" —
+        // proving no partial multi-byte sequence survived.
+        let body = truncated.trim_end_matches('…');
+        assert!(!body.is_empty());
+        assert!(
+            body.chars().all(|c| c == '🦀'),
+            "truncation must land on a character boundary, not mid-character"
+        );
+    }
+
+    #[test]
+    fn truncate_for_log_is_exact_when_the_budget_lands_on_a_character_boundary() {
+        let s = "abcdefghij"; // all 1-byte chars, so any budget is a boundary
+        let truncated = truncate_for_log(s, 5);
+        assert_eq!(truncated, "abcde…");
+    }
 
     #[test]
     fn classify_sandbox_abort_recognizes_an_instruction_limit_abort() {

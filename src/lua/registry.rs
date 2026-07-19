@@ -37,6 +37,22 @@ use crate::network::socks5::Socks5ProxyConfig;
 /// never derived from Lua. See the module doc comment.
 pub type ProxyProfiles = std::collections::HashMap<String, Arc<Socks5ProxyConfig>>;
 
+/// Conservative explicit bounds on every Lua-controlled quantity that
+/// would otherwise let a script drive an unbounded allocation (a
+/// `Vec::with_capacity`/`HashMap`/`String` sized directly off a
+/// script-supplied count or length). No single mandatory value was
+/// specified beyond "choose conservative limits" — these are chosen
+/// generously above any real swarm this wrapper is designed for (see
+/// `docs/lua_runtime_benchmark.md`'s measured scale of hundreds of bots),
+/// while still being small enough that hitting one is unambiguously a
+/// misconfiguration, not a legitimate large deployment.
+pub const MAX_BOTS: usize = 20_000;
+pub const MAX_GROUPS: usize = 4_000;
+pub const MAX_BOTS_PER_GROUP: usize = 20_000;
+pub const MAX_NAME_LEN: usize = 256;
+pub const MAX_USERNAME_LEN: usize = 64;
+pub const MAX_LABEL_LEN: usize = 256;
+
 /// A named Minecraft server endpoint bots can be assigned to.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerDef {
@@ -195,6 +211,11 @@ impl SwarmRegistryBuilder {
                 "server name must not be empty".to_string(),
             ));
         }
+        if def.name.len() > MAX_NAME_LEN {
+            return Err(RegistryError::InvalidConfiguration(format!(
+                "server name exceeds the {MAX_NAME_LEN}-byte limit"
+            )));
+        }
         if def.host.is_empty() {
             return Err(RegistryError::InvalidConfiguration(format!(
                 "server `{}` has an empty host",
@@ -214,13 +235,31 @@ impl SwarmRegistryBuilder {
         Ok(())
     }
 
-    fn allocate_id(&mut self) -> u32 {
-        while self.bots.contains_key(&self.next_auto_id) {
-            self.next_auto_id += 1;
+    /// Finds the next free id starting from `next_auto_id`, bounded so a
+    /// swarm with bot ids clustered near `u32::MAX` can never spin
+    /// forever (or overflow the counter) searching for a free slot: once
+    /// every remaining id up to `u32::MAX` is exhausted, this reports
+    /// failure instead of wrapping back to `0` and silently colliding
+    /// with an already-allocated low id.
+    fn allocate_id(&mut self) -> Result<u32, RegistryError> {
+        loop {
+            if !self.bots.contains_key(&self.next_auto_id) {
+                let id = self.next_auto_id;
+                match self.next_auto_id.checked_add(1) {
+                    Some(next) => self.next_auto_id = next,
+                    None => self.next_auto_id = u32::MAX, // saturate; next call re-checks id u32::MAX itself
+                }
+                return Ok(id);
+            }
+            match self.next_auto_id.checked_add(1) {
+                Some(next) => self.next_auto_id = next,
+                None => {
+                    return Err(RegistryError::InvalidConfiguration(
+                        "no free auto-assigned bot id remains up to u32::MAX".to_string(),
+                    ))
+                }
+            }
         }
-        let id = self.next_auto_id;
-        self.next_auto_id += 1;
-        id
     }
 
     pub fn add_bot(&mut self, spec: BotSpec) -> Result<u32, RegistryError> {
@@ -228,6 +267,18 @@ impl SwarmRegistryBuilder {
             return Err(RegistryError::InvalidConfiguration(
                 "bot username must not be empty".to_string(),
             ));
+        }
+        if spec.username.len() > MAX_USERNAME_LEN {
+            return Err(RegistryError::InvalidConfiguration(format!(
+                "bot username exceeds the {MAX_USERNAME_LEN}-byte limit"
+            )));
+        }
+        if let Some(label) = &spec.label {
+            if label.len() > MAX_LABEL_LEN {
+                return Err(RegistryError::InvalidConfiguration(format!(
+                    "bot label exceeds the {MAX_LABEL_LEN}-byte limit"
+                )));
+            }
         }
         if !self.servers.contains_key(&spec.server) {
             return Err(RegistryError::UnknownServer(spec.server));
@@ -240,6 +291,11 @@ impl SwarmRegistryBuilder {
         if self.username_to_id.contains_key(&spec.username) {
             return Err(RegistryError::DuplicateUsername(spec.username));
         }
+        if self.bots.len() >= MAX_BOTS {
+            return Err(RegistryError::InvalidConfiguration(format!(
+                "swarm already has the maximum of {MAX_BOTS} bots"
+            )));
+        }
         let id = match spec.id {
             Some(id) => {
                 if self.bots.contains_key(&id) {
@@ -247,7 +303,7 @@ impl SwarmRegistryBuilder {
                 }
                 id
             }
-            None => self.allocate_id(),
+            None => self.allocate_id()?,
         };
         self.next_auto_id = self.next_auto_id.max(id.saturating_add(1));
         self.username_to_id.insert(spec.username.clone(), id);
@@ -265,14 +321,49 @@ impl SwarmRegistryBuilder {
         Ok(id)
     }
 
+    /// Reverses a successful [`add_bot`](Self::add_bot) call — the sole
+    /// purpose is letting a caller that adds several bots as one logical,
+    /// all-or-nothing batch (e.g. `swarm:add_group`'s bulk bot creation)
+    /// roll back everything it already added the moment any one of them
+    /// fails, rather than leaving a partial, ungrouped batch behind. Does
+    /// *not* rewind `next_auto_id` — a removed id is simply never reused
+    /// within this same builder, which is harmless (ids only need to be
+    /// unique, not gap-free) and far simpler than trying to safely
+    /// "undo" auto-assignment ordering.
+    pub fn remove_bot(&mut self, id: u32) -> bool {
+        match self.bots.remove(&id) {
+            Some(def) => {
+                self.username_to_id.remove(&def.username);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn add_group(&mut self, name: String, bot_ids: Vec<u32>) -> Result<(), RegistryError> {
         if name.is_empty() {
             return Err(RegistryError::InvalidConfiguration(
                 "group name must not be empty".to_string(),
             ));
         }
+        if name.len() > MAX_NAME_LEN {
+            return Err(RegistryError::InvalidConfiguration(format!(
+                "group name exceeds the {MAX_NAME_LEN}-byte limit"
+            )));
+        }
+        if bot_ids.len() > MAX_BOTS_PER_GROUP {
+            return Err(RegistryError::InvalidConfiguration(format!(
+                "group `{name}` has {} bots, exceeding the {MAX_BOTS_PER_GROUP} limit",
+                bot_ids.len()
+            )));
+        }
         if self.groups.contains_key(&name) {
             return Err(RegistryError::DuplicateGroup(name));
+        }
+        if self.groups.len() >= MAX_GROUPS {
+            return Err(RegistryError::InvalidConfiguration(format!(
+                "swarm already has the maximum of {MAX_GROUPS} groups"
+            )));
         }
         for id in &bot_ids {
             if !self.bots.contains_key(id) {
@@ -473,5 +564,138 @@ mod tests {
         assert_eq!(registry.worker_index(1, 4), 1);
         assert_eq!(registry.worker_index(4, 4), 0);
         assert_eq!(registry.worker_index(7, 4), 3);
+    }
+
+    #[test]
+    fn server_name_over_the_length_limit_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        let mut def = server("main");
+        def.name = "x".repeat(MAX_NAME_LEN + 1);
+        let err = b.add_server(def).unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+    }
+
+    #[test]
+    fn bot_username_over_the_length_limit_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        let mut spec = bot(&"x".repeat(MAX_USERNAME_LEN + 1), "main");
+        spec.username = "x".repeat(MAX_USERNAME_LEN + 1);
+        let err = b.add_bot(spec).unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+    }
+
+    #[test]
+    fn bot_label_over_the_length_limit_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        let mut spec = bot("alice", "main");
+        spec.label = Some("x".repeat(MAX_LABEL_LEN + 1));
+        let err = b.add_bot(spec).unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+    }
+
+    #[test]
+    fn group_name_over_the_length_limit_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        let id = b.add_bot(bot("alice", "main")).unwrap();
+        let err = b
+            .add_group("g".repeat(MAX_NAME_LEN + 1), vec![id])
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+    }
+
+    #[test]
+    fn adding_more_than_max_bots_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        for i in 0..MAX_BOTS {
+            let mut spec = bot(&format!("bot{i}"), "main");
+            spec.id = Some(i as u32);
+            b.add_bot(spec).unwrap();
+        }
+        let mut one_more = bot("one_too_many", "main");
+        one_more.id = Some(MAX_BOTS as u32);
+        let err = b.add_bot(one_more).unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+        assert_eq!(b.bots.len(), MAX_BOTS);
+    }
+
+    #[test]
+    fn adding_more_than_max_groups_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        let id = b.add_bot(bot("alice", "main")).unwrap();
+        for i in 0..MAX_GROUPS {
+            b.add_group(format!("g{i}"), vec![id]).unwrap();
+        }
+        let err = b
+            .add_group("one_too_many".to_string(), vec![id])
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+        assert_eq!(b.groups.len(), MAX_GROUPS);
+    }
+
+    #[test]
+    fn a_group_with_more_bots_than_the_per_group_limit_is_rejected() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        // Duplicate ids are fine for this check — it must reject on
+        // length alone, before ever validating individual bot ids.
+        let bot_ids = vec![0u32; MAX_BOTS_PER_GROUP + 1];
+        let err = b.add_group("too_big".to_string(), bot_ids).unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+    }
+
+    #[test]
+    fn remove_bot_reverses_a_successful_add_bot_including_the_username_reservation() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        let id = b.add_bot(bot("alice", "main")).unwrap();
+        assert!(b.remove_bot(id));
+        assert!(!b.bots.contains_key(&id));
+        // The username must be free again — re-adding it must succeed.
+        assert!(b.add_bot(bot("alice", "main")).is_ok());
+    }
+
+    #[test]
+    fn remove_bot_on_an_unknown_id_is_a_harmless_no_op() {
+        let mut b = SwarmRegistryBuilder::default();
+        assert!(!b.remove_bot(999));
+    }
+
+    #[test]
+    fn auto_id_allocation_reports_a_typed_error_instead_of_overflowing_past_u32_max() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        let mut spec = bot("alice", "main");
+        spec.id = Some(u32::MAX);
+        b.add_bot(spec).unwrap();
+        // `next_auto_id` is now pinned at `u32::MAX` (the explicit id
+        // above pushed it there), and that exact id is already taken —
+        // the next auto-assignment must return a typed error (this
+        // builder never searches backward for a lower gap once pinned at
+        // the top) rather than panicking on `u32::MAX + 1` overflow or
+        // looping forever. This call returning *at all*, promptly, is
+        // itself the regression proof.
+        let err = b.add_bot(bot("bob", "main")).unwrap_err();
+        assert_eq!(err.code(), "invalid_configuration");
+    }
+
+    #[test]
+    fn auto_id_allocation_still_works_normally_after_an_unrelated_high_explicit_id() {
+        let mut b = SwarmRegistryBuilder::default();
+        b.add_server(server("main")).unwrap();
+        // An explicit id (already-existing behavior, unchanged by this
+        // fix) advances `next_auto_id` past it — proving that ordinary
+        // path still just works (returns *some* fresh, non-conflicting
+        // id) after this fix's changes, not specifically that it reuses
+        // any particular gap.
+        let mut spec = bot("alice", "main");
+        spec.id = Some(1000);
+        b.add_bot(spec).unwrap();
+        let auto_id = b.add_bot(bot("bob", "main")).unwrap();
+        assert_ne!(auto_id, 1000);
     }
 }

@@ -234,7 +234,25 @@ pub struct WorkerState {
     pub timers: RefCell<crate::lua::api::timers::TimerRegistry>,
     pub shutdown: Arc<std::sync::atomic::AtomicBool>,
     pub callback_timeout: Duration,
+    /// Bounds concurrently in-flight action tasks spawned by
+    /// `crate::lua::api::bot::spawn_action` — without this, a handler
+    /// invoked repeatedly (e.g. from a tight `set_interval` timer, or one
+    /// invocation issuing many actions before the instruction budget
+    /// catches up) could spawn an unbounded number of tokio tasks with
+    /// nothing ever capping how many exist concurrently. A permit is held
+    /// for exactly one in-flight action's lifetime; `try_acquire_owned`
+    /// never blocks the calling Lua thread — an exhausted semaphore
+    /// resolves that one action's callback with a typed
+    /// `worker_overloaded` error immediately instead of queueing.
+    pub action_task_semaphore: Arc<tokio::sync::Semaphore>,
 }
+
+/// Default `WorkerState::action_task_semaphore` capacity — generously
+/// above `crate::lua::runtime::DEFAULT_HIGH_QUEUE_CAPACITY`, since a
+/// single action can be in flight for a while (network round-trip time)
+/// but the queue this bounds is meant to absorb bursts, not steady-state
+/// concurrency far beyond what any real swarm needs.
+pub const MAX_CONCURRENT_ACTION_TASKS: usize = 8192;
 
 impl WorkerState {
     pub fn my_bot_ids(&self) -> Vec<u32> {
@@ -346,6 +364,7 @@ pub fn run_worker(
         timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
         shutdown: config.shutdown,
         callback_timeout: config.callback_timeout,
+        action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_ACTION_TASKS)),
     });
 
     if let Err(e) = crate::lua::api::install(&lua, state.clone()) {
@@ -399,7 +418,21 @@ impl std::fmt::Display for HandlerFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HandlerFailure::Sandbox(e) => write!(f, "{}: {}", e.code, e.message),
-            HandlerFailure::Script(e) => write!(f, "{e}"),
+            // `e`'s text is entirely Lua-controlled (e.g. `error(huge_string)`)
+            // — bounded here, at the one place every `tracing::*!(... error
+            // = %e ...)` call site in this module ultimately reads through,
+            // rather than at each site individually.
+            HandlerFailure::Script(e) => {
+                let msg = e.to_string();
+                write!(
+                    f,
+                    "{}",
+                    crate::lua::error::truncate_for_log(
+                        &msg,
+                        crate::lua::error::MAX_LOG_MESSAGE_BYTES
+                    )
+                )
+            }
         }
     }
 }
@@ -792,6 +825,9 @@ mod tests {
             timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
             shutdown: Arc::new(AtomicBool::new(false)),
             callback_timeout: DEFAULT_CALLBACK_TIMEOUT,
+            action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(
+                MAX_CONCURRENT_ACTION_TASKS,
+            )),
         })
     }
 
@@ -834,6 +870,9 @@ mod tests {
                     timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
                     shutdown: Arc::new(AtomicBool::new(false)),
                     callback_timeout,
+                    action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(
+                        MAX_CONCURRENT_ACTION_TASKS,
+                    )),
                 })
             })
             .collect()
@@ -1269,6 +1308,41 @@ mod tests {
         assert!(
             state.callbacks.borrow().pending.is_empty(),
             "the resolved callback must be removed"
+        );
+    }
+
+    /// End-to-end proof that a Lua-raised error with an arbitrarily long,
+    /// multi-byte message never panics when logged and is visibly
+    /// truncated — `HandlerFailure::Script`'s `Display` is what every
+    /// `tracing::*!(... error = %e ...)` call site in this module reads
+    /// through.
+    #[tokio::test]
+    async fn handler_failure_display_truncates_a_huge_multibyte_lua_error_safely() {
+        let state = test_state(SandboxConfig::default());
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+
+        // "🦀" is 4 UTF-8 bytes; well past the 2048-byte log budget and
+        // not aligned to it, so a naive truncation would either panic
+        // (mid-character byte slice) or split a character silently.
+        let huge = "🦀".repeat(600);
+        let func: mlua::Function = lua
+            .load("function(msg) error(msg, 0) end")
+            .eval::<mlua::Function>()
+            .unwrap();
+        let err = func.call::<()>(huge).unwrap_err();
+
+        let failure = HandlerFailure::Script(err);
+        let displayed = failure.to_string(); // must not panic
+
+        assert!(
+            displayed.len() <= crate::lua::error::MAX_LOG_MESSAGE_BYTES + "…".len(),
+            "displayed length {} must respect the log budget",
+            displayed.len()
+        );
+        assert!(
+            displayed.ends_with('…'),
+            "truncation must be visibly marked"
         );
     }
 }
