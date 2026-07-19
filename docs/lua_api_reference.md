@@ -235,6 +235,16 @@ No pathfinding/obstacle avoidance — `walk_to` is a straight-line
 | `bot:chat(message) -> request_id` |
 | `bot:command(command) -> request_id` — `command` must not include a leading `/` |
 
+Chat is sent **unsigned, with a zero last-seen acknowledgement** — correct
+for this client's offline-custom-games scope, and accepted by offline-mode
+and `enforce-secure-profile=false` servers. Vanilla's secure-chat message
+signing (a per-message ECDSA signature over the session key) needs the
+player's certificates from an online-mode Mojang session, which a headless
+bot has no key for; a secure server accepts only a signed chain, so partial
+participation isn't possible, and the last-seen tracker it feeds only has
+signed messages to acknowledge on such servers. A secure server therefore
+rejects these messages, as it would any client without a signing key.
+
 ### Hand actions (async action)
 
 | Call |

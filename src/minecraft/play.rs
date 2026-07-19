@@ -407,11 +407,31 @@ fn apply_command(state: &mut PlayState, command: BotCommand) {
     }
 }
 
-/// The message is sent unsigned (no cryptographic signature). Offline-mode
-/// servers and servers with `enforce-secure-profile=false` accept this;
-/// servers that enforce secure chat will reject or kick unsigned messages —
-/// full message signing (a per-message ECDSA signature over the chat session
-/// key from `/player/certificates`) is a deliberate follow-up.
+/// The message is sent unsigned, with a zero last-seen acknowledgement —
+/// the correct behavior for this client's scope, not a stub.
+///
+/// Two vanilla secure-chat mechanisms are deliberately omitted, both of
+/// which only apply on servers that enforce secure chat (online-mode,
+/// `enforce-secure-profile=true`):
+///
+/// - **Message signing** (a per-message ECDSA signature over the chat
+///   session key) requires the player's certificates from
+///   `/player/certificates`, which only exist for an online-mode Mojang
+///   session. A headless bot for offline custom games has no such key, so
+///   it cannot sign — and a signed chain is the *only* thing a secure
+///   server accepts, so partial participation is impossible regardless.
+/// - **Last-seen acknowledgement** (the `offset` + bitset that acknowledges
+///   received signed messages) only has anything to track when the server
+///   sends *signed* `player_chat` messages, which enforce-secure-profile
+///   servers do and offline/custom servers do not. Since the bot cannot
+///   sign its own messages on a secure server anyway, tracking last-seen
+///   there buys nothing; on the offline/custom servers this client targets,
+///   there are no signed messages to acknowledge, so a zero offset and an
+///   empty bitset are exactly right.
+///
+/// Offline-mode servers and `enforce-secure-profile=false` servers accept
+/// this unsigned, zero-ack message as-is; a secure server rejects it, as it
+/// would reject any client without a Mojang signing key.
 async fn send_outbound_chat_action(conn: &mut Connection, action: &BotCommand) -> Result<()> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -445,9 +465,10 @@ fn encode_outbound_chat_action(
                 timestamp,
                 salt,
                 signature: None,
-                // No message-chain acknowledgement is tracked, so
-                // acknowledge zero prior messages: offset 0 and an empty
-                // (all-zero) 3-byte bitset.
+                // Unsigned, with a zero last-seen acknowledgement: offset 0
+                // and an empty (all-zero) 20-bit / 3-byte bitset. Correct for
+                // this client's scope — see `send_outbound_chat_action`'s doc
+                // comment for why signing and last-seen tracking are omitted.
                 offset: 0,
                 acknowledged: vec![0u8; 3],
             }
