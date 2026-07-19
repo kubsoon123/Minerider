@@ -522,11 +522,13 @@ fn play_coverage(id: i32) -> CoverageEntry {
             evidence: EVIDENCE_UNIT,
         }),
         play::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
-        play::CLIENTBOUND_CUSTOM_PAYLOAD_ID => ignored(Obligation {
-            state_update: "vanilla answers known plugin channels; brand sent voluntarily",
-            status: ConformanceStatus::NotImplemented,
-            evidence: EVIDENCE_NONE,
-            ..NO_RESPONSE
+        play::CLIENTBOUND_CUSTOM_PAYLOAD_ID => handled(Obligation {
+            responds_with: None,
+            timing: TimingClass::None,
+            state_update: "read the server brand (minecraft:brand); ignore other channels",
+            status: ConformanceStatus::Partial,
+            scenario: "",
+            evidence: EVIDENCE_UNIT,
         }),
         play::CLIENTBOUND_ADD_RESOURCE_PACK_ID => handled(Obligation {
             responds_with: Some("resource_pack_receive"),

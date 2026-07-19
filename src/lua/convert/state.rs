@@ -45,6 +45,13 @@ pub fn state_snapshot_to_table(lua: &Lua, snapshot: &StateSnapshot) -> mlua::Res
             None => Value::Nil,
         },
     )?;
+    t.set(
+        "server_brand",
+        match &snapshot.server_brand {
+            Some(brand) => Value::String(lua.create_string(brand.as_str())?),
+            None => Value::Nil,
+        },
+    )?;
     Ok(t)
 }
 

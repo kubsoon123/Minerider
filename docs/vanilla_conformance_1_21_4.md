@@ -73,7 +73,7 @@ or lose an id.
 | 22 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
 | 23 | set_cooldown | handled | — | — | apply bounded cooldown group lifecycle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 24 | chat_suggestions | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 25 | custom_payload | ignored | — | — | vanilla answers known plugin channels; brand sent voluntarily | NOT IMPLEMENTED |  | none |
+| 25 | custom_payload | handled | — | — | read the server brand (minecraft:brand); ignore other channels | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 26 | damage_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 27 | debug_sample | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 28 | hide_message | ignored | — | — | none | NOT IMPLEMENTED |  | none |

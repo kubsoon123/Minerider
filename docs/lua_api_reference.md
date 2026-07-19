@@ -268,7 +268,7 @@ rejects these messages, as it would any client without a signing key.
 
 | Call | Returns |
 |---|---|
-| `bot:state() -> table \| nil` | Full `StateSnapshot`: `tick`, `player`, `entities`, `inventory`, `players`, `presentation`, `scoreboard`, `hud`, `world_time`, `raining`, `dimension`. `nil` if the bot has no connection handle yet. |
+| `bot:state() -> table \| nil` | Full `StateSnapshot`: `tick`, `player`, `entities`, `inventory`, `players`, `presentation`, `scoreboard`, `hud`, `world_time`, `raining`, `dimension`, `server_brand` (the server's `minecraft:brand`, or `nil` until sent). `nil` if the bot has no connection handle yet. |
 | `bot:player() -> table \| nil` | Just the `player` section (position, health, food, saturation, xp, velocity, input, on_ground, ...). |
 | `bot:entities() -> table \| nil` | `{[entity_id] = {id, uuid, kind, x, y, z, yaw, pitch, head_yaw, vx, vy, vz, on_ground}}` — a bounded snapshot, never a per-tick/per-movement event stream. |
 | `bot:players() -> table \| nil` | `{[uuid_hex] = {uuid, name, gamemode, latency, listed, display_name, list_priority, show_hat, chat_session}}` — no secret auth data. |

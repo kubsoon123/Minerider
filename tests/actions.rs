@@ -831,6 +831,63 @@ async fn interact_entity_sends_use_entity_interact() {
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }
 
+/// The server's `minecraft:brand` plugin message is read and exposed in
+/// state, like the vanilla client (F3 debug screen). Other plugin channels
+/// are ignored — vanilla never blindly replies to a server channel.
+#[tokio::test]
+async fn server_brand_plugin_message_is_read_into_state() {
+    let port = start_and_run(|mut conn| async move {
+        // An unrelated channel first: must be silently ignored, not answered.
+        let other = play::PacketCustomPayload {
+            channel: "example:hello".to_string(),
+            data: vec![1, 2, 3],
+        };
+        let mut w = PacketWriter::new();
+        other.encode(&mut w).expect("encode custom_payload");
+        conn.send_packet(play::CLIENTBOUND_CUSTOM_PAYLOAD_ID, &w.into_inner())
+            .await
+            .expect("send other channel");
+
+        // The server brand: a length-prefixed string inside the payload data.
+        let mut brand_data = PacketWriter::new();
+        brand_data.put_string("PaperSpigot").unwrap();
+        let brand = play::PacketCustomPayload {
+            channel: "minecraft:brand".to_string(),
+            data: brand_data.into_inner().to_vec(),
+        };
+        let mut w = PacketWriter::new();
+        brand.encode(&mut w).expect("encode brand");
+        conn.send_packet(play::CLIENTBOUND_CUSTOM_PAYLOAD_ID, &w.into_inner())
+            .await
+            .expect("send brand");
+
+        // Give the client a moment, then it must not have replied to either
+        // channel (a vanilla client never answers a server plugin message).
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "BrandBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if handle.state().borrow().server_brand.as_deref() == Some("PaperSpigot") {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "server_brand was not read into state"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 /// The three dig stages send `block_dig` with the START/ABORT/STOP destroy
 /// statuses, carrying the target block and hit face.
 #[tokio::test]

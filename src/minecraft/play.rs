@@ -15,20 +15,21 @@ use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
     PacketArmAnimation, PacketBlockChange, PacketBlockDig, PacketBlockPlace, PacketChatCommand,
     PacketChatMessage, PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand,
-    PacketCloseWindow, PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation,
-    PacketEntityLook, PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity,
-    PacketExperience, PacketGameStateChange, PacketHeldItemSlot, PacketHeldItemSlotServerbound,
-    PacketKeepAlive, PacketLogin, PacketMapChunk, PacketMultiBlockChange, PacketOpenWindow,
-    PacketPing, PacketPlayerInfo, PacketPlayerInput, PacketPlayerInputInputs, PacketPlayerRemove,
-    PacketPong, PacketPosition, PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn,
-    PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
-    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
-    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseEntity, PacketUseEntityHand,
-    PacketUseEntityX, PacketUseEntityY, PacketUseEntityZ, PacketUseItem, PacketWindowItems,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
-    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CHUNK_BATCH_START_ID,
-    CLIENTBOUND_CLOSE_WINDOW_ID, CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
-    CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
+    PacketCloseWindow, PacketCraftProgressBar, PacketCustomPayload, PacketEntityDestroy,
+    PacketEntityHeadRotation, PacketEntityLook, PacketEntityMoveLook, PacketEntityTeleport,
+    PacketEntityVelocity, PacketExperience, PacketGameStateChange, PacketHeldItemSlot,
+    PacketHeldItemSlotServerbound, PacketKeepAlive, PacketLogin, PacketMapChunk,
+    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
+    PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
+    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
+    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
+    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
+    PacketUpdateTime, PacketUseEntity, PacketUseEntityHand, PacketUseEntityX, PacketUseEntityY,
+    PacketUseEntityZ, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
+    CLIENTBOUND_CHUNK_BATCH_START_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
+    CLIENTBOUND_ENTITY_DESTROY_ID, CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
     CLIENTBOUND_HELD_ITEM_SLOT_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
@@ -145,6 +146,10 @@ pub struct PlayState {
     /// When the current chunk batch started processing (`chunk_batch_start`),
     /// used to time it at `chunk_batch_finished`. `None` outside a batch.
     chunk_batch_started_at: Option<std::time::Instant>,
+    /// The server's self-reported brand from its `minecraft:brand` plugin
+    /// message, if it sent one. Vanilla reads this for the F3 debug screen;
+    /// exposed here so a script can see what server implementation it's on.
+    server_brand: Option<String>,
 }
 
 /// Vanilla `ClientCommandPacket.Action.PERFORM_RESPAWN`: click the death
@@ -187,6 +192,7 @@ impl PlayState {
             last_player_input: 0,
             chunk_batch: crate::minecraft::chunk_batch::ChunkBatchSizeCalculator::default(),
             chunk_batch_started_at: None,
+            server_brand: None,
         }
     }
 
@@ -280,6 +286,7 @@ impl PlayState {
             world_time: self.world_time,
             raining: self.raining,
             dimension: self.dimension.clone(),
+            server_brand: self.server_brand.clone(),
         }
     }
 }
@@ -309,6 +316,8 @@ pub struct StateSnapshot {
     /// this snapshot deliberately still excludes (see [`PlayState::snapshot`]).
     /// `None` before the first `login`/`respawn` packet.
     pub dimension: Option<DimensionType>,
+    /// The server's self-reported brand (`minecraft:brand`), if it sent one.
+    pub server_brand: Option<String>,
 }
 
 /// Runs the play-state loop: a `select!` between the packet stream and a
@@ -1042,6 +1051,23 @@ async fn handle_clientbound(
             keep_alive.encode(&mut w)?;
             conn.send_packet(SERVERBOUND_KEEP_ALIVE_ID, &w.freeze())
                 .await?;
+        }
+        CLIENTBOUND_CUSTOM_PAYLOAD_ID => {
+            // Plugin message. Vanilla reads its own known channels and
+            // ignores the rest — it never blindly replies to a server plugin
+            // channel. The one channel worth reading is `minecraft:brand`,
+            // the server's self-reported implementation name (shown on F3);
+            // store it. Everything else is intentionally ignored (a headless
+            // bot has no mod channels to answer).
+            let mut r = PacketReader::new(&packet.payload);
+            let custom = PacketCustomPayload::decode(&mut r)?;
+            if custom.channel == crate::minecraft::BRAND_CHANNEL {
+                let mut data = PacketReader::new(&custom.data);
+                if let Ok(brand) = data.read_string() {
+                    debug!(%brand, "server brand");
+                    state.server_brand = Some(brand.to_string());
+                }
+            }
         }
         CLIENTBOUND_PING_ID => {
             // Play-state ping/pong: echo the id straight back, exactly like
