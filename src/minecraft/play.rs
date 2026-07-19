@@ -18,11 +18,11 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
     PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
     PacketGameStateChange, PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition,
-    PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem,
-    PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition,
-    PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth,
-    PacketUpdateLight, PacketUpdateTime, PacketUseItem, PacketWindowItems,
+    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerRemove,
+    PacketPong, PacketPosition, PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn,
+    PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
+    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
+    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseItem, PacketWindowItems,
     CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
     CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
@@ -31,15 +31,16 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
     CLIENTBOUND_HELD_ITEM_SLOT_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
     CLIENTBOUND_LOGIN_ID, CLIENTBOUND_MAP_CHUNK_ID, CLIENTBOUND_MULTI_BLOCK_CHANGE_ID,
-    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_INFO_ID, CLIENTBOUND_PLAYER_REMOVE_ID,
-    CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
-    CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
-    CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
-    CLIENTBOUND_TILE_ENTITY_DATA_ID, CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID,
-    CLIENTBOUND_UPDATE_LIGHT_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
-    SERVERBOUND_ARM_ANIMATION_ID, SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID,
-    SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
-    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
+    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PING_ID, CLIENTBOUND_PLAYER_INFO_ID,
+    CLIENTBOUND_PLAYER_REMOVE_ID, CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID,
+    CLIENTBOUND_REMOVE_RESOURCE_PACK_ID, CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID,
+    CLIENTBOUND_SET_PLAYER_INVENTORY_ID, CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID,
+    CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_TILE_ENTITY_DATA_ID,
+    CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_LIGHT_ID,
+    CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_ARM_ANIMATION_ID,
+    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
+    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID,
     SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
     SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
@@ -591,6 +592,19 @@ async fn handle_clientbound(
             keep_alive.encode(&mut w)?;
             conn.send_packet(SERVERBOUND_KEEP_ALIVE_ID, &w.freeze())
                 .await?;
+        }
+        CLIENTBOUND_PING_ID => {
+            // Play-state ping/pong: echo the id straight back, exactly like
+            // the vanilla client. Distinct from the status-state ping and
+            // from keep-alive; a server that pings and gets no pong within
+            // its window disconnects the client.
+            let mut r = PacketReader::new(&packet.payload);
+            let ping = PacketPing::decode(&mut r)?;
+            let pong = PacketPong { id: ping.id };
+            let mut w = PacketWriter::new();
+            pong.encode(&mut w)?;
+            conn.send_packet(SERVERBOUND_PONG_ID, &w.freeze()).await?;
+            debug!(id = ping.id, "replied pong to play ping");
         }
         CLIENTBOUND_POSITION_ID => {
             let mut r = PacketReader::new(&packet.payload);

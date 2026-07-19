@@ -103,7 +103,7 @@ or lose an id.
 | 52 | open_book | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 53 | open_window | handled | — | — | replace open container, cancel stale transactions and emit inventory events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 54 | open_sign_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 55 | ping | ignored | pong | strict | none | NOT IMPLEMENTED | join_idle | none |
+| 55 | ping | handled | pong | strict | none | PARTIAL | join_idle | unit-tested state projection; mock/vanilla capture pending |
 | 56 | ping_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 57 | craft_recipe_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 58 | abilities | handled | — | — | store player ability flags and flying/walking speeds; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |

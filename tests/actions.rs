@@ -380,6 +380,51 @@ async fn wait_until_connected(handle: &minerider::core::supervisor::SupervisorHa
     }
 }
 
+/// The play loop must answer a clientbound `ping` with a `pong` echoing the
+/// same id, exactly like the vanilla client — the server uses it as a
+/// liveness probe distinct from keep-alive, and a missing pong gets the
+/// client disconnected. Tolerates the tick-driven movement/tick_end/
+/// player_input packets that legitimately interleave.
+#[tokio::test]
+async fn play_ping_is_answered_with_a_matching_pong() {
+    let port = start_and_run(|mut conn| async move {
+        let ping = play::PacketPing { id: 0x5150_1234 };
+        let mut w = PacketWriter::new();
+        ping.encode(&mut w).expect("encode ping");
+        conn.send_packet(play::CLIENTBOUND_PING_ID, &w.into_inner())
+            .await
+            .expect("send ping");
+
+        let pong = loop {
+            let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+                .await
+                .expect("pong did not arrive in time")
+                .expect("read packet");
+            if packet.id == play::SERVERBOUND_PONG_ID {
+                break packet;
+            }
+        };
+        let decoded =
+            play::PacketPong::decode(&mut PacketReader::new(&pong.payload)).expect("decode pong");
+        assert_eq!(
+            decoded.id, 0x5150_1234,
+            "pong must echo the exact ping id back"
+        );
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "PingBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+
+    wait_until_connected(&handle).await;
+    // The pong is driven entirely by the inbound ping; nothing to send here.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 async fn wait_until_gui_open(
     handle: &minerider::core::supervisor::SupervisorHandle,
     window_id: i32,

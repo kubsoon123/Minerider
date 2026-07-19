@@ -413,12 +413,14 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_UPDATE_LIGHT_ID => {
             handled(state_only("replace light data in cached chunk snapshot"))
         }
-        play::CLIENTBOUND_PING_ID => ignored(not_implemented(
-            Some("pong"),
-            TimingClass::Strict,
-            "none",
-            "join_idle",
-        )),
+        play::CLIENTBOUND_PING_ID => handled(Obligation {
+            responds_with: Some("pong"),
+            timing: TimingClass::Strict,
+            state_update: "none",
+            status: ConformanceStatus::Partial,
+            scenario: "join_idle",
+            evidence: EVIDENCE_UNIT,
+        }),
         play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => handled(state_only(
             "store structured local-player death information; emit HUD event",
         )),
