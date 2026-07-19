@@ -113,6 +113,82 @@ async fn send_play_login(conn: &mut Connection) {
         .expect("send play login");
 }
 
+/// Sends a Synchronize Player Position (teleport id 1) at a fixed spawn,
+/// then a one-chunk batch containing a stone floor at the player's chunk,
+/// so the client's readiness gate fires and it sends `player_loaded`. After
+/// this the player is a fully in-world, ticking entity — the state in which
+/// vanilla sends `tick_end` and `player_input`.
+async fn send_position_and_load_chunk(conn: &mut Connection) {
+    let position = play::PacketPosition {
+        teleport_id: 1,
+        x: 0.5,
+        y: 64.0,
+        z: 0.5,
+        dx: 0.0,
+        dy: 0.0,
+        dz: 0.0,
+        yaw: 0.0,
+        pitch: 0.0,
+        flags: play::PositionUpdateRelatives(0),
+    };
+    let mut w = PacketWriter::new();
+    position.encode(&mut w).expect("encode position");
+    conn.send_packet(play::CLIENTBOUND_POSITION_ID, &w.into_inner())
+        .await
+        .expect("send position");
+
+    conn.send_packet(play::CLIENTBOUND_CHUNK_BATCH_START_ID, &[])
+        .await
+        .expect("send chunk batch start");
+    let mut chunk_data = PacketWriter::new();
+    for section in 0..24 {
+        if section == 7 {
+            // Stone floor at world Y=63 (local Y=15 of section 7): a 4-bit
+            // indirect palette [air=0, stone=1], stone in the top rows.
+            chunk_data.put_i16(256);
+            chunk_data.put_u8(4);
+            chunk_data.put_varint(2);
+            chunk_data.put_varint(0);
+            chunk_data.put_varint(1);
+            chunk_data.put_varint(256);
+            for packed in 0..256 {
+                chunk_data.put_u64(if packed >= 240 {
+                    0x1111_1111_1111_1111
+                } else {
+                    0
+                });
+            }
+        } else {
+            chunk_data.put_i16(0);
+            chunk_data.put_u8(0);
+            chunk_data.put_varint(0);
+            chunk_data.put_varint(0);
+        }
+        chunk_data.put_u8(0);
+        chunk_data.put_varint(0);
+        chunk_data.put_varint(0);
+    }
+    let chunk_data = chunk_data.into_inner();
+    let mut w = PacketWriter::new();
+    w.put_i32(0);
+    w.put_i32(0);
+    Nbt::Compound(vec![])
+        .encode(&mut w)
+        .expect("encode heightmap");
+    w.put_byte_array(&chunk_data);
+    for _ in 0..7 {
+        w.put_varint(0);
+    }
+    conn.send_packet(play::CLIENTBOUND_MAP_CHUNK_ID, &w.into_inner())
+        .await
+        .expect("send map chunk");
+    let mut w = PacketWriter::new();
+    w.put_varint(1);
+    conn.send_packet(play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, &w.into_inner())
+        .await
+        .expect("send chunk batch finished");
+}
+
 /// Starts a mock server that completes the handshake through play-state
 /// login, then hands the still-open server-side `Connection` to `body` for
 /// the test to drive further.
@@ -421,6 +497,95 @@ async fn play_ping_is_answered_with_a_matching_pong() {
     // The pong is driven entirely by the inbound ping; nothing to send here.
     tokio::time::sleep(Duration::from_millis(300)).await;
 
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// Once the player is a loaded, ticking in-world entity, vanilla sends a
+/// fieldless `tick_end` at the end of every client tick. Load the player,
+/// then assert several `tick_end`s arrive over the following ticks.
+#[tokio::test]
+async fn tick_end_is_sent_every_active_play_tick() {
+    let port = start_and_run(|mut conn| async move {
+        send_position_and_load_chunk(&mut conn).await;
+
+        // player_loaded first (the readiness gate), then a run of tick_ends.
+        let mut tick_ends = 0;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        while tick_ends < 3 && tokio::time::Instant::now() < deadline {
+            let packet = tokio::time::timeout(Duration::from_secs(3), conn.read_packet())
+                .await
+                .expect("packet did not arrive in time")
+                .expect("read packet");
+            if packet.id == play::SERVERBOUND_TICK_END_ID {
+                tick_ends += 1;
+            }
+        }
+        assert!(
+            tick_ends >= 3,
+            "expected a tick_end every active tick, saw {tick_ends}"
+        );
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "TickEndBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// Vanilla sends `player_input` (the seven movement-key bitset) whenever the
+/// pressed set changes. Load the player, then hold "forward" and assert a
+/// `player_input` carrying exactly the FORWARD bit arrives.
+#[tokio::test]
+async fn player_input_is_sent_when_the_bot_starts_moving() {
+    let port = start_and_run(|mut conn| async move {
+        send_position_and_load_chunk(&mut conn).await;
+
+        let input = loop {
+            let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+                .await
+                .expect("player_input did not arrive in time")
+                .expect("read packet");
+            if packet.id == play::SERVERBOUND_PLAYER_INPUT_ID {
+                break packet;
+            }
+        };
+        let decoded = play::PacketPlayerInput::decode(&mut PacketReader::new(&input.payload))
+            .expect("decode player_input");
+        assert_eq!(
+            decoded.inputs.0,
+            play::PacketPlayerInputInputs::FORWARD,
+            "holding forward must send exactly the FORWARD bit"
+        );
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "InputBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    // Hold forward. The controller keeps applying it each tick; once the
+    // player is loaded, the change from "no keys" to FORWARD sends one
+    // player_input. Re-sent a few times in case it lands before load; stop
+    // once the mock has seen it and closed (set_input then errors, which is
+    // the success path, not a failure).
+    for _ in 0..10 {
+        if handle
+            .set_input(minerider::minecraft::player::MovementInput {
+                forward: 1.0,
+                ..Default::default()
+            })
+            .await
+            .is_err()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(60)).await;
+    }
     handle.stop();
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }

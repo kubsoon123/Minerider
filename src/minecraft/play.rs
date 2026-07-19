@@ -18,13 +18,13 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
     PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
     PacketGameStateChange, PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerRemove,
-    PacketPong, PacketPosition, PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn,
-    PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
-    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
-    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseItem, PacketWindowItems,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
-    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
+    PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
+    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
+    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
+    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
+    PacketUpdateTime, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
@@ -40,9 +40,10 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_ARM_ANIMATION_ID,
     SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
     SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
-    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID,
-    SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
-    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
+    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_INPUT_ID, SERVERBOUND_PLAYER_LOADED_ID,
+    SERVERBOUND_PONG_ID, SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID,
+    SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_TICK_END_ID,
+    SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
 use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Vec2f};
 use minerider_protocol::packet::RawPacket;
@@ -127,6 +128,12 @@ pub struct PlayState {
     /// to be unique *within* one session's acknowledgement stream, never
     /// across sessions.
     next_action_sequence: i32,
+    /// The seven-flag `player_input` bitset last sent to the server. Vanilla
+    /// sends `player_input` only when the input *changes*, so this tracks the
+    /// last value to suppress redundant per-tick resends. Starts at `0` (no
+    /// keys) every session, matching the server's assumption for a freshly
+    /// joined player, so an idle bot sends nothing.
+    last_player_input: u8,
 }
 
 /// Vanilla `ClientCommandPacket.Action.PERFORM_RESPAWN`: click the death
@@ -166,6 +173,7 @@ impl PlayState {
             respawn_pending: false,
             was_alive: true,
             next_action_sequence: 0,
+            last_player_input: 0,
         }
     }
 
@@ -546,32 +554,97 @@ async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()>
         state.player.tick_physics(world)?;
     }
 
-    let Some(packet) = state.player.movement_packet() else {
+    // Vanilla's `LocalPlayer.aiStep` sends `player_input` (the seven movement
+    // keys) whenever the pressed set changes, before `sendPosition`. `drive`
+    // above has finalized this tick's input; send it (on change) before the
+    // movement packet.
+    send_player_input_if_changed(conn, state).await?;
+
+    if let Some(packet) = state.player.movement_packet() {
+        let (id, payload) = match packet {
+            MovementPacket::PositionLook(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_POSITION_LOOK_ID, w.freeze())
+            }
+            MovementPacket::Position(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_POSITION_ID, w.freeze())
+            }
+            MovementPacket::Look(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_LOOK_ID, w.freeze())
+            }
+            MovementPacket::StatusOnly(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_FLYING_ID, w.freeze())
+            }
+        };
+        conn.send_packet(id, &payload).await?;
+    }
+
+    // Vanilla sends `tick_end` (a fieldless marker) at the very end of every
+    // client tick once the player is in a ticking world — after movement,
+    // once per tick. The `loaded` gate keeps a mid-join client (not yet
+    // ticking in-world) from sending it, matching vanilla, and keeps it out
+    // of pre-spawn packet expectations.
+    if state.player.loaded {
+        conn.send_packet(SERVERBOUND_TICK_END_ID, &[]).await?;
+    }
+    Ok(())
+}
+
+/// The seven-flag `player_input` bitset for the player's current movement
+/// keys, matching `ServerboundPlayerInputPacket`'s flag layout. Forward and
+/// left are the positive impulse directions (vanilla `leftImpulse` is
+/// positive when strafing left).
+fn player_input_flags(input: &crate::minecraft::player::MovementInput) -> u8 {
+    let mut flags = 0u8;
+    if input.forward > 0.0 {
+        flags |= PacketPlayerInputInputs::FORWARD;
+    } else if input.forward < 0.0 {
+        flags |= PacketPlayerInputInputs::BACKWARD;
+    }
+    if input.strafe > 0.0 {
+        flags |= PacketPlayerInputInputs::LEFT;
+    } else if input.strafe < 0.0 {
+        flags |= PacketPlayerInputInputs::RIGHT;
+    }
+    if input.jump {
+        flags |= PacketPlayerInputInputs::JUMP;
+    }
+    if input.sneak {
+        flags |= PacketPlayerInputInputs::SHIFT;
+    }
+    if input.sprint {
+        flags |= PacketPlayerInputInputs::SPRINT;
+    }
+    flags
+}
+
+/// Sends `player_input` only when this tick's movement-key set differs from
+/// the last one sent, exactly like vanilla. Gated on `loaded` by its only
+/// caller (the active-tick path), so a mid-join client sends nothing.
+async fn send_player_input_if_changed(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    if !state.player.loaded {
         return Ok(());
+    }
+    let flags = player_input_flags(&state.player.input);
+    if flags == state.last_player_input {
+        return Ok(());
+    }
+    state.last_player_input = flags;
+    let packet = PacketPlayerInput {
+        inputs: PacketPlayerInputInputs(flags),
     };
-    let (id, payload) = match packet {
-        MovementPacket::PositionLook(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_POSITION_LOOK_ID, w.freeze())
-        }
-        MovementPacket::Position(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_POSITION_ID, w.freeze())
-        }
-        MovementPacket::Look(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_LOOK_ID, w.freeze())
-        }
-        MovementPacket::StatusOnly(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_FLYING_ID, w.freeze())
-        }
-    };
-    conn.send_packet(id, &payload).await?;
+    let mut w = PacketWriter::new();
+    packet.encode(&mut w)?;
+    conn.send_packet(SERVERBOUND_PLAYER_INPUT_ID, &w.freeze())
+        .await?;
+    debug!(flags, tick = state.clock.current(), "sent player_input");
     Ok(())
 }
 
@@ -1124,6 +1197,62 @@ mod tests {
         assert_eq!(state.next_action_sequence(), 1);
         assert_eq!(state.next_action_sequence(), 2);
         assert_eq!(state.next_action_sequence(), 3);
+    }
+
+    #[test]
+    fn player_input_flags_map_each_movement_key_to_its_vanilla_bit() {
+        use crate::minecraft::player::MovementInput;
+
+        // Idle: no keys, no flags.
+        assert_eq!(player_input_flags(&MovementInput::default()), 0);
+
+        // Forward and backward are the two signs of the forward impulse and
+        // are mutually exclusive.
+        let fwd = MovementInput {
+            forward: 1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&fwd), PacketPlayerInputInputs::FORWARD);
+        let back = MovementInput {
+            forward: -1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&back), PacketPlayerInputInputs::BACKWARD);
+
+        // Left is the positive strafe direction (vanilla leftImpulse).
+        let left = MovementInput {
+            strafe: 1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&left), PacketPlayerInputInputs::LEFT);
+        let right = MovementInput {
+            strafe: -1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&right), PacketPlayerInputInputs::RIGHT);
+
+        // A sprint-jump strafing forward sets exactly its four bits.
+        let combo = MovementInput {
+            forward: 1.0,
+            strafe: 1.0,
+            jump: true,
+            sprint: true,
+            sneak: false,
+        };
+        assert_eq!(
+            player_input_flags(&combo),
+            PacketPlayerInputInputs::FORWARD
+                | PacketPlayerInputInputs::LEFT
+                | PacketPlayerInputInputs::JUMP
+                | PacketPlayerInputInputs::SPRINT
+        );
+
+        // Sneak maps to SHIFT.
+        let sneak = MovementInput {
+            sneak: true,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&sneak), PacketPlayerInputInputs::SHIFT);
     }
 
     #[test]

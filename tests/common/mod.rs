@@ -142,8 +142,16 @@ fn ensure_vanilla_movement(packet: &minerider_protocol::packet::RawPacket) -> Re
                 | play::SERVERBOUND_POSITION_LOOK_ID
                 | play::SERVERBOUND_LOOK_ID
                 | play::SERVERBOUND_FLYING_ID
+                // Per-tick vanilla play traffic that legitimately interleaves
+                // with movement once the player is loaded: the end-of-tick
+                // marker and the on-change movement-key input packet.
+                | play::SERVERBOUND_TICK_END_ID
+                | play::SERVERBOUND_PLAYER_INPUT_ID
         ),
-        format!("expected vanilla movement packet, got 0x{:02x}", packet.id),
+        format!(
+            "expected vanilla per-tick play packet, got 0x{:02x}",
+            packet.id
+        ),
     )
 }
 
