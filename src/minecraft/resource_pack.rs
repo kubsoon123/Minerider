@@ -8,10 +8,7 @@
 use std::time::Duration;
 
 use minerider_protocol::buffer::PacketWriter;
-use minerider_protocol::generated::v1_21_4::types::{
-    PacketCommonAddResourcePack, PacketResourcePackReceive,
-};
-use minerider_protocol::traits::Encode;
+use minerider_protocol::generated::v1_21_4::types::PacketCommonAddResourcePack;
 use sha1::{Digest, Sha1};
 use tracing::{debug, info, warn};
 
@@ -79,14 +76,10 @@ pub async fn handle_offer(
     Ok(())
 }
 
-async fn send_status(
-    conn: &mut Connection,
-    packet_id: i32,
-    uuid: u128,
-    result: i32,
-) -> Result<()> {
+async fn send_status(conn: &mut Connection, packet_id: i32, uuid: u128, result: i32) -> Result<()> {
     let mut writer = PacketWriter::new();
-    PacketResourcePackReceive { uuid, result }.encode(&mut writer)?;
+    writer.put_uuid(uuid);
+    writer.put_varint(result);
     conn.send_packet(packet_id, &writer.freeze()).await
 }
 
@@ -188,10 +181,7 @@ mod tests {
             prompt_message: None,
         };
 
-        assert_eq!(
-            download_and_verify(&pack).await.unwrap(),
-            body.len() as u64
-        );
+        assert_eq!(download_and_verify(&pack).await.unwrap(), body.len() as u64);
         server.await.unwrap();
     }
 }

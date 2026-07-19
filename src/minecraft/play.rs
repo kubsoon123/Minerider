@@ -21,14 +21,13 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketHeldItemSlotServerbound, PacketKeepAlive, PacketLogin, PacketMapChunk,
     PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
     PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
-    PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
-    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
-    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
-    PacketUpdateTime, PacketUseEntity, PacketUseEntityHand, PacketUseEntityX, PacketUseEntityY,
-    PacketUseEntityZ, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
-    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
-    CLIENTBOUND_CHUNK_BATCH_START_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
-    CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
+    PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
+    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
+    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseEntity, PacketUseEntityHand,
+    PacketUseEntityX, PacketUseEntityY, PacketUseEntityZ, PacketUseItem, PacketWindowItems,
+    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
+    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CHUNK_BATCH_START_ID,
+    CLIENTBOUND_CLOSE_WINDOW_ID, CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
     CLIENTBOUND_ENTITY_DESTROY_ID, CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
@@ -459,13 +458,12 @@ pub async fn run_play(
         // which re-sends our brand/settings, processes the server's
         // registry/finish, and leaves the connection back in Play — then loop
         // to rebuild a fresh play session on the new configuration.
-        configuration =
-            crate::minecraft::configuration::run_configuration(
-                conn,
-                view_distance,
-                accept_resource_packs,
-            )
-            .await?;
+        configuration = crate::minecraft::configuration::run_configuration(
+            conn,
+            view_distance,
+            accept_resource_packs,
+        )
+        .await?;
         debug!("reconfiguration complete; resuming play");
     }
 }
