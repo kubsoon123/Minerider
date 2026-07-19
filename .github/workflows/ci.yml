@@ -140,26 +140,27 @@ jobs:
       # into two process-isolated steps gives each suite a clean resource
       # baseline instead of inheriting whatever the other left behind.
       #
-      # That diagnosis was never fully separated from an alternative
-      # explanation available at the time: several concrete bugs since
-      # fixed on this branch could themselves have produced exactly this
-      # symptom — an unbounded worker-startup wait, a lost cross-worker
-      # callback, and (most directly) `shutdown` not actually tracking or
-      # waiting for every action task/worker thread it spawned, letting
-      # state leak from one test into the next within the same process.
-      # Process isolation alone doesn't distinguish "the runner is just
-      # slow" from "something leaked" — it just hides either one behind a
-      # clean process boundary. `production_smoke`'s
+      # That diagnosis has since been disproven with CI-scale evidence:
+      # run 29661321026 (Windows) and run 29684306799 (Ubuntu) each failed
+      # a *different* test inside THIS step — the process that excludes
+      # production_smoke entirely — so shared-process contention could not
+      # have been the cause. The actual root cause was found in the test
+      # fixture itself: `spawn_mock_server`'s accept loop stopped at
+      # exactly `bot_count` connections for every non-ReconnectStorm
+      # scenario, so a bot whose first connect attempt hit any transient
+      # failure (easy on a contended 2-core runner) retried into a
+      # listener that would never accept it again — stranded forever,
+      # which no settle-timeout widening could fix. The loop now accepts
+      # until the server task is torn down (see the comment in
+      # `spawn_mock_server`). Independently,
       # `repeated_start_connect_shutdown_cycles_do_not_accumulate_state`
-      # now asserts a direct cleanup invariant for this (OS thread count on
-      # Linux, handle count on Windows — see
-      # `crate::lua_benchmark::metrics::process_thread_count`) in addition
-      # to the existing timing-based inference, specifically so a future
-      # regression here is caught by more than "a CI runner felt slow
-      # today". The split itself stays for now — local, many-core
-      # non-flakiness doesn't prove safety on a constrained shared runner,
-      # and removing a working mitigation without CI-scale evidence is
-      # exactly the kind of change to avoid making on inference alone.
+      # asserts a direct cleanup invariant (OS thread count on Linux,
+      # handle count on Windows — see
+      # `crate::lua_benchmark::metrics::process_thread_count`) so a future
+      # resource leak is caught by more than "a CI runner felt slow
+      # today". The two-step split is retained: it's harmless, and the
+      # production_smoke suite alone takes ~100s, so process isolation
+      # also keeps each step's logs and failure attribution clean.
       - run: cargo test --features lua-benchmark --lib lua_benchmark --locked -- --test-threads=1 --skip production_smoke
       # `lua_benchmark::full_runtime::production_smoke`: the
       # production-wrapper smoke (4 default workers, several bots, 2 local

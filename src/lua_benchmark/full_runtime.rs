@@ -442,33 +442,33 @@ async fn spawn_mock_server(
     );
 
     let task = tokio::spawn(async move {
-        let mut handles = Vec::new();
-        // Accept at least bot_count connections; reconnects after a kick
-        // arrive as additional connections on the same listener.
-        let expected = match scenario {
-            // At least one reconnect per targeted bot, plus headroom for
-            // legitimate extra retries under real scheduling/timing
-            // variance — an accept loop that stops exactly at the
-            // theoretical minimum would itself force spurious extra
-            // retries (a refused connection is also a transient failure).
-            ScenarioKind::ReconnectStorm { percent } => {
-                bot_count as usize + (bot_count as usize * percent as usize / 100) * 3
-            }
-            _ => bot_count as usize,
-        };
-        for _ in 0..expected {
+        // Accept until this task is aborted (`run_full_runtime_scenario`
+        // aborts it at teardown; in `production_smoke` tests the tokio
+        // test runtime drops it) — never a fixed count. A supervisor's
+        // retry after ANY transient failure (a serve_one read error, a
+        // connect-deadline timeout on a contended 2-core CI runner)
+        // arrives as a NEW connection on this listener; an accept loop
+        // that stops at the theoretical minimum leaves that retry's SYN
+        // sitting in the backlog forever, permanently stranding the bot
+        // no matter how long the caller's settle timeout is. That exact
+        // failure — `bots_connected` one short with a 90s settle, a
+        // different test each time, only on slow shared runners — is
+        // what every CI-only flake in this suite actually was (Actions
+        // runs 29661321026 on Windows and 29684306799 on Ubuntu are the
+        // runs that finally isolated it to this loop, by failing in the
+        // process that *excludes* production_smoke). `already_kicked`
+        // still guarantees each ReconnectStorm-targeted bot is kicked
+        // exactly once regardless of how many times it connects.
+        loop {
             let (stream, _) = match listener.accept().await {
                 Ok(pair) => pair,
                 Err(_) => break,
             };
             let kick_rx = kick_rx.clone();
             let already_kicked = already_kicked.clone();
-            handles.push(tokio::spawn(async move {
+            tokio::spawn(async move {
                 let _ = serve_one(stream, scenario, kick_rx, already_kicked).await;
-            }));
-        }
-        for h in handles {
-            let _ = h.await;
+            });
         }
     });
 
@@ -871,15 +871,17 @@ mod tests {
     use crate::lua_benchmark::scripts::ScriptKind;
 
     // `settle_timeout: Duration::from_secs(90)` below: widened from 45s
-    // after a third CI-only flake (`proxy_groups_scenario_routes_every_bot_through_its_assigned_proxy`
-    // failed on ubuntu-latest with only 2/4 bots connected within 45s —
-    // never reproduced locally). This module's own test count roughly
-    // doubled once `production_smoke` (see the sibling module below) was
-    // added, plausibly increasing resource pressure on a shared CI runner
-    // for tests that run later in the same `--test-threads=1` process.
-    // Widening again rather than chasing a specific root cause, consistent
-    // with the first two flakes this suite hit (see git history) — real
-    // environment slowness, not a logic bug in code this diff didn't touch.
+    // after a third CI-only flake. The attribution that widening rested on
+    // ("real environment slowness, not a logic bug") turned out to be
+    // wrong: every one of this suite's CI-only flakes — including the
+    // 2/4-bots-connected one the widening reacted to — was the mock
+    // server's accept loop stopping at exactly `bot_count` connections,
+    // so a bot whose first attempt hit any transient failure could never
+    // be accepted again no matter the timeout (see the comment inside
+    // `spawn_mock_server`, and Actions runs 29661321026/29684306799 for
+    // the failures that isolated it). The wide timeout stays anyway: it
+    // now only has to cover genuinely slow runners, which is what it's
+    // for — it is no longer masking a stranded bot.
     fn no_proxy() -> Arc<dyn Fn(u32) -> Option<Arc<Socks5ProxyConfig>> + Send + Sync> {
         Arc::new(|_bot| None)
     }
@@ -1005,11 +1007,19 @@ mod tests {
         let result = run_full_runtime_scenario(config).await;
         assert_eq!(result.bots_connected, 4);
 
+        // `>=` rather than `==`: every bot ends Connected (asserted above)
+        // and an even bot's *only* path to the server is proxy_a (its
+        // supervisor reuses its config's proxy on every attempt), so ≥2
+        // CONNECTs proves both assigned bots routed through it. A rare
+        // transient failure legitimately adds a retry CONNECT, so an exact
+        // count here would flake precisely when the client behaves
+        // correctly; odd bots have no proxy configured at all, so no
+        // unassigned bot can ever contribute to this count.
         let targets = proxy_a.requested_targets().await;
-        assert_eq!(
-            targets.len(),
-            2,
-            "exactly the 2 bots assigned to proxy_a must have connected through it"
+        assert!(
+            targets.len() >= 2,
+            "both bots assigned to proxy_a must have connected through it, saw {} CONNECTs",
+            targets.len()
         );
     }
 
