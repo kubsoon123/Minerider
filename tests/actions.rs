@@ -831,6 +831,88 @@ async fn interact_entity_sends_use_entity_interact() {
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }
 
+/// The three dig stages send `block_dig` with the START/ABORT/STOP destroy
+/// statuses, carrying the target block and hit face.
+#[tokio::test]
+async fn digging_stages_send_block_dig_with_the_right_status() {
+    let port = start_and_run(|mut conn| async move {
+        let start_pkt = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("start block_dig did not arrive in time")
+            .expect("read block_dig");
+        assert_eq!(start_pkt.id, play::SERVERBOUND_BLOCK_DIG_ID);
+        let start = play::PacketBlockDig::decode(&mut PacketReader::new(&start_pkt.payload))
+            .expect("decode block_dig");
+        assert_eq!(start.status, 0, "START_DESTROY");
+        assert_eq!(start.location.x, 3);
+        assert_eq!(start.location.y, 64);
+        assert_eq!(start.location.z, 5);
+        assert_eq!(start.face, 1);
+
+        let finish_pkt = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("finish block_dig did not arrive in time")
+            .expect("read block_dig");
+        let finish = play::PacketBlockDig::decode(&mut PacketReader::new(&finish_pkt.payload))
+            .expect("decode block_dig");
+        assert_eq!(finish.status, 2, "STOP_DESTROY");
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "DigBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .dig_block(3, 64, 5, 1, minerider::minecraft::control::DigAction::Start)
+        .await
+        .expect("start dig accepted");
+    handle
+        .dig_block(
+            3,
+            64,
+            5,
+            1,
+            minerider::minecraft::control::DigAction::Finish,
+        )
+        .await
+        .expect("finish dig accepted");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// `drop_item(true)` and `swap_hands()` send `block_dig` with the DROP_ALL
+/// and SWAP_ITEM_WITH_OFFHAND statuses respectively.
+#[tokio::test]
+async fn drop_item_and_swap_hands_send_their_block_dig_statuses() {
+    let port = start_and_run(|mut conn| async move {
+        let drop = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("drop block_dig did not arrive")
+            .expect("read");
+        let drop = play::PacketBlockDig::decode(&mut PacketReader::new(&drop.payload))
+            .expect("decode block_dig");
+        assert_eq!(drop.status, 3, "DROP_ALL_ITEMS");
+        let swap = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("swap block_dig did not arrive")
+            .expect("read");
+        let swap = play::PacketBlockDig::decode(&mut PacketReader::new(&swap.payload))
+            .expect("decode block_dig");
+        assert_eq!(swap.status, 6, "SWAP_ITEM_WITH_OFFHAND");
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "DropSwapBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle.drop_item(true).await.expect("drop_item accepted");
+    handle.swap_hands().await.expect("swap_hands accepted");
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 /// `close_gui` closes the currently open window: it sends `close_window`
 /// carrying that window's id (not window 0) and drops the local open window.
 #[tokio::test]

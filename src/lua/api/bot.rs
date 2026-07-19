@@ -21,7 +21,7 @@ use crate::core::supervisor::{ControlError, SupervisorHandle, SupervisorStatus};
 use crate::lua::dispatcher::{ActionOutcome, ActionResult};
 use crate::lua::error::ScriptError;
 use crate::lua::worker::WorkerState;
-use crate::minecraft::control::{Hand, RandomLookConfig};
+use crate::minecraft::control::{DigAction, Hand, RandomLookConfig};
 use crate::minecraft::inventory::{DragButton, GuiClick, InventoryOutcome};
 use crate::minecraft::player::MovementInput;
 
@@ -162,6 +162,27 @@ fn parse_hand(s: &str) -> mlua::Result<Hand> {
             "invalid hand \"{other}\" (expected \"main\" or \"off\")"
         ))),
     }
+}
+
+/// Parses a dig-target table `{x, y, z, face}` into `(x, y, z, face)`. All
+/// four are required integers; `face` (0..=5) range-checking is left to
+/// `BotCommand::validate`, but a value that doesn't fit an `i32` is rejected
+/// here.
+fn parse_dig_target(t: &Table) -> mlua::Result<(i32, i32, i32, i32)> {
+    let required_i32 = |key: &str| -> mlua::Result<i32> {
+        let value: i64 = t.get::<Option<i64>>(key)?.ok_or_else(|| {
+            mlua::Error::RuntimeError(format!("dig target requires integer field `{key}`"))
+        })?;
+        i32::try_from(value).map_err(|_| {
+            mlua::Error::RuntimeError(format!("dig target field `{key}` does not fit an i32"))
+        })
+    };
+    Ok((
+        required_i32("x")?,
+        required_i32("y")?,
+        required_i32("z")?,
+        required_i32("face")?,
+    ))
 }
 
 /// Parses a `use_item_on_block` options table:
@@ -586,6 +607,35 @@ impl UserData for LuaBot {
         methods.add_method("release_item", |_, this, ()| {
             Ok(spawn_action(this, |h| async move {
                 control_outcome(h.release_item().await)
+            }))
+        });
+        methods.add_method("start_digging", |_, this, opts: Table| {
+            let (x, y, z, face) = parse_dig_target(&opts)?;
+            Ok(spawn_action(this, move |h| async move {
+                control_outcome(h.dig_block(x, y, z, face, DigAction::Start).await)
+            }))
+        });
+        methods.add_method("cancel_digging", |_, this, opts: Table| {
+            let (x, y, z, face) = parse_dig_target(&opts)?;
+            Ok(spawn_action(this, move |h| async move {
+                control_outcome(h.dig_block(x, y, z, face, DigAction::Cancel).await)
+            }))
+        });
+        methods.add_method("finish_digging", |_, this, opts: Table| {
+            let (x, y, z, face) = parse_dig_target(&opts)?;
+            Ok(spawn_action(this, move |h| async move {
+                control_outcome(h.dig_block(x, y, z, face, DigAction::Finish).await)
+            }))
+        });
+        methods.add_method("drop_item", |_, this, whole_stack: Option<bool>| {
+            let whole_stack = whole_stack.unwrap_or(false);
+            Ok(spawn_action(this, move |h| async move {
+                control_outcome(h.drop_item(whole_stack).await)
+            }))
+        });
+        methods.add_method("swap_hands", |_, this, ()| {
+            Ok(spawn_action(this, |h| async move {
+                control_outcome(h.swap_hands().await)
             }))
         });
         methods.add_method("close_gui", |_, this, ()| {

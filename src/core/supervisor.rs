@@ -592,6 +592,40 @@ impl SupervisorHandle {
         self.send_command(BotCommand::ReleaseItem).await
     }
 
+    /// Breaks a block (vanilla `block_dig`): `action` selects START/ABORT/STOP
+    /// destroy. Survival mining is `start` → wait the break time → `finish`.
+    /// `face` (0..=5) is validated before anything is sent.
+    pub async fn dig_block(
+        &self,
+        x: i32,
+        y: i32,
+        z: i32,
+        face: i32,
+        action: crate::minecraft::control::DigAction,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::DigBlock {
+            x,
+            y,
+            z,
+            face,
+            action,
+        })
+        .await
+    }
+
+    /// Drops item(s) from the held stack (vanilla `block_dig` DROP_ALL /
+    /// DROP_ITEM): `whole_stack` drops the entire held stack, else one item.
+    pub async fn drop_item(&self, whole_stack: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::DropItem { whole_stack })
+            .await
+    }
+
+    /// Swaps the main-hand and off-hand items (vanilla `block_dig`
+    /// SWAP_ITEM_WITH_OFFHAND, the `F` key).
+    pub async fn swap_hands(&self) -> Result<(), ControlError> {
+        self.send_command(BotCommand::SwapHands).await
+    }
+
     /// Closes the currently open container/window (vanilla `close_window`).
     /// A no-op on the wire if nothing is open.
     pub async fn close_gui(&self) -> Result<(), ControlError> {

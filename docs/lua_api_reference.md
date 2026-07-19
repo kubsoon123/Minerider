@@ -257,6 +257,11 @@ rejects these messages, as it would any client without a signing key.
 | `bot:attack_entity(entity_id, {sneaking?}?) -> request_id` — left-click (attack) an entity. |
 | `bot:interact_at_entity(entity_id, {hand?, sneaking?, x?, y?, z?}) -> request_id` — right-click a precise point (`x/y/z` relative to the entity) on its hitbox. |
 | `bot:release_item() -> request_id` — release the item currently in use (finish eating, release a drawn bow). |
+| `bot:start_digging({x, y, z, face}) -> request_id` — begin breaking a block (`face` 0..=5). |
+| `bot:finish_digging({x, y, z, face}) -> request_id` — finish breaking (survival: after the block's break time). |
+| `bot:cancel_digging({x, y, z, face}) -> request_id` — abort an in-progress break. |
+| `bot:drop_item(whole_stack?) -> request_id` — drop one item (default) or the whole held stack (`true`). |
+| `bot:swap_hands() -> request_id` — swap the main-hand and off-hand items (the `F` key). |
 | `bot:close_gui() -> request_id` — close the currently open container; a no-op on the wire if nothing is open. |
 
 ### State (synchronous, read-only, detached — mutating the returned table never affects Rust state)

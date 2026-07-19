@@ -419,6 +419,17 @@ pub async fn run_play(
                         send_interact_at_entity(conn, entity_id, hand, sneaking, x, y, z).await?
                     }
                     Some(BotCommand::ReleaseItem) => send_release_item(conn, &mut state).await?,
+                    Some(BotCommand::DigBlock {
+                        x,
+                        y,
+                        z,
+                        face,
+                        action,
+                    }) => send_dig_block(conn, &mut state, x, y, z, face, action).await?,
+                    Some(BotCommand::DropItem { whole_stack }) => {
+                        send_drop_item(conn, &mut state, whole_stack).await?
+                    }
+                    Some(BotCommand::SwapHands) => send_swap_hands(conn, &mut state).await?,
                     Some(BotCommand::CloseGui) => send_close_gui(conn, &mut state).await?,
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
@@ -626,9 +637,16 @@ async fn send_select_hotbar_slot(
     Ok(())
 }
 
-/// Vanilla `block_dig` status for "release the item currently in use" (finish
-/// eating, release a drawn bow). Values match `ServerboundPlayerActionPacket.Action`.
+/// Vanilla `block_dig` statuses (`ServerboundPlayerActionPacket.Action`):
+/// start/abort/stop destroying a block, drop the whole held stack, drop one
+/// item, release the item in use, swap hands.
+const BLOCK_DIG_START_DESTROY: i32 = 0;
+const BLOCK_DIG_ABORT_DESTROY: i32 = 1;
+const BLOCK_DIG_STOP_DESTROY: i32 = 2;
+const BLOCK_DIG_DROP_ALL_ITEMS: i32 = 3;
+const BLOCK_DIG_DROP_ITEM: i32 = 4;
 const BLOCK_DIG_RELEASE_USE_ITEM: i32 = 5;
+const BLOCK_DIG_SWAP_ITEM_WITH_OFFHAND: i32 = 6;
 
 /// Vanilla `use_entity` interaction types (`ServerboundInteractPacket.Action`):
 /// `INTERACT` (right-click), `ATTACK` (left-click), `INTERACT_AT` (right-click
@@ -765,6 +783,82 @@ async fn send_release_item(conn: &mut Connection, state: &mut PlayState) -> Resu
     conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
         .await?;
     debug!("released item in use");
+    Ok(())
+}
+
+/// Sends `block_dig` to break a block: `action` maps to the START/ABORT/STOP
+/// destroy status. Carries the target `location`, hit `face`, and this
+/// session's next sequence.
+async fn send_dig_block(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    x: i32,
+    y: i32,
+    z: i32,
+    face: i32,
+    action: crate::minecraft::control::DigAction,
+) -> Result<()> {
+    use crate::minecraft::control::DigAction;
+    let status = match action {
+        DigAction::Start => BLOCK_DIG_START_DESTROY,
+        DigAction::Cancel => BLOCK_DIG_ABORT_DESTROY,
+        DigAction::Finish => BLOCK_DIG_STOP_DESTROY,
+    };
+    let packet = PacketBlockDig {
+        status,
+        location: Position { x, y: y as i16, z },
+        face: face as i8,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!(x, y, z, face, ?action, "dig block");
+    Ok(())
+}
+
+/// Sends `block_dig` DROP_ALL_ITEMS / DROP_ITEM to drop from the held stack.
+/// Vanilla sends a zero position and DOWN face for these (they are
+/// meaningless for a drop), plus this session's next sequence.
+async fn send_drop_item(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    whole_stack: bool,
+) -> Result<()> {
+    let status = if whole_stack {
+        BLOCK_DIG_DROP_ALL_ITEMS
+    } else {
+        BLOCK_DIG_DROP_ITEM
+    };
+    let packet = PacketBlockDig {
+        status,
+        location: Position { x: 0, y: 0, z: 0 },
+        face: 0,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!(whole_stack, "drop item");
+    Ok(())
+}
+
+/// Sends `block_dig` SWAP_ITEM_WITH_OFFHAND (the `F` key). Zero position and
+/// DOWN face, plus this session's next sequence.
+async fn send_swap_hands(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let packet = PacketBlockDig {
+        status: BLOCK_DIG_SWAP_ITEM_WITH_OFFHAND,
+        location: Position { x: 0, y: 0, z: 0 },
+        face: 0,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!("swap hands");
     Ok(())
 }
 

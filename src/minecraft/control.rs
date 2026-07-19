@@ -38,6 +38,17 @@ pub enum Hand {
     Off,
 }
 
+/// A stage of breaking a block, matching vanilla `block_dig`'s
+/// START/ABORT/STOP destroy statuses. Survival breaking is
+/// `Start` → (wait the block's break time) → `Finish`; `Cancel` aborts a
+/// started break.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DigAction {
+    Start,
+    Cancel,
+    Finish,
+}
+
 impl Hand {
     /// Protocol-769 wire value: `0` main hand, `1` off hand (see
     /// `PacketUseItem`/`PacketArmAnimation`, whose generated `hand` field is
@@ -226,6 +237,22 @@ pub enum BotCommand {
     /// Release the item currently being used (finish eating, release a
     /// drawn bow): vanilla `block_dig` with the RELEASE_USE_ITEM status.
     ReleaseItem,
+    /// Break a block (vanilla `block_dig` START/ABORT/STOP): `action` selects
+    /// the stage, `face` (0..=5) is the hit face.
+    DigBlock {
+        x: i32,
+        y: i32,
+        z: i32,
+        face: i32,
+        action: DigAction,
+    },
+    /// Drop item(s) from the held stack (vanilla `block_dig` DROP_ALL /
+    /// DROP_ITEM): `whole_stack` drops the entire held stack (Ctrl+Q), else
+    /// a single item (Q).
+    DropItem { whole_stack: bool },
+    /// Swap the main-hand and off-hand items (vanilla `block_dig`
+    /// SWAP_ITEM_WITH_OFFHAND, the `F` key).
+    SwapHands,
     /// Close the currently open container/window (vanilla `close_window`).
     /// No-op if nothing is open.
     CloseGui,
@@ -246,6 +273,9 @@ impl BotCommand {
                 Err(ActionValidationError::HotbarSlotOutOfRange { slot: *slot })
             }
             Self::UseItemOnBlock(placement) => validate_placement(placement),
+            Self::DigBlock { face, .. } if !(0..=5).contains(face) => {
+                Err(ActionValidationError::BlockFaceOutOfRange { face: *face })
+            }
             _ => Ok(()),
         }
     }
@@ -491,6 +521,9 @@ impl Controller {
             | BotCommand::AttackEntity { .. }
             | BotCommand::InteractAtEntity { .. }
             | BotCommand::ReleaseItem
+            | BotCommand::DigBlock { .. }
+            | BotCommand::DropItem { .. }
+            | BotCommand::SwapHands
             | BotCommand::CloseGui => {}
             BotCommand::Stop => {
                 self.goal = None;
