@@ -1,0 +1,1475 @@
+//! One persistent Lua worker: one `Lua` VM, one dedicated OS thread, one
+//! bounded inbound queue. Never a VM per event, never a task per event,
+//! never concurrent Lua execution against the same VM — the loop below
+//! processes exactly one envelope's handlers to completion before looking
+//! at the next.
+//!
+//! Worker 0 is the coordinator: only it actually executes the callback
+//! passed to `swarm:configure(fn)` (see `crate::lua::registry`). Every
+//! worker, coordinator included, registers its own handlers via
+//! `swarm:on`/`bot:on` and runs its own copy of the loaded script — Lua
+//! globals are therefore worker-local by construction (see
+//! `docs/lua_wrapper.md#worker-local-globals`).
+
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
+
+use mlua::{Lua, RegistryKey};
+
+use crate::core::supervisor::SupervisorHandle;
+use crate::lua::dispatcher::{ActionOutcome, DispatcherHandle, WorkerQueue};
+use crate::lua::event::WorkItem;
+use crate::lua::queue::QueueItem;
+use crate::lua::registry::{SwarmRegistry, SwarmRegistryBuilder};
+use crate::lua::sandbox::{new_sandboxed_lua, SandboxConfig};
+
+/// Everything the top-level runtime learns only once the coordinator's
+/// `configure` callback has run and every bot has been connected — shared,
+/// read-only, with every worker after the startup barrier releases.
+pub struct StartupPayload {
+    pub registry: Arc<SwarmRegistry>,
+    pub bot_handles: Arc<HashMap<u32, SupervisorHandle>>,
+}
+
+/// What a worker blocked in `swarm:connect_all()` is released with:
+/// either the finalized startup payload, or an abort reason if startup
+/// failed for *any* reason (another worker failed, the coordinator never
+/// called `connect_all`, the startup timeout elapsed, proxy resolution
+/// failed, or bot spawning failed). A worker released with `Aborted`
+/// surfaces it as a Lua error from `connect_all()`, which propagates out
+/// of that worker's top-level script `exec()` and ends that worker's
+/// thread cleanly — no worker is ever left blocked on a barrier that will
+/// never open.
+#[derive(Clone)]
+pub enum StartupOutcome {
+    Started(Arc<StartupPayload>),
+    Aborted(Arc<str>),
+}
+
+/// A one-time synchronization point: the coordinator publishes the
+/// finalized registry + bot handles exactly once; every worker (including
+/// the coordinator itself) blocks in `swarm:connect_all()` until it's
+/// available (or startup is aborted). This is the "wait at a startup
+/// barrier, then begin connecting" step the two-phase script-loading model
+/// requires.
+pub struct StartupBarrier {
+    state: Mutex<Option<StartupOutcome>>,
+    condvar: Condvar,
+}
+
+impl StartupBarrier {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            state: Mutex::new(None),
+            condvar: Condvar::new(),
+        })
+    }
+
+    pub fn wait(&self) -> StartupOutcome {
+        let mut guard = self.state.lock().expect("startup barrier poisoned");
+        while guard.is_none() {
+            guard = self.condvar.wait(guard).expect("startup barrier poisoned");
+        }
+        guard.clone().expect("checked Some above")
+    }
+
+    /// Non-blocking poll used by `swarm:status()` before the barrier opens.
+    pub fn peek(&self) -> Option<StartupOutcome> {
+        self.state.lock().expect("startup barrier poisoned").clone()
+    }
+
+    pub fn publish(&self, payload: Arc<StartupPayload>) {
+        let mut guard = self.state.lock().expect("startup barrier poisoned");
+        // A barrier already resolved (e.g. aborted first by a racing
+        // failure) must never be silently overwritten — first outcome
+        // wins, exactly like `abort` below.
+        if guard.is_none() {
+            *guard = Some(StartupOutcome::Started(payload));
+            self.condvar.notify_all();
+        }
+    }
+
+    /// Releases every worker currently (or later) blocked in
+    /// `connect_all()` with a typed failure instead of a payload. Safe to
+    /// call more than once or concurrently with `publish` — only the first
+    /// outcome ever takes effect.
+    pub fn abort(&self, reason: impl Into<Arc<str>>) {
+        let mut guard = self.state.lock().expect("startup barrier poisoned");
+        if guard.is_none() {
+            *guard = Some(StartupOutcome::Aborted(reason.into()));
+            self.condvar.notify_all();
+        }
+    }
+}
+
+/// What one worker reports back to the async orchestrator during startup —
+/// see `crate::lua::runtime::run_swarm`'s startup-collection loop. Sent
+/// exactly once per worker per `run_swarm` call, from that worker's own
+/// dedicated thread (never blocks: backed by an unbounded channel).
+pub enum WorkerStartupReport {
+    /// This worker's script ran to the point of calling
+    /// `swarm:connect_all()` and is now blocked on the startup barrier.
+    ReachedBarrier,
+    /// This worker's script failed before ever reaching `connect_all()`
+    /// (sandbox init, script load, or a `configure()`/handler-registration
+    /// error) — the thread is about to exit.
+    Failed(String),
+}
+
+/// One registered handler. `key` is `Rc`-wrapped since `mlua::RegistryKey`
+/// itself is not `Clone`, but callers need to collect a snapshot of
+/// `(id, key, once)` tuples while holding only a `Ref`, then drop the
+/// borrow before invoking any of them (a handler can register/unregister
+/// more handlers, which would otherwise conflict with an outstanding
+/// `RefCell` borrow).
+pub struct Handler {
+    pub id: u64,
+    pub key: Rc<RegistryKey>,
+    pub once: bool,
+}
+
+/// Per-worker handler storage. `swarm:on(name, fn)` registers into
+/// `global`; `bot:on(name, fn)` registers into `per_bot`, keyed by the
+/// bot's numeric id (only bots assigned to this worker will ever have
+/// matching events dispatched here, but nothing stops a script from
+/// registering for a bot on the wrong worker — it will simply never fire,
+/// since that bot's events never reach this queue).
+#[derive(Default)]
+pub struct HandlerRegistry {
+    pub global: HashMap<&'static str, Vec<Handler>>,
+    pub per_bot: HashMap<(u32, &'static str), Vec<Handler>>,
+    pub next_id: u64,
+}
+
+impl HandlerRegistry {
+    pub fn register_global(&mut self, name: &'static str, key: RegistryKey, once: bool) -> u64 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.global.entry(name).or_default().push(Handler {
+            id,
+            key: Rc::new(key),
+            once,
+        });
+        id
+    }
+
+    pub fn register_bot(
+        &mut self,
+        bot_id: u32,
+        name: &'static str,
+        key: RegistryKey,
+        once: bool,
+    ) -> u64 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.per_bot
+            .entry((bot_id, name))
+            .or_default()
+            .push(Handler {
+                id,
+                key: Rc::new(key),
+                once,
+            });
+        id
+    }
+
+    pub fn remove(&mut self, id: u64) -> bool {
+        for handlers in self.global.values_mut() {
+            if let Some(pos) = handlers.iter().position(|h| h.id == id) {
+                handlers.remove(pos);
+                return true;
+            }
+        }
+        for handlers in self.per_bot.values_mut() {
+            if let Some(pos) = handlers.iter().position(|h| h.id == id) {
+                handlers.remove(pos);
+                return true;
+            }
+        }
+        false
+    }
+}
+
+pub struct PendingCallback {
+    pub key: RegistryKey,
+    pub bot_id: u32,
+    pub registered_at: Instant,
+}
+
+#[derive(Default)]
+pub struct CallbackRegistry {
+    pub pending: HashMap<u64, PendingCallback>,
+}
+
+pub const MAX_PENDING_CALLBACKS: usize = 4096;
+pub const DEFAULT_CALLBACK_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Everything one worker's Lua closures need to reach outside the VM.
+/// Confined to a single OS thread by construction, so interior mutability
+/// uses `RefCell`, not `Mutex` — the `Arc`-wrapped fields are the only
+/// state that legitimately crosses threads (they're handles into
+/// cross-worker/async machinery, never the `Lua` VM itself).
+pub struct WorkerState {
+    pub worker_index: usize,
+    pub is_coordinator: bool,
+    pub dispatcher: DispatcherHandle,
+    pub runtime_handle: tokio::runtime::Handle,
+    pub instruction_counter: RefCell<Arc<AtomicU64>>,
+    pub sandbox: SandboxConfig,
+    pub handlers: RefCell<HandlerRegistry>,
+    pub callbacks: RefCell<CallbackRegistry>,
+    pub disabled_bots: RefCell<HashSet<u32>>,
+    pub consecutive_errors: RefCell<HashMap<u32, u32>>,
+    pub config_builder: RefCell<SwarmRegistryBuilder>,
+    pub config_tx: RefCell<Option<std::sync::mpsc::SyncSender<SwarmRegistry>>>,
+    pub startup_barrier: Arc<StartupBarrier>,
+    pub startup_report_tx: tokio::sync::mpsc::UnboundedSender<(usize, WorkerStartupReport)>,
+    pub started: RefCell<Option<Arc<StartupPayload>>>,
+    pub shared_state: Arc<crate::lua::api::shared::SharedState>,
+    pub pubsub: RefCell<HashMap<String, Vec<Handler>>>,
+    pub timers: RefCell<crate::lua::api::timers::TimerRegistry>,
+    pub shutdown: Arc<std::sync::atomic::AtomicBool>,
+    pub callback_timeout: Duration,
+    /// Bounds concurrently in-flight action tasks spawned by
+    /// `crate::lua::api::bot::spawn_action` — without this, a handler
+    /// invoked repeatedly (e.g. from a tight `set_interval` timer, or one
+    /// invocation issuing many actions before the instruction budget
+    /// catches up) could spawn an unbounded number of tokio tasks with
+    /// nothing ever capping how many exist concurrently. A permit is held
+    /// for exactly one in-flight action's lifetime; `try_acquire_owned`
+    /// never blocks the calling Lua thread — an exhausted semaphore
+    /// resolves that one action's callback with a typed
+    /// `worker_overloaded` error immediately instead of queueing.
+    pub action_task_semaphore: Arc<tokio::sync::Semaphore>,
+}
+
+/// Default `WorkerState::action_task_semaphore` capacity — generously
+/// above `crate::lua::runtime::DEFAULT_HIGH_QUEUE_CAPACITY`, since a
+/// single action can be in flight for a while (network round-trip time)
+/// but the queue this bounds is meant to absorb bursts, not steady-state
+/// concurrency far beyond what any real swarm needs.
+pub const MAX_CONCURRENT_ACTION_TASKS: usize = 8192;
+
+impl WorkerState {
+    pub fn my_bot_ids(&self) -> Vec<u32> {
+        match self.started.borrow().as_ref() {
+            Some(payload) => payload
+                .registry
+                .bots
+                .keys()
+                .copied()
+                .filter(|id| self.dispatcher.worker_index_for(*id) == self.worker_index)
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn bot_handle(&self, bot_id: u32) -> Option<SupervisorHandle> {
+        self.started
+            .borrow()
+            .as_ref()
+            .and_then(|p| p.bot_handles.get(&bot_id).cloned())
+    }
+
+    pub fn registry(&self) -> Option<Arc<SwarmRegistry>> {
+        self.started.borrow().as_ref().map(|p| p.registry.clone())
+    }
+
+    /// Removes a registration by the id `swarm:on`/`bot:on`/`swarm:on_message`
+    /// returned, regardless of which of those three registered it. `id`s
+    /// are allocated from one shared counter (`HandlerRegistry::next_id`)
+    /// across all three, but `on_message` subscriptions live in a
+    /// *separate* collection (`pubsub`, keyed by topic) that
+    /// `HandlerRegistry::remove` never looks at — so `swarm:off(id)` on a
+    /// subscription id previously did nothing at all, leaving it
+    /// registered forever. This is the single choke point both `off`
+    /// methods (`swarm.rs`, `bot.rs`) now go through instead.
+    pub fn remove_handler_or_subscription(&self, id: u64) -> bool {
+        if self.handlers.borrow_mut().remove(id) {
+            return true;
+        }
+        let mut pubsub = self.pubsub.borrow_mut();
+        for handlers in pubsub.values_mut() {
+            if let Some(pos) = handlers.iter().position(|h| h.id == id) {
+                handlers.remove(pos);
+                return true;
+            }
+        }
+        false
+    }
+}
+
+pub struct WorkerReport {
+    pub events_processed: u64,
+    pub handlers_run: u64,
+    pub handler_errors: u64,
+    pub bots_disabled_by_consecutive_errors: u64,
+}
+
+/// Everything needed to build a [`WorkerState`], as plain `Send` data —
+/// `Rc<WorkerState>` itself cannot cross the `std::thread::spawn` boundary
+/// (`Rc` is not `Send`), so each worker thread builds its own `WorkerState`
+/// from one of these immediately after starting, rather than receiving an
+/// already-constructed one.
+pub struct WorkerConfig {
+    pub worker_index: usize,
+    pub is_coordinator: bool,
+    pub dispatcher: DispatcherHandle,
+    pub runtime_handle: tokio::runtime::Handle,
+    pub sandbox: SandboxConfig,
+    pub startup_barrier: Arc<StartupBarrier>,
+    pub shared_state: Arc<crate::lua::api::shared::SharedState>,
+    /// The host-registered proxy *profile ids* (never the actual configs —
+    /// see `crate::lua::registry`'s module doc comment) available for this
+    /// run, used only to validate `add_bot`/`add_group`'s `proxy` field on
+    /// the coordinator.
+    pub proxy_profile_ids: Arc<std::collections::BTreeSet<String>>,
+    pub config_tx: Option<std::sync::mpsc::SyncSender<SwarmRegistry>>,
+    pub startup_report_tx: tokio::sync::mpsc::UnboundedSender<(usize, WorkerStartupReport)>,
+    pub shutdown: Arc<std::sync::atomic::AtomicBool>,
+    pub callback_timeout: Duration,
+    /// Constructed once, by `crate::lua::runtime::run_swarm`, and handed
+    /// to the one worker that will own it — not created fresh here — so
+    /// `RunningSwarm::shutdown` can observe when every action task this
+    /// worker's bots have spawned has actually finished (all permits
+    /// returned to the semaphore), the same instance `spawn_action`
+    /// acquires a permit from.
+    pub action_task_semaphore: Arc<tokio::sync::Semaphore>,
+}
+
+/// Runs one worker to completion: loads `script_body` (defining `configure`
+/// on the coordinator only, and `on`-handlers on every worker), then loops
+/// on its queue until closed.
+///
+/// Any failure before the script reaches `swarm:connect_all()` (sandbox
+/// init, API install, script load/top-level exec) is reported via
+/// `config.startup_report_tx` as [`WorkerStartupReport::Failed`] *before*
+/// this function returns its own `Err` — the async orchestrator
+/// (`crate::lua::runtime::run_swarm`) is what actually waits on that
+/// channel, so it learns about a startup failure promptly instead of
+/// blocking forever on a coordinator that will now never call
+/// `connect_all()`. `swarm:connect_all()` itself reports
+/// [`WorkerStartupReport::ReachedBarrier`] before blocking (see
+/// `crate::lua::api::swarm`) — this function does not send that report
+/// directly.
+pub fn run_worker(
+    config: WorkerConfig,
+    queue: Arc<WorkerQueue>,
+    script_body: &str,
+) -> Result<WorkerReport, String> {
+    let worker_index = config.worker_index;
+    let startup_report_tx = config.startup_report_tx.clone();
+    let report_startup_failure = |reason: String| {
+        let _ = startup_report_tx.send((worker_index, WorkerStartupReport::Failed(reason.clone())));
+        reason
+    };
+
+    let (lua, counter) = match new_sandboxed_lua(&config.sandbox) {
+        Ok(pair) => pair,
+        Err(e) => return Err(report_startup_failure(format!("sandbox init failed: {e}"))),
+    };
+
+    let state = Rc::new(WorkerState {
+        worker_index: config.worker_index,
+        is_coordinator: config.is_coordinator,
+        dispatcher: config.dispatcher,
+        runtime_handle: config.runtime_handle,
+        instruction_counter: RefCell::new(counter.clone()),
+        sandbox: config.sandbox,
+        handlers: RefCell::new(HandlerRegistry::default()),
+        callbacks: RefCell::new(CallbackRegistry::default()),
+        disabled_bots: RefCell::new(HashSet::new()),
+        consecutive_errors: RefCell::new(HashMap::new()),
+        config_builder: RefCell::new(SwarmRegistryBuilder::new(config.proxy_profile_ids)),
+        config_tx: RefCell::new(config.config_tx),
+        startup_barrier: config.startup_barrier,
+        startup_report_tx: config.startup_report_tx,
+        started: RefCell::new(None),
+        shared_state: config.shared_state,
+        pubsub: RefCell::new(HashMap::new()),
+        timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
+        shutdown: config.shutdown,
+        callback_timeout: config.callback_timeout,
+        action_task_semaphore: config.action_task_semaphore,
+    });
+
+    if let Err(e) = crate::lua::api::install(&lua, state.clone()) {
+        return Err(report_startup_failure(format!("api install failed: {e}")));
+    }
+
+    if let Err(e) = lua.load(script_body).set_name("swarm_script").exec() {
+        return Err(report_startup_failure(format!(
+            "script load/top-level exec failed: {e}"
+        )));
+    }
+
+    let mut report = WorkerReport {
+        events_processed: 0,
+        handlers_run: 0,
+        handler_errors: 0,
+        bots_disabled_by_consecutive_errors: 0,
+    };
+
+    loop {
+        if state.shutdown.load(Ordering::Acquire) {
+            queue.close();
+        }
+        let batch = queue.wait_for_batch();
+        if batch.is_empty() && state.shutdown.load(Ordering::Acquire) {
+            break;
+        }
+        for envelope in batch {
+            report.events_processed += 1;
+            dispatch_one(&lua, &state, envelope, &mut report);
+        }
+        resolve_overflowed_callbacks(&lua, &state, &queue);
+        sweep_callback_timeouts(&lua, &state);
+        crate::lua::api::timers::fire_due(&lua, &state, &mut report);
+    }
+
+    // Nothing this worker's Lua VM registered is left dangling once this
+    // thread returns: a pending one-shot action callback would otherwise
+    // simply be dropped (its Lua function's registry entry freed, but the
+    // script never told), and every timer would otherwise just stop
+    // firing with no `clear_timer`/completion the script can observe.
+    shutdown_cleanup(&lua, &state, &mut report);
+
+    Ok(report)
+}
+
+/// Resolves every still-pending one-shot action callback with a typed
+/// `shutdown` error (the same delivery path `resolve_overflowed_callbacks`
+/// uses for a lost/rejected action), and clears every timer
+/// (`crate::lua::api::timers::clear_all`). Called exactly once, from
+/// [`run_worker`], immediately before this worker's thread returns.
+fn shutdown_cleanup(lua: &Lua, state: &Rc<WorkerState>, report: &mut WorkerReport) {
+    let pending_ids: Vec<u64> = state.callbacks.borrow().pending.keys().copied().collect();
+    for request_id in pending_ids {
+        if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+            if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
+                let result = crate::lua::dispatcher::ActionResult {
+                    request_id,
+                    bot_id: callback.bot_id,
+                    outcome: ActionOutcome::Error(crate::lua::error::ScriptError::shutdown()),
+                };
+                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
+                {
+                    report.handlers_run += 1;
+                    if let Err(e) = invoke_top_level(state, &func, table) {
+                        report.handler_errors += 1;
+                        tracing::warn!(worker = state.worker_index, error = %e, "shutdown callback itself failed");
+                    }
+                }
+            }
+            let _ = lua.remove_registry_value(callback.key);
+        }
+    }
+    crate::lua::api::timers::clear_all(state, lua);
+}
+
+/// The result of one [`invoke_top_level`] call: either a genuine sandbox
+/// abort (already classified into a typed [`ScriptError`]), or the raw Lua
+/// error from an ordinary handler failure (a plain `error(...)`, a type
+/// mismatch, etc. — never itself surfaced to a script, only logged and
+/// counted).
+pub(crate) enum HandlerFailure {
+    Sandbox(crate::lua::error::ScriptError),
+    Script(mlua::Error),
+}
+
+impl std::fmt::Display for HandlerFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HandlerFailure::Sandbox(e) => write!(f, "{}: {}", e.code, e.message),
+            // `e`'s text is entirely Lua-controlled (e.g. `error(huge_string)`)
+            // — bounded here, at the one place every `tracing::*!(... error
+            // = %e ...)` call site in this module ultimately reads through,
+            // rather than at each site individually.
+            HandlerFailure::Script(e) => {
+                let msg = e.to_string();
+                write!(
+                    f,
+                    "{}",
+                    crate::lua::error::truncate_for_log(
+                        &msg,
+                        crate::lua::error::MAX_LOG_MESSAGE_BYTES
+                    )
+                )
+            }
+        }
+    }
+}
+
+/// The single choke point every *top-level* Lua callback invocation must
+/// go through: event handlers, one-shot action callbacks, pub/sub
+/// handlers, and timer callbacks. Resets the instruction counter
+/// immediately before the call — and *only* here, never for a Lua
+/// function invoked from *within* one of these (e.g. the function passed
+/// to `shared:update(fn)`), since resetting there would let a script
+/// bypass its whole budget by nesting unbounded work inside a
+/// Rust-mediated call. A resettable-per-invocation counter is also why a
+/// single VM-lifetime-cumulative counter would be wrong here: it would
+/// eventually trip on a VM that has simply run for a long time, not on
+/// any one runaway call (see `crate::lua::sandbox::new_sandboxed_lua`'s
+/// doc comment).
+pub(crate) fn invoke_top_level<A: mlua::IntoLuaMulti>(
+    state: &Rc<WorkerState>,
+    func: &mlua::Function,
+    args: A,
+) -> Result<(), HandlerFailure> {
+    state
+        .instruction_counter
+        .borrow()
+        .store(0, Ordering::Relaxed);
+    func.call::<()>(args)
+        .map_err(|e| match crate::lua::error::classify_sandbox_abort(&e) {
+            Some(script_err) => HandlerFailure::Sandbox(script_err),
+            None => HandlerFailure::Script(e),
+        })
+}
+
+/// Updates bot `bot_id`'s consecutive-error counter after a top-level
+/// handler invocation *actually ran* for it (never call this for an event
+/// that had no registered handlers at all — see `run_handlers_for`, which
+/// only calls this when at least one handler was invoked). Disables the
+/// bot once `consecutive_error_threshold` is reached; the underlying
+/// connection and every other bot are unaffected. Shared by
+/// `run_handlers_for` (event handlers) and `crate::lua::api::timers::fire_one`
+/// (bot-scoped timers) so both failure sources feed the same accounting.
+pub(crate) fn record_bot_handler_outcome(
+    state: &Rc<WorkerState>,
+    bot_id: u32,
+    succeeded: bool,
+    report: &mut WorkerReport,
+) {
+    if succeeded {
+        state.consecutive_errors.borrow_mut().remove(&bot_id);
+        return;
+    }
+    let mut errors = state.consecutive_errors.borrow_mut();
+    let count = errors.entry(bot_id).or_insert(0);
+    *count += 1;
+    if *count >= state.sandbox.consecutive_error_threshold {
+        state.disabled_bots.borrow_mut().insert(bot_id);
+        report.bots_disabled_by_consecutive_errors += 1;
+        tracing::error!(worker = state.worker_index, %bot_id, "script disabled after {count} consecutive handler errors");
+    }
+}
+
+/// Looks up, invokes, and removes a pending one-shot action callback by
+/// `request_id` on *this* worker's own registry — a no-op if none is
+/// registered here (either because none was ever registered for this
+/// action, or because it lives on a different worker; see
+/// `WorkItem::ActionResult`/`WorkItem::CallbackCompletion` above). Shared
+/// between both work items so a callback fires exactly the same way
+/// regardless of which one delivered it.
+fn resolve_callback(lua: &Lua, state: &Rc<WorkerState>, request_id: u64, table: mlua::Table) {
+    if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+        if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
+            if let Err(e) = invoke_top_level(state, &func, table) {
+                tracing::warn!(worker = state.worker_index, error = %e, "action_result callback failed");
+            }
+        }
+        let _ = lua.remove_registry_value(callback.key);
+    }
+}
+
+/// Resolves every pending callback whose action result/callback completion
+/// never actually reached a queue — lost to critical (high-lane) overflow,
+/// or rejected because the queue had already been closed — with the typed
+/// error `WorkerQueue::push` recorded for it (`worker_overloaded` or
+/// `shutdown` respectively) instead of leaving it to silently expire via
+/// `sweep_callback_timeouts`'s generic `inventory_timeout`. Called once per
+/// dispatch-loop iteration; almost always a no-op (an empty drain).
+fn resolve_overflowed_callbacks(lua: &Lua, state: &Rc<WorkerState>, queue: &WorkerQueue) {
+    for (request_id, err) in queue.take_failed_requests() {
+        if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+            if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
+                let result = crate::lua::dispatcher::ActionResult {
+                    request_id,
+                    bot_id: callback.bot_id,
+                    outcome: ActionOutcome::Error(err),
+                };
+                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
+                {
+                    if let Err(e) = invoke_top_level(state, &func, table) {
+                        tracing::warn!(worker = state.worker_index, error = %e, "overflow/shutdown callback itself failed");
+                    }
+                }
+            }
+            let _ = lua.remove_registry_value(callback.key);
+        }
+    }
+}
+
+fn dispatch_one(
+    lua: &Lua,
+    state: &Rc<WorkerState>,
+    envelope: crate::lua::queue::Envelope<WorkItem>,
+    report: &mut WorkerReport,
+) {
+    let bot_id = envelope.bot_id.0;
+    let name = envelope.event.name();
+
+    match envelope.event {
+        WorkItem::Bot(event) => {
+            if state.disabled_bots.borrow().contains(&bot_id) {
+                return;
+            }
+            let event_table = match crate::lua::convert::events::event_to_table(lua, &event) {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!(worker = state.worker_index, %bot_id, error = %e, "failed to convert event to Lua table");
+                    return;
+                }
+            };
+            let bot_obj = crate::lua::api::bot::make_bot(lua, state.clone(), bot_id);
+            let bot_value = match bot_obj {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!(worker = state.worker_index, %bot_id, error = %e, "failed to build bot object");
+                    return;
+                }
+            };
+            run_handlers_for(
+                lua,
+                state,
+                bot_id,
+                name,
+                bot_value,
+                mlua::Value::Table(event_table),
+                report,
+            );
+        }
+        WorkItem::ActionResult(result) => {
+            let table = crate::lua::convert::events::action_result_to_table(lua, &result);
+            if let Ok(table) = table {
+                // Only resolves a callback actually registered *on this
+                // worker* — a no-op when the calling worker (where the
+                // callback lives) differs from this bot's owning worker,
+                // since `DispatcherHandle::dispatch_action_result` also
+                // sends a `CallbackCompletion` to that calling worker in
+                // that case (see its doc comment).
+                resolve_callback(lua, state, result.request_id, table.clone());
+                let bot_obj = crate::lua::api::bot::make_bot(lua, state.clone(), bot_id).ok();
+                if let Some(bot_value) = bot_obj {
+                    run_handlers_for(
+                        lua,
+                        state,
+                        bot_id,
+                        "action_result",
+                        bot_value,
+                        mlua::Value::Table(table),
+                        report,
+                    );
+                }
+            }
+        }
+        WorkItem::CallbackCompletion(result) => {
+            if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result) {
+                resolve_callback(lua, state, result.request_id, table);
+            }
+        }
+        WorkItem::Message { topic, payload } => {
+            let funcs: Vec<mlua::Function> = {
+                let reg = state.pubsub.borrow();
+                reg.get(&topic)
+                    .map(|hs| {
+                        hs.iter()
+                            .filter_map(|h| lua.registry_value::<mlua::Function>(&h.key).ok())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            if funcs.is_empty() {
+                return;
+            }
+            if let Ok(value) = crate::lua::api::shared::shared_value_to_lua(lua, &payload) {
+                for func in funcs {
+                    report.handlers_run += 1;
+                    if let Err(e) = invoke_top_level(state, &func, (topic.clone(), value.clone())) {
+                        report.handler_errors += 1;
+                        tracing::warn!(worker = state.worker_index, %topic, error = %e, "on_message handler failed");
+                    }
+                }
+            }
+        }
+        WorkItem::TimerFired { timer_id } => {
+            crate::lua::api::timers::invoke(lua, state, timer_id, report);
+        }
+        WorkItem::ScriptError {
+            event_name,
+            message,
+        } => {
+            tracing::warn!(worker = state.worker_index, %bot_id, event = event_name, %message, "script_error");
+        }
+        WorkItem::ScriptDisabled { reason } => {
+            tracing::warn!(worker = state.worker_index, %bot_id, %reason, "script_disabled");
+        }
+        WorkItem::WorkerOverloaded => {
+            tracing::error!(
+                worker = state.worker_index,
+                "worker_overload: critical queue saturated"
+            );
+            // A genuine `swarm:on("worker_overload", fn)`-fireable event,
+            // not log-only — see `docs/lua_api_reference.md#events`. Uses
+            // `run_global_handlers_for`, not `run_handlers_for`: this
+            // isn't tied to any one bot, so there is no per-bot handler
+            // lookup and — deliberately — no consecutive-error accounting
+            // against any bot (that concept is specifically about a
+            // *bot's* script execution, and attributing an unrelated
+            // worker-level condition to whichever bot happened to have id
+            // 0 would be wrong).
+            run_global_handlers_for(lua, state, "worker_overload", report);
+        }
+    }
+}
+
+/// Runs only *global* handlers (`swarm:on(name, fn)`) for a worker-level
+/// event that isn't tied to any one bot (currently only `worker_overload`)
+/// — no per-bot handler lookup, and deliberately no consecutive-error
+/// accounting, since that concept is specifically about a bot's own
+/// script execution.
+fn run_global_handlers_for(
+    lua: &Lua,
+    state: &Rc<WorkerState>,
+    name: &'static str,
+    report: &mut WorkerReport,
+) {
+    let mut to_remove = Vec::new();
+    let global_keys: Vec<(u64, Rc<RegistryKey>, bool)> = {
+        let reg = state.handlers.borrow();
+        reg.global
+            .get(name)
+            .map(|hs| hs.iter().map(|h| (h.id, h.key.clone(), h.once)).collect())
+            .unwrap_or_default()
+    };
+    for (id, key, once) in global_keys {
+        if let Ok(func) = lua.registry_value::<mlua::Function>(&key) {
+            report.handlers_run += 1;
+            if let Err(e) = invoke_top_level(state, &func, (mlua::Value::Nil, mlua::Value::Nil)) {
+                report.handler_errors += 1;
+                tracing::warn!(worker = state.worker_index, event = name, error = %e, "handler error");
+            }
+        }
+        if once {
+            to_remove.push(id);
+        }
+    }
+    if !to_remove.is_empty() {
+        let mut reg = state.handlers.borrow_mut();
+        for id in to_remove {
+            reg.remove(id);
+        }
+    }
+}
+
+fn run_handlers_for(
+    lua: &Lua,
+    state: &Rc<WorkerState>,
+    bot_id: u32,
+    name: &'static str,
+    bot_value: mlua::Value,
+    event_value: mlua::Value,
+    report: &mut WorkerReport,
+) {
+    let mut to_remove = Vec::new();
+    let per_bot_keys: Vec<(u64, Rc<RegistryKey>, bool)> = {
+        let reg = state.handlers.borrow();
+        reg.per_bot
+            .get(&(bot_id, name))
+            .map(|hs| hs.iter().map(|h| (h.id, h.key.clone(), h.once)).collect())
+            .unwrap_or_default()
+    };
+    let global_keys: Vec<(u64, Rc<RegistryKey>, bool)> = {
+        let reg = state.handlers.borrow();
+        reg.global
+            .get(name)
+            .map(|hs| hs.iter().map(|h| (h.id, h.key.clone(), h.once)).collect())
+            .unwrap_or_default()
+    };
+
+    let mut had_error = false;
+    let mut invoked_any = false;
+    for (id, key, once) in per_bot_keys.into_iter().chain(global_keys) {
+        if let Ok(func) = lua.registry_value::<mlua::Function>(&key) {
+            invoked_any = true;
+            report.handlers_run += 1;
+            if let Err(e) = invoke_top_level(state, &func, (bot_value.clone(), event_value.clone()))
+            {
+                report.handler_errors += 1;
+                had_error = true;
+                tracing::warn!(worker = state.worker_index, %bot_id, event = name, error = %e, "handler error");
+            }
+        }
+        if once {
+            to_remove.push(id);
+        }
+    }
+    if !to_remove.is_empty() {
+        let mut reg = state.handlers.borrow_mut();
+        for id in to_remove {
+            reg.remove(id);
+        }
+    }
+
+    // Only a handler that actually ran can affect the counter — an event
+    // with no registered handlers at all must leave a bot's existing
+    // consecutive-error streak untouched (it did not "succeed", it simply
+    // never ran anything for this bot).
+    if invoked_any {
+        record_bot_handler_outcome(state, bot_id, !had_error, report);
+    }
+}
+
+fn sweep_callback_timeouts(lua: &Lua, state: &Rc<WorkerState>) {
+    let now = Instant::now();
+    let timeout = state.callback_timeout;
+    let expired: Vec<u64> = {
+        let pending = &state.callbacks.borrow().pending;
+        pending
+            .iter()
+            .filter(|(_, cb)| now.duration_since(cb.registered_at) > timeout)
+            .map(|(id, _)| *id)
+            .collect()
+    };
+    for request_id in expired {
+        if let Some(cb) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+            if let Ok(func) = lua.registry_value::<mlua::Function>(&cb.key) {
+                let outcome = ActionOutcome::Error(crate::lua::error::ScriptError::new(
+                    "inventory_timeout",
+                    "action callback timed out waiting for a result",
+                ));
+                let result = crate::lua::dispatcher::ActionResult {
+                    request_id,
+                    bot_id: cb.bot_id,
+                    outcome,
+                };
+                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
+                {
+                    if let Err(e) = invoke_top_level(state, &func, table) {
+                        tracing::warn!(worker = state.worker_index, error = %e, "timed-out action callback itself failed");
+                    }
+                }
+            }
+            let _ = lua.remove_registry_value(cb.key);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lua::dispatcher::DispatcherHandle;
+    use crate::lua::queue::{PriorityQueue, QueueDesign};
+    use std::sync::atomic::AtomicBool;
+
+    fn test_state(sandbox: SandboxConfig) -> Rc<WorkerState> {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(64, 64)));
+        let dispatcher = DispatcherHandle::new(vec![queue]);
+        Rc::new(WorkerState {
+            worker_index: 0,
+            is_coordinator: true,
+            dispatcher,
+            runtime_handle: tokio::runtime::Handle::current(),
+            instruction_counter: RefCell::new(Arc::new(AtomicU64::new(0))),
+            sandbox,
+            handlers: RefCell::new(HandlerRegistry::default()),
+            callbacks: RefCell::new(CallbackRegistry::default()),
+            disabled_bots: RefCell::new(HashSet::new()),
+            consecutive_errors: RefCell::new(HashMap::new()),
+            config_builder: RefCell::new(SwarmRegistryBuilder::default()),
+            config_tx: RefCell::new(None),
+            startup_barrier: StartupBarrier::new(),
+            startup_report_tx: tokio::sync::mpsc::unbounded_channel().0,
+            started: RefCell::new(None),
+            shared_state: Arc::new(crate::lua::api::shared::SharedState::new()),
+            pubsub: RefCell::new(HashMap::new()),
+            timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            callback_timeout: DEFAULT_CALLBACK_TIMEOUT,
+            action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(
+                MAX_CONCURRENT_ACTION_TASKS,
+            )),
+        })
+    }
+
+    /// Builds `worker_count` `WorkerState`s that share one real
+    /// `DispatcherHandle` (one queue per worker, exactly like `run_swarm`
+    /// wires it up) and one shared `SharedState` — enough to exercise
+    /// genuinely cross-worker routing (`DispatcherHandle::dispatch_action_result`,
+    /// `worker_index_for`) directly, without a real Lua script, network
+    /// connection, or `run_swarm` call.
+    fn test_states(
+        worker_count: usize,
+        sandbox: SandboxConfig,
+        callback_timeout: Duration,
+    ) -> Vec<Rc<WorkerState>> {
+        let queues: Vec<_> = (0..worker_count)
+            .map(|_| WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(64, 64))))
+            .collect();
+        let dispatcher = DispatcherHandle::new(queues);
+        let shared_state = Arc::new(crate::lua::api::shared::SharedState::new());
+        (0..worker_count)
+            .map(|worker_index| {
+                Rc::new(WorkerState {
+                    worker_index,
+                    is_coordinator: worker_index == 0,
+                    dispatcher: dispatcher.clone(),
+                    runtime_handle: tokio::runtime::Handle::current(),
+                    instruction_counter: RefCell::new(Arc::new(AtomicU64::new(0))),
+                    sandbox,
+                    handlers: RefCell::new(HandlerRegistry::default()),
+                    callbacks: RefCell::new(CallbackRegistry::default()),
+                    disabled_bots: RefCell::new(HashSet::new()),
+                    consecutive_errors: RefCell::new(HashMap::new()),
+                    config_builder: RefCell::new(SwarmRegistryBuilder::default()),
+                    config_tx: RefCell::new(None),
+                    startup_barrier: StartupBarrier::new(),
+                    startup_report_tx: tokio::sync::mpsc::unbounded_channel().0,
+                    started: RefCell::new(None),
+                    shared_state: shared_state.clone(),
+                    pubsub: RefCell::new(HashMap::new()),
+                    timers: RefCell::new(crate::lua::api::timers::TimerRegistry::default()),
+                    shutdown: Arc::new(AtomicBool::new(false)),
+                    callback_timeout,
+                    action_task_semaphore: Arc::new(tokio::sync::Semaphore::new(
+                        MAX_CONCURRENT_ACTION_TASKS,
+                    )),
+                })
+            })
+            .collect()
+    }
+
+    /// Regression proof that extracting `resolve_callback` out of the
+    /// `ActionResult` arm (to share it with the new `CallbackCompletion`
+    /// arm below) didn't change the common same-worker path: a callback
+    /// registered on the same worker that owns the bot must still fire
+    /// exactly once, and `action_result` handlers must still run too.
+    #[tokio::test]
+    async fn action_result_still_resolves_a_same_worker_callback_and_runs_handlers() {
+        let states = test_states(1, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let state = states[0].clone();
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+        lua.load(
+            r#"
+            swarm:on("action_result", function(bot, event)
+                _G.handler_saw_ok = event.ok
+            end)
+            "#,
+        )
+        .exec()
+        .unwrap();
+        let callback: mlua::Function = lua
+            .load("function(result) _G.callback_saw_ok = result.ok end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        state.callbacks.borrow_mut().pending.insert(
+            1,
+            PendingCallback {
+                key,
+                bot_id: 0,
+                registered_at: Instant::now(),
+            },
+        );
+
+        let result = crate::lua::dispatcher::ActionResult {
+            request_id: 1,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        };
+        let envelope = crate::lua::queue::Envelope {
+            bot_id: crate::lua::queue::BotId(0),
+            event: WorkItem::ActionResult(result),
+            enqueued_at: Instant::now(),
+            bot_seq: 0,
+        };
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        dispatch_one(&lua, &state, envelope, &mut report);
+
+        let callback_saw_ok: bool = lua.globals().get("callback_saw_ok").unwrap();
+        let handler_saw_ok: bool = lua.globals().get("handler_saw_ok").unwrap();
+        assert!(callback_saw_ok, "the locally-registered callback must fire");
+        assert!(handler_saw_ok, "action_result handlers must still run");
+        assert!(
+            state.callbacks.borrow().pending.is_empty(),
+            "the callback must be removed after firing exactly once"
+        );
+    }
+
+    /// The core Fix 3 regression: a one-shot callback registered by the
+    /// *calling* worker for a bot owned by a *different* worker must still
+    /// fire — via the `CallbackCompletion` work item delivered directly to
+    /// the calling (origin) worker, since the callback closure only exists
+    /// in that worker's own Lua registry.
+    #[tokio::test]
+    async fn callback_completion_fires_on_the_origin_worker_even_when_a_different_worker_owns_the_bot(
+    ) {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let origin = states[0].clone(); // worker 0 — the caller
+        let (lua, counter) = new_sandboxed_lua(&origin.sandbox).unwrap();
+        *origin.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, origin.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.seen_outcome = result.outcome; _G.seen_bot_id = result.bot_id end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        origin.callbacks.borrow_mut().pending.insert(
+            7,
+            PendingCallback {
+                key,
+                bot_id: 1, // owned by worker 1 (1 % 2), not this origin worker
+                registered_at: Instant::now(),
+            },
+        );
+
+        let result = crate::lua::dispatcher::ActionResult {
+            request_id: 7,
+            bot_id: 1,
+            outcome: ActionOutcome::DeliveredSent,
+        };
+        let envelope = crate::lua::queue::Envelope {
+            bot_id: crate::lua::queue::BotId(1),
+            event: WorkItem::CallbackCompletion(result),
+            enqueued_at: Instant::now(),
+            bot_seq: 0,
+        };
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        dispatch_one(&lua, &origin, envelope, &mut report);
+
+        let seen_outcome: String = lua.globals().get("seen_outcome").unwrap();
+        let seen_bot_id: u32 = lua.globals().get("seen_bot_id").unwrap();
+        assert_eq!(seen_outcome, "delivered_sent");
+        assert_eq!(seen_bot_id, 1);
+        assert!(
+            origin.callbacks.borrow().pending.is_empty(),
+            "the callback must be removed after firing exactly once"
+        );
+    }
+
+    /// Same cross-worker routing, but for an `Error` outcome — proves the
+    /// full structured error table (`code`, `message`, ...), not just a
+    /// success flag, survives the `CallbackCompletion` path intact.
+    #[tokio::test]
+    async fn callback_completion_delivers_error_outcomes_to_the_originating_worker() {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let origin = states[0].clone();
+        let (lua, counter) = new_sandboxed_lua(&origin.sandbox).unwrap();
+        *origin.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, origin.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        origin.callbacks.borrow_mut().pending.insert(
+            9,
+            PendingCallback {
+                key,
+                bot_id: 1,
+                registered_at: Instant::now(),
+            },
+        );
+
+        let result = crate::lua::dispatcher::ActionResult {
+            request_id: 9,
+            bot_id: 1,
+            outcome: ActionOutcome::Error(crate::lua::error::ScriptError::new(
+                "no_gui_open",
+                "no non-player GUI is currently open",
+            )),
+        };
+        let envelope = crate::lua::queue::Envelope {
+            bot_id: crate::lua::queue::BotId(1),
+            event: WorkItem::CallbackCompletion(result),
+            enqueued_at: Instant::now(),
+            bot_seq: 0,
+        };
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        dispatch_one(&lua, &origin, envelope, &mut report);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "no_gui_open");
+    }
+
+    /// A callback registered on the calling worker for a bot owned by a
+    /// different worker must still be swept and time out correctly —
+    /// `sweep_callback_timeouts` only ever touches the worker it runs on,
+    /// so cross-worker origin has no bearing on it, but this proves that
+    /// explicitly rather than by inference.
+    #[tokio::test]
+    async fn sweep_callback_timeouts_resolves_a_cross_worker_registered_callback() {
+        let states = test_states(2, SandboxConfig::default(), Duration::from_millis(5));
+        let origin = states[0].clone();
+        let (lua, counter) = new_sandboxed_lua(&origin.sandbox).unwrap();
+        *origin.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, origin.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        origin.callbacks.borrow_mut().pending.insert(
+            3,
+            PendingCallback {
+                key,
+                bot_id: 1, // owned by worker 1, not this (origin) worker
+                registered_at: Instant::now(),
+            },
+        );
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        sweep_callback_timeouts(&lua, &origin);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "inventory_timeout");
+        assert!(
+            origin.callbacks.borrow().pending.is_empty(),
+            "the timed-out callback must be removed"
+        );
+    }
+
+    /// `bot:set_timeout`/`set_interval` must reject a bot owned by a
+    /// different worker rather than silently registering a timer that
+    /// looks bot-scoped but isn't actually tied to that bot's own worker —
+    /// see `TimerError::CrossWorkerBot`'s doc comment for why this can't
+    /// instead just "route to the right worker" (a Lua closure is only
+    /// valid within the VM that created it).
+    #[tokio::test]
+    async fn schedule_for_bot_rejects_a_bot_owned_by_a_different_worker() {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let caller = states[0].clone(); // worker 0
+        let (lua, _counter) = new_sandboxed_lua(&caller.sandbox).unwrap();
+        let func: mlua::Function = lua.load("function() end").eval().unwrap();
+
+        let err = crate::lua::api::timers::schedule_for_bot(
+            &caller,
+            1, // owned by worker 1 (1 % 2), not this caller
+            &lua,
+            func,
+            Duration::from_millis(10),
+            None,
+        )
+        .expect_err("must reject a bot owned by a different worker");
+        match err {
+            crate::lua::api::timers::TimerError::CrossWorkerBot {
+                bot_id,
+                owner,
+                caller: caller_idx,
+            } => {
+                assert_eq!(bot_id, 1);
+                assert_eq!(owner, 1);
+                assert_eq!(caller_idx, 0);
+            }
+            other => panic!("expected CrossWorkerBot, got {other:?}"),
+        }
+        assert!(
+            caller.timers.borrow().entries.is_empty(),
+            "no timer may be registered when the ownership check rejects the call"
+        );
+    }
+
+    #[tokio::test]
+    async fn schedule_for_bot_succeeds_for_a_bot_this_worker_actually_owns() {
+        let states = test_states(2, SandboxConfig::default(), DEFAULT_CALLBACK_TIMEOUT);
+        let caller = states[0].clone(); // worker 0
+        let (lua, _counter) = new_sandboxed_lua(&caller.sandbox).unwrap();
+        let func: mlua::Function = lua.load("function() end").eval().unwrap();
+
+        let id = crate::lua::api::timers::schedule_for_bot(
+            &caller,
+            0, // owned by worker 0 (0 % 2) — the calling worker itself
+            &lua,
+            func,
+            Duration::from_millis(10),
+            None,
+        )
+        .expect("must succeed for a bot this worker owns");
+        assert!(caller.timers.borrow().entries.contains_key(&id));
+    }
+
+    /// Fast, no-network proof of the consecutive-error → disable
+    /// transition: a handler that always errors for bot 0 must disable
+    /// *only* bot 0 once `consecutive_error_threshold` is reached, leaving
+    /// bot 1 (and the worker itself) untouched. The full network path
+    /// (real events driving this through `dispatch_one`) is additionally
+    /// exercised in
+    /// `crate::lua_benchmark::full_runtime::production_smoke::a_bot_with_a_broken_handler_does_not_affect_other_bots_or_the_connection`.
+    #[tokio::test]
+    async fn consecutive_handler_errors_disable_the_offending_bot_only() {
+        let sandbox = SandboxConfig {
+            consecutive_error_threshold: 3,
+            ..SandboxConfig::default()
+        };
+        let state = test_state(sandbox);
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+        lua.load(
+            r#"
+            swarm:on("connected", function(bot, event)
+                if bot:id() == 0 then error("boom") end
+            end)
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        for _ in 0..5 {
+            let bot0 = crate::lua::api::bot::make_bot(&lua, state.clone(), 0).unwrap();
+            run_handlers_for(
+                &lua,
+                &state,
+                0,
+                "connected",
+                bot0,
+                mlua::Value::Nil,
+                &mut report,
+            );
+        }
+
+        assert!(
+            state.disabled_bots.borrow().contains(&0),
+            "bot 0 must be disabled after {} consecutive errors",
+            state.sandbox.consecutive_error_threshold
+        );
+        assert!(report.bots_disabled_by_consecutive_errors >= 1);
+        assert!(
+            !state.disabled_bots.borrow().contains(&1),
+            "bot 1 must never be disabled — it never errored"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_successful_handler_resets_the_consecutive_error_counter() {
+        let sandbox = SandboxConfig {
+            consecutive_error_threshold: 3,
+            ..SandboxConfig::default()
+        };
+        let state = test_state(sandbox);
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+        lua.load(
+            r#"
+            local calls = 0
+            swarm:on("connected", function(bot, event)
+                calls = calls + 1
+                -- Errors on odd calls only, so the counter should never
+                -- accumulate to the threshold.
+                if calls % 2 == 1 then error("boom") end
+            end)
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        for _ in 0..6 {
+            let bot0 = crate::lua::api::bot::make_bot(&lua, state.clone(), 0).unwrap();
+            run_handlers_for(
+                &lua,
+                &state,
+                0,
+                "connected",
+                bot0,
+                mlua::Value::Nil,
+                &mut report,
+            );
+        }
+
+        assert!(
+            !state.disabled_bots.borrow().contains(&0),
+            "alternating success/error must never reach the consecutive-error threshold"
+        );
+    }
+
+    /// Bridges `WorkerQueue`'s `(request_id, error)` side-channel (the
+    /// only way the async/producer side can report a lost action result —
+    /// see `WorkerQueue::push`'s doc comment) back to an actual pending
+    /// Lua callback, with a tiny capacity forcing a real critical overflow
+    /// deterministically.
+    #[tokio::test]
+    async fn resolve_overflowed_callbacks_invokes_the_pending_callback_with_a_typed_error() {
+        let state = test_state(SandboxConfig::default());
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        state.callbacks.borrow_mut().pending.insert(
+            7,
+            PendingCallback {
+                key,
+                bot_id: 0,
+                registered_at: Instant::now(),
+            },
+        );
+
+        // A dedicated tiny-capacity queue, independent of `state`'s own —
+        // `resolve_overflowed_callbacks` takes it as a separate parameter,
+        // exactly like `run_worker`'s loop does.
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(1, 8)));
+        queue.push_action_result(crate::lua::dispatcher::ActionResult {
+            request_id: 99, // fills the lane first; unrelated to our callback
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+        queue.push_action_result(crate::lua::dispatcher::ActionResult {
+            request_id: 7, // overflows -> recorded with a worker_overloaded error
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+
+        resolve_overflowed_callbacks(&lua, &state, &queue);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "worker_overloaded");
+        assert!(
+            state.callbacks.borrow().pending.is_empty(),
+            "the resolved callback must be removed"
+        );
+    }
+
+    /// End-to-end proof that a Lua-raised error with an arbitrarily long,
+    /// multi-byte message never panics when logged and is visibly
+    /// truncated — `HandlerFailure::Script`'s `Display` is what every
+    /// `tracing::*!(... error = %e ...)` call site in this module reads
+    /// through.
+    #[tokio::test]
+    async fn handler_failure_display_truncates_a_huge_multibyte_lua_error_safely() {
+        let state = test_state(SandboxConfig::default());
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+
+        // "🦀" is 4 UTF-8 bytes; well past the 2048-byte log budget and
+        // not aligned to it, so a naive truncation would either panic
+        // (mid-character byte slice) or split a character silently.
+        let huge = "🦀".repeat(600);
+        let func: mlua::Function = lua
+            .load("function(msg) error(msg, 0) end")
+            .eval::<mlua::Function>()
+            .unwrap();
+        let err = func.call::<()>(huge).unwrap_err();
+
+        let failure = HandlerFailure::Script(err);
+        let displayed = failure.to_string(); // must not panic
+
+        assert!(
+            displayed.len() <= crate::lua::error::MAX_LOG_MESSAGE_BYTES + "…".len(),
+            "displayed length {} must respect the log budget",
+            displayed.len()
+        );
+        assert!(
+            displayed.ends_with('…'),
+            "truncation must be visibly marked"
+        );
+    }
+
+    /// The core Fix 8 regression: `shutdown_cleanup` must resolve every
+    /// still-pending action callback with a typed `shutdown` error (not
+    /// just silently drop it — the previous behavior, since nothing ever
+    /// touched `state.callbacks`/`state.timers` before a worker thread
+    /// returned) and clear every timer.
+    #[tokio::test]
+    async fn shutdown_cleanup_resolves_pending_callbacks_with_shutdown_and_clears_timers() {
+        let state = test_state(SandboxConfig::default());
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        state.callbacks.borrow_mut().pending.insert(
+            1,
+            PendingCallback {
+                key,
+                bot_id: 0,
+                registered_at: Instant::now(),
+            },
+        );
+
+        let timer_func: mlua::Function = lua.load("function() end").eval().unwrap();
+        let timer_id = crate::lua::api::timers::schedule(
+            &state,
+            &lua,
+            timer_func,
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(state.timers.borrow().entries.contains_key(&timer_id));
+
+        let mut report = WorkerReport {
+            events_processed: 0,
+            handlers_run: 0,
+            handler_errors: 0,
+            bots_disabled_by_consecutive_errors: 0,
+        };
+        shutdown_cleanup(&lua, &state, &mut report);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "shutdown");
+        assert!(
+            state.callbacks.borrow().pending.is_empty(),
+            "the callback must be removed after resolving"
+        );
+        assert!(
+            state.timers.borrow().entries.is_empty(),
+            "every timer must be cleared"
+        );
+    }
+}

@@ -67,6 +67,12 @@ fn symbol_kind(key: &str) -> Option<&'static str> {
         Some("SERVER_PORT")
     } else if key == "sequence" || key == "sequence_number" {
         Some("SEQUENCE")
+    } else if key == "chunks_per_tick" {
+        // Vanilla's adaptive chunk-batch pacing rate is derived from
+        // wall-clock batch-processing time, so its exact value varies run to
+        // run; symbolize it so fixtures stay deterministic while still
+        // proving the field is present and populated.
+        Some("CHUNKS_PER_TICK")
     } else {
         None
     }

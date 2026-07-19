@@ -271,6 +271,14 @@ impl LocalPlayer {
     /// movement baseline from the current authoritative position.
     pub fn mark_loaded(&mut self) {
         self.loaded = true;
+        self.sync_movement_baseline();
+    }
+
+    /// Resets the last-sent movement baseline (position, rotation,
+    /// on-ground/collision, reminder counter) to the current authoritative
+    /// state, so the next `movement_packet` measures deltas from here and
+    /// doesn't redundantly resend a position the server already knows.
+    fn sync_movement_baseline(&mut self) {
         self.x_last = self.position.x;
         self.y_last = self.position.y;
         self.z_last = self.position.z;
@@ -279,6 +287,29 @@ impl LocalPlayer {
         self.last_on_ground = self.on_ground;
         self.last_horizontal_collision = self.horizontal_collision;
         self.position_reminder = 0;
+    }
+
+    /// The full position+rotation packet vanilla sends immediately after
+    /// acknowledging a teleport (right after `teleport_confirm`, in
+    /// `handleMovePlayer`) — for every teleport, including the initial spawn
+    /// one that arrives before the world is loaded. Resyncs the movement
+    /// baseline to the teleported position so the next tick doesn't resend
+    /// it. The caller sends the returned packet as `SERVERBOUND_POSITION_LOOK`.
+    pub fn teleport_ack_movement(&mut self) -> PacketPositionLook {
+        let flags = MovementFlags(
+            (u8::from(self.on_ground) * MovementFlags::ON_GROUND)
+                | (u8::from(self.horizontal_collision) * MovementFlags::HAS_HORIZONTAL_COLLISION),
+        );
+        let packet = PacketPositionLook {
+            x: self.position.x,
+            y: self.position.y,
+            z: self.position.z,
+            yaw: self.position.yaw,
+            pitch: self.position.pitch,
+            flags,
+        };
+        self.sync_movement_baseline();
+        packet
     }
 
     /// Runs one vanilla physics tick (`aiStep` + `travel`) for the normal
@@ -1067,6 +1098,29 @@ mod tests {
             (p.position.x - 0.5).abs() < 0.2,
             "held the lane: {}",
             p.position.x
+        );
+    }
+
+    #[test]
+    fn teleport_ack_reports_the_new_position_and_syncs_the_baseline() {
+        let mut p = LocalPlayer::new();
+        // A teleport moves the player to a new absolute position/rotation.
+        p.on_position(&sync(10.0, 70.0, -4.0, 90.0, 12.0, 0));
+
+        let ack = p.teleport_ack_movement();
+        assert_eq!(ack.x, 10.0);
+        assert_eq!(ack.y, 70.0);
+        assert_eq!(ack.z, -4.0);
+        assert_eq!(ack.yaw, 90.0);
+        assert_eq!(ack.pitch, 12.0);
+
+        // The baseline is now the teleported position, so a movement check on
+        // the very next tick (with no further movement) reports nothing —
+        // the ack already told the server where we are.
+        p.mark_loaded();
+        assert!(
+            p.movement_packet().is_none(),
+            "no redundant movement packet right after a teleport ack"
         );
     }
 

@@ -380,12 +380,14 @@ fn play_coverage(id: i32) -> CoverageEntry {
             scenario: "teleport_correction",
             evidence: EVIDENCE_VALIDATED,
         }),
-        play::CLIENTBOUND_CHUNK_BATCH_START_ID => ignored(not_implemented(
-            None,
-            TimingClass::None,
-            "begin chunk batch",
-            "initial_chunks",
-        )),
+        play::CLIENTBOUND_CHUNK_BATCH_START_ID => handled(Obligation {
+            responds_with: None,
+            timing: TimingClass::None,
+            state_update: "start timing the batch for adaptive chunks-per-tick pacing",
+            status: ConformanceStatus::Partial,
+            scenario: "initial_chunks",
+            evidence: EVIDENCE_UNIT,
+        }),
         play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => handled(Obligation {
             responds_with: Some("chunk_batch_received"),
             timing: TimingClass::Strict,
@@ -413,12 +415,14 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_UPDATE_LIGHT_ID => {
             handled(state_only("replace light data in cached chunk snapshot"))
         }
-        play::CLIENTBOUND_PING_ID => ignored(not_implemented(
-            Some("pong"),
-            TimingClass::Strict,
-            "none",
-            "join_idle",
-        )),
+        play::CLIENTBOUND_PING_ID => handled(Obligation {
+            responds_with: Some("pong"),
+            timing: TimingClass::Strict,
+            state_update: "none",
+            status: ConformanceStatus::Partial,
+            scenario: "join_idle",
+            evidence: EVIDENCE_UNIT,
+        }),
         play::CLIENTBOUND_DEATH_COMBAT_EVENT_ID => handled(state_only(
             "store structured local-player death information; emit HUD event",
         )),
@@ -509,18 +513,22 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_SCOREBOARD_SCORE_ID => handled(state_only(
             "create/update bounded score with display/number formatting and emit event",
         )),
-        play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
-            Some("configuration_acknowledged"),
-            TimingClass::Strict,
-            "re-enter configuration state",
-            "",
-        )),
+        play::CLIENTBOUND_START_CONFIGURATION_ID => handled(Obligation {
+            responds_with: Some("configuration_acknowledged"),
+            timing: TimingClass::Strict,
+            state_update: "acknowledge, re-run configuration, and re-enter play",
+            status: ConformanceStatus::Partial,
+            scenario: "",
+            evidence: EVIDENCE_UNIT,
+        }),
         play::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
-        play::CLIENTBOUND_CUSTOM_PAYLOAD_ID => ignored(Obligation {
-            state_update: "vanilla answers known plugin channels; brand sent voluntarily",
-            status: ConformanceStatus::NotImplemented,
-            evidence: EVIDENCE_NONE,
-            ..NO_RESPONSE
+        play::CLIENTBOUND_CUSTOM_PAYLOAD_ID => handled(Obligation {
+            responds_with: None,
+            timing: TimingClass::None,
+            state_update: "read the server brand (minecraft:brand); ignore other channels",
+            status: ConformanceStatus::Partial,
+            scenario: "",
+            evidence: EVIDENCE_UNIT,
         }),
         play::CLIENTBOUND_ADD_RESOURCE_PACK_ID => handled(Obligation {
             responds_with: Some("resource_pack_receive"),

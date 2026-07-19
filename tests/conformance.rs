@@ -18,6 +18,7 @@ use minerider::trace::format::TraceEvent;
 use minerider::trace::normalize::normalize;
 use minerider::trace::recorder::{read_trace, TraceRecorder};
 use minerider::trace::Direction;
+use minerider_protocol::generated::v1_21_4::play;
 
 const FIXTURES: &str = "tests/conformance/fixtures";
 
@@ -42,7 +43,20 @@ async fn capture(server: &MockServer, scenario: &str) -> Vec<TraceEvent> {
     drop(client);
     let events = read_trace(&path).expect("read trace");
     std::fs::remove_file(&path).ok();
-    normalize(&events)
+    let mut normalized = normalize(&events);
+    // Drop the serverbound `tick_end` heartbeat: it fires once every active
+    // play tick, so both its *count* and its per-instance wall-clock timing
+    // are inherently session-length- and scheduler-dependent, not a
+    // structural request/response these golden traces exist to pin (the diff
+    // otherwise flags a few-ms timing wobble on it as a Strict violation).
+    // That the client sends it at all, once per tick, is proven directly and
+    // deterministically by `tests/actions.rs::tick_end_is_sent_every_active_play_tick`.
+    normalized.retain(|event| {
+        !(event.dir == Direction::Serverbound
+            && event.state == "play"
+            && event.id == play::SERVERBOUND_TICK_END_ID)
+    });
+    normalized
 }
 
 fn fixture_path(scenario: &str) -> String {
@@ -324,6 +338,25 @@ async fn scenario_4_teleport_correction() {
         find_field(confirm, "teleport_id"),
         find_field(position, "teleport_id"),
         "teleport_confirm must echo the server's teleport id"
+    );
+
+    // Vanilla follows the confirm with a full position_look reporting the
+    // acknowledged absolute position; it must appear after the confirm.
+    let confirm_idx = captured
+        .iter()
+        .position(|e| e.dir == Direction::Serverbound && e.state == "play" && e.id == 0)
+        .expect("teleport_confirm index");
+    let pos_look_idx = captured
+        .iter()
+        .position(|e| {
+            e.dir == Direction::Serverbound
+                && e.state == "play"
+                && e.id == play::SERVERBOUND_POSITION_LOOK_ID
+        })
+        .expect("position_look after teleport confirm");
+    assert!(
+        pos_look_idx > confirm_idx,
+        "the post-teleport position_look must follow the teleport_confirm"
     );
     check_fixture("teleport_correction", &captured);
 }

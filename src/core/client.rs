@@ -186,6 +186,9 @@ pub struct Client {
     /// Username confirmed by the server during login.
     pub username: String,
     configuration: ConfigurationData,
+    /// The render distance sent in `client_information`; retained so the play
+    /// loop can re-run configuration on a server reconfiguration request.
+    view_distance: i8,
     control_tx: ControlHandle,
     control_rx: Option<UnboundedReceiver<BotCommand>>,
     state_tx: Option<watch::Sender<StateSnapshot>>,
@@ -288,6 +291,7 @@ impl Client {
             uuid: success.uuid,
             username: success.username,
             configuration,
+            view_distance: cfg.view_distance,
             control_tx,
             control_rx: Some(control_rx),
             state_tx: Some(state_tx),
@@ -337,7 +341,8 @@ impl Client {
             .unwrap_or_else(|| watch::channel(StateSnapshot::default()).0);
         play::run_play(
             &mut self.conn,
-            &self.configuration,
+            self.configuration.clone(),
+            self.view_distance,
             control_rx,
             state_tx,
             self.event_tx.clone(),

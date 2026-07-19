@@ -19,7 +19,7 @@ name = "minerider"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-description = "High performance Minecraft Java Edition client engine: Rust core, generated protocol; Lua scripting planned"
+description = "High performance Minecraft Java Edition client engine: Rust core, generated protocol, optional embedded Lua scripting"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["minecraft", "client", "bot", "protocol"]
@@ -44,26 +44,39 @@ serde_json = { workspace = true }
 sha1 = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
 
-# Benchmark-only: validates the Lua runtime architecture (shared VM vs. a
-# small worker pool vs. per-bot VM) before the real wrapper is built; see
-# docs/lua_runtime_benchmark.md. `lua54` + `vendored` needs no system Lua
+# Production Lua scripting (`src/lua/`) plus the benchmark harness that
+# validated its architecture (`src/lua_benchmark/`, see
+# docs/lua_runtime_benchmark.md). `lua54` + `vendored` needs no system Lua
 # install and builds identically on Ubuntu/Windows. `send` is deliberately
-# NOT enabled: every architecture candidate here, including the per-bot-VM
-# control comparison, runs each `Lua` to completion on its own dedicated
-# `std::thread` for that VM's whole lifetime — it never crosses an `.await`
-# or moves between threads, so `Lua: Send` is never required.
+# NOT enabled: every `Lua` VM here — the 4 production workers and every
+# benchmark architecture candidate, including the per-bot-VM control
+# comparison — runs on its own dedicated `std::thread` for that VM's whole
+# lifetime. It never crosses an `.await` or moves between threads, so
+# `Lua: Send` is never required.
 mlua = { version = "0.12", optional = true, default-features = false, features = [
     "lua54",
     "vendored",
 ] }
 
 [features]
-lua-benchmark = ["dep:mlua"]
+# Production embedded Lua scripting: `src/lua/`, the `minerider-lua` binary,
+# `minerider.create_swarm(...)`. Off by default — a normal `cargo build`
+# never compiles mlua or the vendored Lua C sources.
+lua = ["dep:mlua"]
+# Adds `src/lua_benchmark/`: the architecture-validation harness and its CLI
+# (`lua_runtime_benchmark`). Depends on `lua` for the sandbox/queue
+# primitives it reuses rather than duplicating.
+lua-benchmark = ["lua"]
 
 [[bin]]
 name = "lua_runtime_benchmark"
 path = "src/bin/lua_runtime_benchmark.rs"
 required-features = ["lua-benchmark"]
+
+[[bin]]
+name = "minerider-lua"
+path = "src/bin/minerider_lua.rs"
+required-features = ["lua"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

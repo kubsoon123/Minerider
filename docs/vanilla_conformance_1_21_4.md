@@ -61,7 +61,7 @@ or lose an id.
 | 10 | boss_bar | handled | — | — | apply bounded add/update/remove state by stable uuid and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 11 | difficulty | handled | — | — | store difficulty and server lock state; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
-| 13 | chunk_batch_start | ignored | — | — | begin chunk batch | NOT IMPLEMENTED | initial_chunks | none |
+| 13 | chunk_batch_start | handled | — | — | start timing the batch for adaptive chunks-per-tick pacing | PARTIAL | initial_chunks | unit-tested state projection; mock/vanilla capture pending |
 | 14 | chunk_biomes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 15 | clear_titles | handled | — | — | clear title/subtitle; reset default timings only when requested | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 16 | tab_complete | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -73,7 +73,7 @@ or lose an id.
 | 22 | cookie_request | UNSUPPORTED | cookie_response | strict | none | NOT IMPLEMENTED |  | none |
 | 23 | set_cooldown | handled | — | — | apply bounded cooldown group lifecycle; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 24 | chat_suggestions | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 25 | custom_payload | ignored | — | — | vanilla answers known plugin channels; brand sent voluntarily | NOT IMPLEMENTED |  | none |
+| 25 | custom_payload | handled | — | — | read the server brand (minecraft:brand); ignore other channels | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 26 | damage_event | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 27 | debug_sample | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 28 | hide_message | ignored | — | — | none | NOT IMPLEMENTED |  | none |
@@ -103,7 +103,7 @@ or lose an id.
 | 52 | open_book | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 53 | open_window | handled | — | — | replace open container, cancel stale transactions and emit inventory events | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 54 | open_sign_entity | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 55 | ping | ignored | pong | strict | none | NOT IMPLEMENTED | join_idle | none |
+| 55 | ping | handled | pong | strict | none | PARTIAL | join_idle | unit-tested state projection; mock/vanilla capture pending |
 | 56 | ping_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 57 | craft_recipe_response | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 58 | abilities | handled | — | — | store player ability flags and flying/walking speeds; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
@@ -160,7 +160,7 @@ or lose an id.
 | 109 | set_title_time | handled | — | — | replace title timing values and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 110 | entity_sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 111 | sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 112 | start_configuration | ignored | configuration_acknowledged | strict | re-enter configuration state | NOT IMPLEMENTED |  | none |
+| 112 | start_configuration | handled | configuration_acknowledged | strict | acknowledge, re-run configuration, and re-enter play | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 113 | stop_sound | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 114 | store_cookie | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 115 | system_chat | handled | — | — | store system chat or action bar according to packet flag; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |

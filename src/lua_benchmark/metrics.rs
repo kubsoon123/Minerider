@@ -44,6 +44,48 @@ pub fn process_rss_kib() -> Option<u64> {
     None
 }
 
+/// This process's own OS thread count right now. `None` on a platform
+/// this isn't supported on. Used as a cleanup-invariant check — not a
+/// benchmark metric — for tests that run several full start/shutdown
+/// cycles: if `crate::lua::runtime::RunningSwarm::shutdown` genuinely
+/// joins every worker thread it spawned (as it must — see
+/// `docs/lua_wrapper.md#graceful-shutdown`), this count must return to
+/// (approximately) its pre-cycle value after each cycle, not grow
+/// monotonically.
+#[cfg(target_os = "linux")]
+pub fn process_thread_count() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("Threads:")?.trim().parse().ok())
+}
+
+/// On Windows this reports the process's total open-handle count
+/// (`GetProcessHandleCount`), not a thread count specifically — Windows
+/// has no equivalently cheap "thread count" syscall without enumerating
+/// a full thread snapshot. A handle count is actually the *broader* of
+/// the two signals the mission asks for here ("leaked tasks/sockets/
+/// threads" — a leaked OS thread, socket, or file all show up as a
+/// leaked handle), so it serves the same cleanup-invariant purpose.
+#[cfg(windows)]
+pub fn process_thread_count() -> Option<u64> {
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
+    unsafe {
+        let mut count: u32 = 0;
+        let ok = GetProcessHandleCount(GetCurrentProcess(), &mut count);
+        if ok != 0 {
+            Some(count as u64)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+pub fn process_thread_count() -> Option<u64> {
+    None
+}
+
 /// A bounded sample of latencies with a small local quantile helper — no
 /// heavy statistics dependency, per the mission's explicit instruction. A
 /// full sort on read is fine at this benchmark's sample sizes (at most a
@@ -242,6 +284,16 @@ mod tests {
     fn process_rss_kib_returns_a_plausible_value_on_supported_platforms() {
         if let Some(kib) = process_rss_kib() {
             assert!(kib > 0, "a running process should report nonzero RSS");
+        }
+    }
+
+    #[test]
+    fn process_thread_count_returns_a_plausible_value_on_supported_platforms() {
+        if let Some(count) = process_thread_count() {
+            // Every test binary has at least the main thread plus the
+            // test harness's own worker threads; on Windows this is a
+            // handle count instead, which is always well above zero too.
+            assert!(count > 0, "a running process should report a nonzero count");
         }
     }
 }

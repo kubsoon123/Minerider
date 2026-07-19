@@ -390,7 +390,7 @@ async fn run_full_runtime(args: &Args) -> Result<Report, String> {
             let server_count = (args.bots / group_size).clamp(1, 8);
             let mut servers = Vec::with_capacity(server_count as usize);
             for _ in 0..server_count {
-                servers.push(FakeSocks5Server::start((args.bots + 1) as usize).await);
+                servers.push(FakeSocks5Server::start().await);
             }
             let configs: Vec<Arc<Socks5ProxyConfig>> = servers
                 .iter()

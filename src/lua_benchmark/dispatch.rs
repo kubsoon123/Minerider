@@ -66,7 +66,7 @@ pub enum QueueKind {
     },
 }
 
-fn build_queue(kind: QueueKind) -> QueueDesign {
+fn build_queue(kind: QueueKind) -> QueueDesign<BenchEvent> {
     match kind {
         QueueKind::Fifo { capacity } => {
             QueueDesign::Fifo(FifoQueue::new(capacity, OverflowPolicy::DropOldest))

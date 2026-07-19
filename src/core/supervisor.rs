@@ -256,7 +256,9 @@ pub enum SupervisorOutcome {
 /// its convenience wrappers) did not complete. Typed and centralized —
 /// never a loose string — so a caller (including the future workflow/action
 /// layer) can match on exactly what happened instead of guessing from text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: it wraps `ActionValidationError`, which carries an `f32`
+// (only `PartialEq`). `PartialEq` is all callers and tests use.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum ControlError {
     /// The action was rejected before queueing because its text cannot be
     /// represented as a valid protocol-769 chat/command action.
@@ -289,7 +291,9 @@ pub enum ControlError {
     SupervisorStopped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: wraps `ControlError`, which is only `PartialEq` (it can carry a
+// validation error holding an `f32`).
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum InventoryActionError {
     #[error(transparent)]
     Control(ControlError),
@@ -308,7 +312,8 @@ pub enum InventoryActionError {
 /// doesn't fit the wire format" are typed separately from the underlying
 /// transaction failure modes — in particular, a missing GUI is never
 /// silently redirected to the player's own inventory window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: transitively wraps `ControlError`, which is only `PartialEq`.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum GuiActionError {
     #[error("no non-player GUI is currently open")]
     NoGuiOpen,
@@ -508,6 +513,123 @@ impl SupervisorHandle {
     /// a specific action requires it.
     pub async fn swing(&self, hand: Hand) -> Result<(), ControlError> {
         self.send_command(BotCommand::Swing(hand)).await
+    }
+
+    /// Selects the active hotbar slot (`0..=8`), sending vanilla's
+    /// `held_item_slot`. A slot outside `0..=8` is rejected with
+    /// [`ControlError::InvalidAction`] before anything is sent. The client
+    /// tracks the new selection, so a subsequent [`Self::use_item`] acts on
+    /// the newly held item — send this first when switching items.
+    pub async fn select_hotbar_slot(&self, slot: i16) -> Result<(), ControlError> {
+        self.send_command(BotCommand::SelectHotbarSlot(slot)).await
+    }
+
+    /// Right-clicks a block with the held item (vanilla `block_place`).
+    /// `placement`'s `face` (0..=5) and `cursor_*` (0.0..=1.0) are validated
+    /// before anything is sent. Like [`Self::use_item`], success means only
+    /// "the packet was sent", not that the server accepted the interaction.
+    pub async fn use_item_on_block(
+        &self,
+        placement: crate::minecraft::control::BlockPlacement,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::UseItemOnBlock(placement))
+            .await
+    }
+
+    /// Right-clicks (interacts with) an entity by its id — vanilla
+    /// `use_entity`'s INTERACT form (not attack). Success means only "the
+    /// packet was sent".
+    pub async fn interact_entity(
+        &self,
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::InteractEntity {
+            entity_id,
+            hand,
+            sneaking,
+        })
+        .await
+    }
+
+    /// Attacks (left-clicks) an entity by its id — vanilla `use_entity`'s
+    /// ATTACK form. Success means only "the packet was sent".
+    pub async fn attack_entity(&self, entity_id: i32, sneaking: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::AttackEntity {
+            entity_id,
+            sneaking,
+        })
+        .await
+    }
+
+    /// Interacts with an entity at a specific point on its hitbox — vanilla
+    /// `use_entity`'s INTERACT_AT form. `x/y/z` are relative to the entity's
+    /// position. Success means only "the packet was sent".
+    pub async fn interact_at_entity(
+        &self,
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+        x: f32,
+        y: f32,
+        z: f32,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::InteractAtEntity {
+            entity_id,
+            hand,
+            sneaking,
+            x,
+            y,
+            z,
+        })
+        .await
+    }
+
+    /// Releases the item currently being used (finish eating, release a
+    /// drawn bow): vanilla `block_dig` with the RELEASE_USE_ITEM status.
+    pub async fn release_item(&self) -> Result<(), ControlError> {
+        self.send_command(BotCommand::ReleaseItem).await
+    }
+
+    /// Breaks a block (vanilla `block_dig`): `action` selects START/ABORT/STOP
+    /// destroy. Survival mining is `start` → wait the break time → `finish`.
+    /// `face` (0..=5) is validated before anything is sent.
+    pub async fn dig_block(
+        &self,
+        x: i32,
+        y: i32,
+        z: i32,
+        face: i32,
+        action: crate::minecraft::control::DigAction,
+    ) -> Result<(), ControlError> {
+        self.send_command(BotCommand::DigBlock {
+            x,
+            y,
+            z,
+            face,
+            action,
+        })
+        .await
+    }
+
+    /// Drops item(s) from the held stack (vanilla `block_dig` DROP_ALL /
+    /// DROP_ITEM): `whole_stack` drops the entire held stack, else one item.
+    pub async fn drop_item(&self, whole_stack: bool) -> Result<(), ControlError> {
+        self.send_command(BotCommand::DropItem { whole_stack })
+            .await
+    }
+
+    /// Swaps the main-hand and off-hand items (vanilla `block_dig`
+    /// SWAP_ITEM_WITH_OFFHAND, the `F` key).
+    pub async fn swap_hands(&self) -> Result<(), ControlError> {
+        self.send_command(BotCommand::SwapHands).await
+    }
+
+    /// Closes the currently open container/window (vanilla `close_window`).
+    /// A no-op on the wire if nothing is open.
+    pub async fn close_gui(&self) -> Result<(), ControlError> {
+        self.send_command(BotCommand::CloseGui).await
     }
 
     /// A read-only view of the currently open non-player window, or `None`

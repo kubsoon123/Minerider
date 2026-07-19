@@ -43,9 +43,19 @@ pub struct FakeSocks5Server {
 }
 
 impl FakeSocks5Server {
-    /// Starts a no-auth accept loop bound to `127.0.0.1:0`, relaying up to
-    /// `max_connections` real `CONNECT`s to their requested target.
-    pub async fn start(max_connections: usize) -> Self {
+    /// Starts a no-auth accept loop bound to `127.0.0.1:0`, relaying every
+    /// real `CONNECT` to its requested target until the task is dropped at
+    /// test teardown.
+    ///
+    /// The loop is deliberately unbounded (not capped at some expected
+    /// connection count): a supervised bot that hits a transient failure
+    /// retries with a *new* connection, and a listener that stopped accepting
+    /// at a fixed count would strand that retry's SYN in the backlog forever
+    /// — the same CI-only "one bot never connects" flake that
+    /// `spawn_mock_server` had at the Minecraft-server layer (see its
+    /// comment). `accepted_connections`/`requested_targets` still count every
+    /// real connection, so exact-count assertions are unaffected.
+    pub async fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind fake SOCKS5 server");
@@ -55,7 +65,7 @@ impl FakeSocks5Server {
         let targets_clone = requested_targets.clone();
         let count_clone = accepted_connections.clone();
         let handle = tokio::spawn(async move {
-            for _ in 0..max_connections {
+            loop {
                 let (stream, _) = match listener.accept().await {
                     Ok(pair) => pair,
                     Err(_) => break,
@@ -79,8 +89,11 @@ impl FakeSocks5Server {
         self.requested_targets.lock().await.clone()
     }
 
-    pub async fn finish(self) {
-        let _ = self.handle.await;
+    /// Aborts the accept loop. The loop never returns on its own (it accepts
+    /// until aborted), so this is the teardown primitive; the tokio test
+    /// runtime also drops the detached task at test end.
+    pub fn finish(self) {
+        self.handle.abort();
     }
 }
 
@@ -160,7 +173,7 @@ mod tests {
             stream.write_all(&buf).await.unwrap();
         });
 
-        let proxy = FakeSocks5Server::start(4).await;
+        let proxy = FakeSocks5Server::start().await;
         let mut conn = TcpStream::connect(("127.0.0.1", proxy.port)).await.unwrap();
         conn.write_all(&[VERSION, 1, METHOD_NO_AUTH]).await.unwrap();
         let mut reply = [0u8; 2];

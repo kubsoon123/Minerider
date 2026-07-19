@@ -458,10 +458,10 @@ async fn minimal_login_and_configuration(stream: TcpStream) -> Connection {
     let ack = conn.read_packet().await.expect("read login acknowledged");
     assert_eq!(ack.id, login::SERVERBOUND_LOGIN_ACKNOWLEDGED_ID);
 
-    let settings = conn.read_packet().await.expect("read settings");
-    assert_eq!(settings.id, configuration::SERVERBOUND_SETTINGS_ID);
     let brand = conn.read_packet().await.expect("read brand");
     assert_eq!(brand.id, configuration::SERVERBOUND_CUSTOM_PAYLOAD_ID);
+    let settings = conn.read_packet().await.expect("read settings");
+    assert_eq!(settings.id, configuration::SERVERBOUND_SETTINGS_ID);
 
     send_dimension_registry(&mut conn).await;
 

@@ -38,6 +38,17 @@ pub enum Hand {
     Off,
 }
 
+/// A stage of breaking a block, matching vanilla `block_dig`'s
+/// START/ABORT/STOP destroy statuses. Survival breaking is
+/// `Start` → (wait the block's break time) → `Finish`; `Cancel` aborts a
+/// started break.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DigAction {
+    Start,
+    Cancel,
+    Finish,
+}
+
 impl Hand {
     /// Protocol-769 wire value: `0` main hand, `1` off hand (see
     /// `PacketUseItem`/`PacketArmAnimation`, whose generated `hand` field is
@@ -48,6 +59,25 @@ impl Hand {
             Hand::Off => 1,
         }
     }
+}
+
+/// A right-click-on-block interaction (`use_item_on_block` / vanilla
+/// `block_place`): where the block is, which face was hit, which hand, and
+/// where on the face the cursor landed. `cursor_*` are 0.0..=1.0 fractions
+/// across the hit face; `face` is 0..=5 (down, up, north, south, west, east).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlockPlacement {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub face: i32,
+    pub hand: Hand,
+    pub cursor_x: f32,
+    pub cursor_y: f32,
+    pub cursor_z: f32,
+    /// Whether the player's head is inside the target block (vanilla sends
+    /// this so the server can reproduce placement rules exactly).
+    pub inside_block: bool,
 }
 
 /// Bounded, deterministic-when-seeded random head rotation. Not
@@ -96,7 +126,10 @@ impl RandomLookConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+// Not `Eq`: `BlockCursorOutOfRange` carries the offending `f32` (which is
+// only `PartialEq`) so the message can name it. `PartialEq` is all the
+// tests and callers need.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum ActionValidationError {
     #[error("chat messages must not be empty")]
     EmptyChat,
@@ -118,6 +151,12 @@ pub enum ActionValidationError {
     RandomLookPitchOrder,
     #[error("random-look max_yaw_delta must not be negative")]
     RandomLookNegativeYawDelta,
+    #[error("hotbar slot {slot} is out of range; must be 0..=8")]
+    HotbarSlotOutOfRange { slot: i16 },
+    #[error("block face {face} is out of range; must be 0..=5")]
+    BlockFaceOutOfRange { face: i32 },
+    #[error("block cursor coordinate {value} is out of range; must be 0.0..=1.0")]
+    BlockCursorOutOfRange { value: f32 },
 }
 
 /// A command sent from a controller to the running play loop.
@@ -167,6 +206,56 @@ pub enum BotCommand {
     /// Not automatically coupled to [`Self::UseItem`] — vanilla sends these
     /// independently, and so does this API.
     Swing(Hand),
+    /// Select the active hotbar slot (`0..=8`), sending vanilla's
+    /// `held_item_slot`. The client tracks the new selection so a later
+    /// `use_item`/`swing` acts on the newly held item.
+    SelectHotbarSlot(i16),
+    /// Right-click a block with the held item (vanilla `block_place`):
+    /// place a block, open a container, press a button, etc.
+    UseItemOnBlock(BlockPlacement),
+    /// Interact with (right-click) an entity by its id — vanilla
+    /// `use_entity` in its INTERACT form. Not the attack form.
+    InteractEntity {
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+    },
+    /// Attack (left-click) an entity by its id — vanilla `use_entity` in its
+    /// ATTACK form. Carries no hand (the attack always uses the main hand).
+    AttackEntity { entity_id: i32, sneaking: bool },
+    /// Interact with an entity at a specific point on its hitbox — vanilla
+    /// `use_entity` in its INTERACT_AT form (e.g. clicking a precise part of
+    /// an armor stand). `x/y/z` are relative to the entity's position.
+    InteractAtEntity {
+        entity_id: i32,
+        hand: Hand,
+        sneaking: bool,
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    /// Release the item currently being used (finish eating, release a
+    /// drawn bow): vanilla `block_dig` with the RELEASE_USE_ITEM status.
+    ReleaseItem,
+    /// Break a block (vanilla `block_dig` START/ABORT/STOP): `action` selects
+    /// the stage, `face` (0..=5) is the hit face.
+    DigBlock {
+        x: i32,
+        y: i32,
+        z: i32,
+        face: i32,
+        action: DigAction,
+    },
+    /// Drop item(s) from the held stack (vanilla `block_dig` DROP_ALL /
+    /// DROP_ITEM): `whole_stack` drops the entire held stack (Ctrl+Q), else
+    /// a single item (Q).
+    DropItem { whole_stack: bool },
+    /// Swap the main-hand and off-hand items (vanilla `block_dig`
+    /// SWAP_ITEM_WITH_OFFHAND, the `F` key).
+    SwapHands,
+    /// Close the currently open container/window (vanilla `close_window`).
+    /// No-op if nothing is open.
+    CloseGui,
     /// Clear any walk goal and zero all movement input.
     Stop,
 }
@@ -180,9 +269,30 @@ impl BotCommand {
             Self::Chat(message) => validate_chat(message),
             Self::Command(command) => validate_command(command),
             Self::SetRandomLook(Some(config)) => config.validate(),
+            Self::SelectHotbarSlot(slot) if !(0..=8).contains(slot) => {
+                Err(ActionValidationError::HotbarSlotOutOfRange { slot: *slot })
+            }
+            Self::UseItemOnBlock(placement) => validate_placement(placement),
+            Self::DigBlock { face, .. } if !(0..=5).contains(face) => {
+                Err(ActionValidationError::BlockFaceOutOfRange { face: *face })
+            }
             _ => Ok(()),
         }
     }
+}
+
+fn validate_placement(placement: &BlockPlacement) -> Result<(), ActionValidationError> {
+    if !(0..=5).contains(&placement.face) {
+        return Err(ActionValidationError::BlockFaceOutOfRange {
+            face: placement.face,
+        });
+    }
+    for value in [placement.cursor_x, placement.cursor_y, placement.cursor_z] {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err(ActionValidationError::BlockCursorOutOfRange { value });
+        }
+    }
+    Ok(())
 }
 
 fn validate_chat(message: &str) -> Result<(), ActionValidationError> {
@@ -404,7 +514,17 @@ impl Controller {
             | BotCommand::Command(_)
             | BotCommand::InventoryClick(_)
             | BotCommand::UseItem(_)
-            | BotCommand::Swing(_) => {}
+            | BotCommand::Swing(_)
+            | BotCommand::SelectHotbarSlot(_)
+            | BotCommand::UseItemOnBlock(_)
+            | BotCommand::InteractEntity { .. }
+            | BotCommand::AttackEntity { .. }
+            | BotCommand::InteractAtEntity { .. }
+            | BotCommand::ReleaseItem
+            | BotCommand::DigBlock { .. }
+            | BotCommand::DropItem { .. }
+            | BotCommand::SwapHands
+            | BotCommand::CloseGui => {}
             BotCommand::Stop => {
                 self.goal = None;
                 self.manual = MovementInput::default();
@@ -576,6 +696,59 @@ mod tests {
             pitch: 0.0,
         };
         p
+    }
+
+    #[test]
+    fn use_item_on_block_validates_face_and_cursor_ranges() {
+        let ok = BlockPlacement {
+            x: 1,
+            y: 2,
+            z: 3,
+            face: 3,
+            hand: Hand::Main,
+            cursor_x: 0.5,
+            cursor_y: 0.0,
+            cursor_z: 1.0,
+            inside_block: false,
+        };
+        assert!(BotCommand::UseItemOnBlock(ok).validate().is_ok());
+
+        let bad_face = BlockPlacement { face: 6, ..ok };
+        assert!(matches!(
+            BotCommand::UseItemOnBlock(bad_face).validate(),
+            Err(ActionValidationError::BlockFaceOutOfRange { face: 6 })
+        ));
+
+        let bad_cursor = BlockPlacement {
+            cursor_y: 1.5,
+            ..ok
+        };
+        assert!(matches!(
+            BotCommand::UseItemOnBlock(bad_cursor).validate(),
+            Err(ActionValidationError::BlockCursorOutOfRange { .. })
+        ));
+
+        let nan_cursor = BlockPlacement {
+            cursor_z: f32::NAN,
+            ..ok
+        };
+        assert!(matches!(
+            BotCommand::UseItemOnBlock(nan_cursor).validate(),
+            Err(ActionValidationError::BlockCursorOutOfRange { .. })
+        ));
+    }
+
+    #[test]
+    fn select_hotbar_slot_validates_the_zero_to_eight_range() {
+        for slot in 0..=8 {
+            assert!(BotCommand::SelectHotbarSlot(slot).validate().is_ok());
+        }
+        for slot in [-1, 9, 100] {
+            assert!(matches!(
+                BotCommand::SelectHotbarSlot(slot).validate(),
+                Err(ActionValidationError::HotbarSlotOutOfRange { slot: s }) if s == slot
+            ));
+        }
     }
 
     #[test]

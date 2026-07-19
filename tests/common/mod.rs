@@ -142,8 +142,16 @@ fn ensure_vanilla_movement(packet: &minerider_protocol::packet::RawPacket) -> Re
                 | play::SERVERBOUND_POSITION_LOOK_ID
                 | play::SERVERBOUND_LOOK_ID
                 | play::SERVERBOUND_FLYING_ID
+                // Per-tick vanilla play traffic that legitimately interleaves
+                // with movement once the player is loaded: the end-of-tick
+                // marker and the on-change movement-key input packet.
+                | play::SERVERBOUND_TICK_END_ID
+                | play::SERVERBOUND_PLAYER_INPUT_ID
         ),
-        format!("expected vanilla movement packet, got 0x{:02x}", packet.id),
+        format!(
+            "expected vanilla per-tick play packet, got 0x{:02x}",
+            packet.id
+        ),
     )
 }
 
@@ -226,18 +234,19 @@ async fn run_server(
     )?;
     ensure(ack.payload.is_empty(), "login acknowledged must be empty")?;
 
-    // On entering configuration a vanilla client sends client_information
-    // (settings, C2S 0x00) then the minecraft:brand plugin message
-    // (custom_payload, C2S 0x02).
-    let settings = conn.read_packet().await?;
-    ensure(
-        settings.id == configuration::SERVERBOUND_SETTINGS_ID,
-        format!("expected settings 0x00, got 0x{:02x}", settings.id),
-    )?;
+    // On entering configuration a vanilla client sends the minecraft:brand
+    // plugin message (custom_payload, C2S 0x02) first, then
+    // client_information (settings, C2S 0x00) — order asserted strictly,
+    // as it is a wire-observable fingerprint of the official client.
     let brand = conn.read_packet().await?;
     ensure(
         brand.id == configuration::SERVERBOUND_CUSTOM_PAYLOAD_ID,
         format!("expected brand custom_payload 0x02, got 0x{:02x}", brand.id),
+    )?;
+    let settings = conn.read_packet().await?;
+    ensure(
+        settings.id == configuration::SERVERBOUND_SETTINGS_ID,
+        format!("expected settings 0x00, got 0x{:02x}", settings.id),
     )?;
     {
         let mut r = PacketReader::new(&brand.payload);
@@ -352,11 +361,11 @@ async fn run_server(
                     ensure(packet.payload.is_empty(), "player_loaded must be empty")?;
                     saw_player_loaded = true;
                 }
-                other => {
-                    return Err(MineRiderError::Protocol(format!(
-                        "mock server: unexpected readiness packet 0x{other:02x}"
-                    )));
-                }
+                // Vanilla sends a full position_look immediately after the
+                // teleport confirm, plus its ordinary per-tick movement /
+                // tick_end / player_input once loaded — all legitimately
+                // interleave with the readiness acks above.
+                _ => ensure_vanilla_movement(&packet)?,
             }
         }
     }
@@ -379,9 +388,13 @@ async fn run_server(
             )?;
             let mut r = PacketReader::new(&ack.payload);
             let chunks_per_tick = r.get_f32()?;
+            // Vanilla's adaptive pacing: a positive, finite rate derived from
+            // how long the batch took to process (7ms budget / nanos-per-chunk,
+            // clamped), no longer a naive echo of the batch size. The exact
+            // value depends on wall-clock timing, so assert only the invariant.
             ensure(
-                chunks_per_tick == 1.0,
-                format!("chunks_per_tick {chunks_per_tick}, expected 1.0 (batch size)"),
+                chunks_per_tick.is_finite() && chunks_per_tick > 0.0,
+                format!("chunks_per_tick {chunks_per_tick} must be finite and positive"),
             )?;
             conn.close().await?;
             return Ok(());

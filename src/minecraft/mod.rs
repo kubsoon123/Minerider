@@ -8,6 +8,7 @@ use minerider_protocol::nbt::Nbt;
 
 use crate::core::error::Result;
 
+pub mod chunk_batch;
 mod collision_data;
 pub mod configuration;
 pub mod control;

@@ -13,37 +13,45 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
-    PacketArmAnimation, PacketBlockChange, PacketChatCommand, PacketChatMessage,
-    PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow,
-    PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
-    PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
-    PacketGameStateChange, PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPlayerInfo, PacketPlayerRemove, PacketPosition,
-    PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem,
-    PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition,
-    PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth,
-    PacketUpdateLight, PacketUpdateTime, PacketUseItem, PacketWindowItems,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
-    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
-    CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
-    CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
+    PacketArmAnimation, PacketBlockChange, PacketBlockDig, PacketBlockPlace, PacketChatCommand,
+    PacketChatMessage, PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand,
+    PacketCloseWindow, PacketCraftProgressBar, PacketCustomPayload, PacketEntityDestroy,
+    PacketEntityHeadRotation, PacketEntityLook, PacketEntityMoveLook, PacketEntityTeleport,
+    PacketEntityVelocity, PacketExperience, PacketGameStateChange, PacketHeldItemSlot,
+    PacketHeldItemSlotServerbound, PacketKeepAlive, PacketLogin, PacketMapChunk,
+    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
+    PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
+    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
+    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
+    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
+    PacketUpdateTime, PacketUseEntity, PacketUseEntityHand, PacketUseEntityX, PacketUseEntityY,
+    PacketUseEntityZ, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
+    CLIENTBOUND_CHUNK_BATCH_START_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
+    CLIENTBOUND_ENTITY_DESTROY_ID, CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
     CLIENTBOUND_HELD_ITEM_SLOT_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_KICK_DISCONNECT_ID,
     CLIENTBOUND_LOGIN_ID, CLIENTBOUND_MAP_CHUNK_ID, CLIENTBOUND_MULTI_BLOCK_CHANGE_ID,
-    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PLAYER_INFO_ID, CLIENTBOUND_PLAYER_REMOVE_ID,
-    CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
-    CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID, CLIENTBOUND_SET_PLAYER_INVENTORY_ID,
-    CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
+    CLIENTBOUND_OPEN_WINDOW_ID, CLIENTBOUND_PING_ID, CLIENTBOUND_PLAYER_INFO_ID,
+    CLIENTBOUND_PLAYER_REMOVE_ID, CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID,
+    CLIENTBOUND_REMOVE_RESOURCE_PACK_ID, CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID,
+    CLIENTBOUND_SET_PLAYER_INVENTORY_ID, CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID,
+    CLIENTBOUND_START_CONFIGURATION_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
     CLIENTBOUND_TILE_ENTITY_DATA_ID, CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID,
     CLIENTBOUND_UPDATE_LIGHT_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
-    SERVERBOUND_ARM_ANIMATION_ID, SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID,
-    SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID,
-    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_LOADED_ID,
+    SERVERBOUND_ARM_ANIMATION_ID, SERVERBOUND_BLOCK_DIG_ID, SERVERBOUND_BLOCK_PLACE_ID,
+    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_CLOSE_WINDOW_ID,
+    SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID, SERVERBOUND_FLYING_ID,
+    SERVERBOUND_HELD_ITEM_SLOT_ID, SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID,
+    SERVERBOUND_PLAYER_INPUT_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID,
     SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
-    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_TICK_END_ID, SERVERBOUND_USE_ENTITY_ID,
+    SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
 };
-use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Vec2f};
+use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Position, Vec2f};
 use minerider_protocol::packet::RawPacket;
 use minerider_protocol::traits::{Decode, Encode};
 use tracing::{debug, warn};
@@ -126,6 +134,22 @@ pub struct PlayState {
     /// to be unique *within* one session's acknowledgement stream, never
     /// across sessions.
     next_action_sequence: i32,
+    /// The seven-flag `player_input` bitset last sent to the server. Vanilla
+    /// sends `player_input` only when the input *changes*, so this tracks the
+    /// last value to suppress redundant per-tick resends. Starts at `0` (no
+    /// keys) every session, matching the server's assumption for a freshly
+    /// joined player, so an idle bot sends nothing.
+    last_player_input: u8,
+    /// Vanilla's adaptive chunk-batch pacing estimate; drives the
+    /// `chunks_per_tick` sent in `chunk_batch_received`.
+    chunk_batch: crate::minecraft::chunk_batch::ChunkBatchSizeCalculator,
+    /// When the current chunk batch started processing (`chunk_batch_start`),
+    /// used to time it at `chunk_batch_finished`. `None` outside a batch.
+    chunk_batch_started_at: Option<std::time::Instant>,
+    /// The server's self-reported brand from its `minecraft:brand` plugin
+    /// message, if it sent one. Vanilla reads this for the F3 debug screen;
+    /// exposed here so a script can see what server implementation it's on.
+    server_brand: Option<String>,
 }
 
 /// Vanilla `ClientCommandPacket.Action.PERFORM_RESPAWN`: click the death
@@ -165,6 +189,10 @@ impl PlayState {
             respawn_pending: false,
             was_alive: true,
             next_action_sequence: 0,
+            last_player_input: 0,
+            chunk_batch: crate::minecraft::chunk_batch::ChunkBatchSizeCalculator::default(),
+            chunk_batch_started_at: None,
+            server_brand: None,
         }
     }
 
@@ -258,6 +286,7 @@ impl PlayState {
             world_time: self.world_time,
             raining: self.raining,
             dimension: self.dimension.clone(),
+            server_brand: self.server_brand.clone(),
         }
     }
 }
@@ -287,6 +316,8 @@ pub struct StateSnapshot {
     /// this snapshot deliberately still excludes (see [`PlayState::snapshot`]).
     /// `None` before the first `login`/`respawn` packet.
     pub dimension: Option<DimensionType>,
+    /// The server's self-reported brand (`minecraft:brand`), if it sent one.
+    pub server_brand: Option<String>,
 }
 
 /// Runs the play-state loop: a `select!` between the packet stream and a
@@ -296,46 +327,69 @@ pub struct StateSnapshot {
 /// only on error/disconnect.
 pub async fn run_play(
     conn: &mut Connection,
-    configuration: &ConfigurationData,
+    mut configuration: ConfigurationData,
+    view_distance: i8,
     mut control_rx: UnboundedReceiver<BotCommand>,
     state_tx: watch::Sender<StateSnapshot>,
     event_tx: broadcast::Sender<BotEvent>,
     world_sharing: Option<SharedWorldContext>,
 ) -> Result<()> {
-    let mut state = PlayState::with_world_sharing(event_tx, world_sharing);
-    // High-frequency ignored packets warn once per id, then drop to debug;
-    // bounded by the number of clientbound play ids, so memory is fixed.
-    let mut warned_ids = std::collections::HashSet::new();
     // Once every control handle is dropped the channel closes; disable its
     // select branch so a permanently-ready `recv` cannot spin the loop.
     let mut control_open = true;
 
-    let mut ticker =
-        tokio::time::interval_at(tokio::time::Instant::now() + TICK_DURATION, TICK_DURATION);
-    // A long send or scheduler hiccup must not trigger a catch-up burst of
-    // ticks; skip missed ticks and resume the cadence.
-    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
+    // Outer session loop: re-entered whenever the server sends
+    // `start_configuration` (a server transfer / reconfiguration). Each
+    // iteration is one Play session with its own fresh `PlayState`; the
+    // control/state/event channels persist across reconfigurations. The only
+    // exits are an error/disconnect (propagated via `?`) or, after a
+    // reconfiguration, a rebuilt session.
     loop {
-        tokio::select! {
-            // Prefer draining the packet stream over advancing the tick.
-            biased;
-            read = conn.read_packet() => {
-                let packet = read?;
-                let result = handle_clientbound(
-                    conn,
-                    &mut state,
-                    configuration,
-                    &packet,
-                    &mut warned_ids,
-                ).await;
-                // Publish promptly on state-changing packets (health, death,
-                // inventory, presentation, entities) rather than waiting up
-                // to one tick. Publish disconnect state before returning its
-                // terminal error as well.
-                let _ = state_tx.send(state.snapshot(state.clock.current()));
-                result?;
-            }
+        let mut state = PlayState::with_world_sharing(event_tx.clone(), world_sharing.clone());
+        // High-frequency ignored packets warn once per id, then drop to debug;
+        // bounded by the number of clientbound play ids, so memory is fixed.
+        let mut warned_ids = std::collections::HashSet::new();
+
+        let mut ticker =
+            tokio::time::interval_at(tokio::time::Instant::now() + TICK_DURATION, TICK_DURATION);
+        // A long send or scheduler hiccup must not trigger a catch-up burst of
+        // ticks; skip missed ticks and resume the cadence.
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                // Prefer draining the packet stream over advancing the tick.
+                biased;
+                read = conn.read_packet() => {
+                    let packet = read?;
+                    // Reconfiguration: the server sends the client back to the
+                    // configuration state mid-play (a server transfer, a
+                    // datapack/dimension reload). Vanilla acknowledges, re-runs
+                    // configuration, and re-enters play. Break the inner loop to
+                    // do exactly that; ignoring this leaves the server waiting
+                    // for the ack and eventually disconnecting the bot.
+                    if packet.id == CLIENTBOUND_START_CONFIGURATION_ID {
+                        conn.send_packet(SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID, &[])
+                            .await?;
+                        conn.set_state(ConnectionState::Configuration);
+                        let _ = state_tx.send(state.snapshot(state.clock.current()));
+                        debug!("acknowledged start_configuration; re-entering configuration");
+                        break;
+                    }
+                    let result = handle_clientbound(
+                        conn,
+                        &mut state,
+                        &configuration,
+                        &packet,
+                        &mut warned_ids,
+                    ).await;
+                    // Publish promptly on state-changing packets (health, death,
+                    // inventory, presentation, entities) rather than waiting up
+                    // to one tick. Publish disconnect state before returning its
+                    // terminal error as well.
+                    let _ = state_tx.send(state.snapshot(state.clock.current()));
+                    result?;
+                }
             command = control_rx.recv(), if control_open => {
                 match command {
                     // Outbound chat actions go straight to their distinct
@@ -348,6 +402,44 @@ pub async fn run_play(
                     }
                     Some(BotCommand::UseItem(hand)) => send_use_item(conn, &mut state, hand).await?,
                     Some(BotCommand::Swing(hand)) => send_swing(conn, hand).await?,
+                    Some(BotCommand::SelectHotbarSlot(slot)) => {
+                        send_select_hotbar_slot(conn, &mut state, slot).await?
+                    }
+                    Some(BotCommand::UseItemOnBlock(placement)) => {
+                        send_use_item_on_block(conn, &mut state, placement).await?
+                    }
+                    Some(BotCommand::InteractEntity {
+                        entity_id,
+                        hand,
+                        sneaking,
+                    }) => send_interact_entity(conn, entity_id, hand, sneaking).await?,
+                    Some(BotCommand::AttackEntity {
+                        entity_id,
+                        sneaking,
+                    }) => send_attack_entity(conn, entity_id, sneaking).await?,
+                    Some(BotCommand::InteractAtEntity {
+                        entity_id,
+                        hand,
+                        sneaking,
+                        x,
+                        y,
+                        z,
+                    }) => {
+                        send_interact_at_entity(conn, entity_id, hand, sneaking, x, y, z).await?
+                    }
+                    Some(BotCommand::ReleaseItem) => send_release_item(conn, &mut state).await?,
+                    Some(BotCommand::DigBlock {
+                        x,
+                        y,
+                        z,
+                        face,
+                        action,
+                    }) => send_dig_block(conn, &mut state, x, y, z, face, action).await?,
+                    Some(BotCommand::DropItem { whole_stack }) => {
+                        send_drop_item(conn, &mut state, whole_stack).await?
+                    }
+                    Some(BotCommand::SwapHands) => send_swap_hands(conn, &mut state).await?,
+                    Some(BotCommand::CloseGui) => send_close_gui(conn, &mut state).await?,
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
@@ -358,7 +450,17 @@ pub async fn run_play(
                 handle_tick(conn, &mut state).await?;
                 let _ = state_tx.send(state.snapshot(state.clock.current()));
             }
+            }
         }
+
+        // The inner loop only breaks for a reconfiguration (every other exit
+        // propagates an error via `?`). Re-run the configuration exchange —
+        // which re-sends our brand/settings, processes the server's
+        // registry/finish, and leaves the connection back in Play — then loop
+        // to rebuild a fresh play session on the new configuration.
+        configuration =
+            crate::minecraft::configuration::run_configuration(conn, view_distance).await?;
+        debug!("reconfiguration complete; resuming play");
     }
 }
 
@@ -373,11 +475,31 @@ fn apply_command(state: &mut PlayState, command: BotCommand) {
     }
 }
 
-/// The message is sent unsigned (no cryptographic signature). Offline-mode
-/// servers and servers with `enforce-secure-profile=false` accept this;
-/// servers that enforce secure chat will reject or kick unsigned messages —
-/// full message signing (a per-message ECDSA signature over the chat session
-/// key from `/player/certificates`) is a deliberate follow-up.
+/// The message is sent unsigned, with a zero last-seen acknowledgement —
+/// the correct behavior for this client's scope, not a stub.
+///
+/// Two vanilla secure-chat mechanisms are deliberately omitted, both of
+/// which only apply on servers that enforce secure chat (online-mode,
+/// `enforce-secure-profile=true`):
+///
+/// - **Message signing** (a per-message ECDSA signature over the chat
+///   session key) requires the player's certificates from
+///   `/player/certificates`, which only exist for an online-mode Mojang
+///   session. A headless bot for offline custom games has no such key, so
+///   it cannot sign — and a signed chain is the *only* thing a secure
+///   server accepts, so partial participation is impossible regardless.
+/// - **Last-seen acknowledgement** (the `offset` + bitset that acknowledges
+///   received signed messages) only has anything to track when the server
+///   sends *signed* `player_chat` messages, which enforce-secure-profile
+///   servers do and offline/custom servers do not. Since the bot cannot
+///   sign its own messages on a secure server anyway, tracking last-seen
+///   there buys nothing; on the offline/custom servers this client targets,
+///   there are no signed messages to acknowledge, so a zero offset and an
+///   empty bitset are exactly right.
+///
+/// Offline-mode servers and `enforce-secure-profile=false` servers accept
+/// this unsigned, zero-ack message as-is; a secure server rejects it, as it
+/// would reject any client without a Mojang signing key.
 async fn send_outbound_chat_action(conn: &mut Connection, action: &BotCommand) -> Result<()> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -411,9 +533,10 @@ fn encode_outbound_chat_action(
                 timestamp,
                 salt,
                 signature: None,
-                // No message-chain acknowledgement is tracked, so
-                // acknowledge zero prior messages: offset 0 and an empty
-                // (all-zero) 3-byte bitset.
+                // Unsigned, with a zero last-seen acknowledgement: offset 0
+                // and an empty (all-zero) 20-bit / 3-byte bitset. Correct for
+                // this client's scope — see `send_outbound_chat_action`'s doc
+                // comment for why signing and last-seen tracking are omitted.
                 offset: 0,
                 acknowledged: vec![0u8; 3],
             }
@@ -501,6 +624,278 @@ async fn send_swing(conn: &mut Connection, hand: Hand) -> Result<()> {
         .await
 }
 
+/// Sends `held_item_slot` to select the active hotbar slot (`0..=8`) and
+/// updates the local selection so a following `use_item`/`swing` acts on the
+/// newly held item — mirroring the vanilla client, which tracks its own
+/// selected slot rather than waiting for a server echo. The `0..=8` range is
+/// already enforced by `BotCommand::validate`, but the inventory setter
+/// re-checks it (it is the authority on the tracked selection).
+async fn send_select_hotbar_slot(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    slot: i16,
+) -> Result<()> {
+    let packet = PacketHeldItemSlotServerbound { slot_id: slot };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_HELD_ITEM_SLOT_ID, &output.freeze())
+        .await?;
+    let event = state.inventory.select_hotbar_slot(slot);
+    state.emit_inventory(event);
+    debug!(slot, "selected hotbar slot");
+    Ok(())
+}
+
+/// Vanilla `block_dig` statuses (`ServerboundPlayerActionPacket.Action`):
+/// start/abort/stop destroying a block, drop the whole held stack, drop one
+/// item, release the item in use, swap hands.
+const BLOCK_DIG_START_DESTROY: i32 = 0;
+const BLOCK_DIG_ABORT_DESTROY: i32 = 1;
+const BLOCK_DIG_STOP_DESTROY: i32 = 2;
+const BLOCK_DIG_DROP_ALL_ITEMS: i32 = 3;
+const BLOCK_DIG_DROP_ITEM: i32 = 4;
+const BLOCK_DIG_RELEASE_USE_ITEM: i32 = 5;
+const BLOCK_DIG_SWAP_ITEM_WITH_OFFHAND: i32 = 6;
+
+/// Vanilla `use_entity` interaction types (`ServerboundInteractPacket.Action`):
+/// `INTERACT` (right-click), `ATTACK` (left-click), `INTERACT_AT` (right-click
+/// a specific point on the hitbox).
+const USE_ENTITY_INTERACT: i32 = 0;
+const USE_ENTITY_ATTACK: i32 = 1;
+const USE_ENTITY_INTERACT_AT: i32 = 2;
+
+/// Sends `block_place`: right-click a block with the held item (place a
+/// block, open a container, press a button). The `sequence` is this
+/// session's next value, like `use_item`; `world_border_hit` is always
+/// false (the bot never targets a block outside the border). No dedicated
+/// acknowledgement exists, so `Ok(())` means only "the packet was sent".
+async fn send_use_item_on_block(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    placement: crate::minecraft::control::BlockPlacement,
+) -> Result<()> {
+    let packet = PacketBlockPlace {
+        hand: placement.hand.wire_value(),
+        location: Position {
+            x: placement.x,
+            y: placement.y as i16,
+            z: placement.z,
+        },
+        direction: placement.face,
+        cursor_x: placement.cursor_x,
+        cursor_y: placement.cursor_y,
+        cursor_z: placement.cursor_z,
+        inside_block: placement.inside_block,
+        world_border_hit: false,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_PLACE_ID, &output.freeze())
+        .await?;
+    debug!(
+        x = placement.x,
+        y = placement.y,
+        z = placement.z,
+        face = placement.face,
+        "used item on block"
+    );
+    Ok(())
+}
+
+/// Sends `use_entity` in its INTERACT (right-click) form: `x/y/z` are absent
+/// (those belong to the INTERACT_AT form) and the hand is carried.
+async fn send_interact_entity(
+    conn: &mut Connection,
+    entity_id: i32,
+    hand: Hand,
+    sneaking: bool,
+) -> Result<()> {
+    let packet = PacketUseEntity {
+        target: entity_id,
+        mouse: USE_ENTITY_INTERACT,
+        x: PacketUseEntityX::Default,
+        y: PacketUseEntityY::Default,
+        z: PacketUseEntityZ::Default,
+        hand: PacketUseEntityHand::V0(hand.wire_value()),
+        sneaking,
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
+        .await?;
+    debug!(entity_id, sneaking, "interacted with entity");
+    Ok(())
+}
+
+/// Sends `use_entity` in its ATTACK (left-click) form: no `x/y/z` and no hand
+/// (an attack always uses the main hand), just the target and sneaking flag.
+async fn send_attack_entity(conn: &mut Connection, entity_id: i32, sneaking: bool) -> Result<()> {
+    let packet = PacketUseEntity {
+        target: entity_id,
+        mouse: USE_ENTITY_ATTACK,
+        x: PacketUseEntityX::Default,
+        y: PacketUseEntityY::Default,
+        z: PacketUseEntityZ::Default,
+        hand: PacketUseEntityHand::Default,
+        sneaking,
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
+        .await?;
+    debug!(entity_id, sneaking, "attacked entity");
+    Ok(())
+}
+
+/// Sends `use_entity` in its INTERACT_AT form: the hit point `x/y/z` (relative
+/// to the entity) plus the hand — used to interact with a specific part of an
+/// entity's hitbox (e.g. an armor stand).
+async fn send_interact_at_entity(
+    conn: &mut Connection,
+    entity_id: i32,
+    hand: Hand,
+    sneaking: bool,
+    x: f32,
+    y: f32,
+    z: f32,
+) -> Result<()> {
+    let packet = PacketUseEntity {
+        target: entity_id,
+        mouse: USE_ENTITY_INTERACT_AT,
+        x: PacketUseEntityX::V2(x),
+        y: PacketUseEntityY::V2(y),
+        z: PacketUseEntityZ::V2(z),
+        hand: PacketUseEntityHand::V2(hand.wire_value()),
+        sneaking,
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_USE_ENTITY_ID, &output.freeze())
+        .await?;
+    debug!(entity_id, sneaking, "interacted at entity");
+    Ok(())
+}
+
+/// Sends `block_dig` with the RELEASE_USE_ITEM status to finish an in-progress
+/// item use. Vanilla sends a zero position and the DOWN face for this status
+/// (they are meaningless for a release), plus this session's next sequence.
+async fn send_release_item(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let packet = PacketBlockDig {
+        status: BLOCK_DIG_RELEASE_USE_ITEM,
+        location: Position { x: 0, y: 0, z: 0 },
+        face: 0,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!("released item in use");
+    Ok(())
+}
+
+/// Sends `block_dig` to break a block: `action` maps to the START/ABORT/STOP
+/// destroy status. Carries the target `location`, hit `face`, and this
+/// session's next sequence.
+async fn send_dig_block(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    x: i32,
+    y: i32,
+    z: i32,
+    face: i32,
+    action: crate::minecraft::control::DigAction,
+) -> Result<()> {
+    use crate::minecraft::control::DigAction;
+    let status = match action {
+        DigAction::Start => BLOCK_DIG_START_DESTROY,
+        DigAction::Cancel => BLOCK_DIG_ABORT_DESTROY,
+        DigAction::Finish => BLOCK_DIG_STOP_DESTROY,
+    };
+    let packet = PacketBlockDig {
+        status,
+        location: Position { x, y: y as i16, z },
+        face: face as i8,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!(x, y, z, face, ?action, "dig block");
+    Ok(())
+}
+
+/// Sends `block_dig` DROP_ALL_ITEMS / DROP_ITEM to drop from the held stack.
+/// Vanilla sends a zero position and DOWN face for these (they are
+/// meaningless for a drop), plus this session's next sequence.
+async fn send_drop_item(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    whole_stack: bool,
+) -> Result<()> {
+    let status = if whole_stack {
+        BLOCK_DIG_DROP_ALL_ITEMS
+    } else {
+        BLOCK_DIG_DROP_ITEM
+    };
+    let packet = PacketBlockDig {
+        status,
+        location: Position { x: 0, y: 0, z: 0 },
+        face: 0,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!(whole_stack, "drop item");
+    Ok(())
+}
+
+/// Sends `block_dig` SWAP_ITEM_WITH_OFFHAND (the `F` key). Zero position and
+/// DOWN face, plus this session's next sequence.
+async fn send_swap_hands(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let packet = PacketBlockDig {
+        status: BLOCK_DIG_SWAP_ITEM_WITH_OFFHAND,
+        location: Position { x: 0, y: 0, z: 0 },
+        face: 0,
+        sequence: state.next_action_sequence(),
+    };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_BLOCK_DIG_ID, &output.freeze())
+        .await?;
+    debug!("swap hands");
+    Ok(())
+}
+
+/// Sends `close_window` for the currently open container, folding the close
+/// into local inventory state (cancelling pending transactions, emitting
+/// events). A no-op on the wire when nothing is open — there is nothing to
+/// close, and closing the player inventory (window 0) unprompted is not what
+/// a `close_gui` caller means.
+async fn send_close_gui(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    let Some(window_id) = state.inventory.open_window.as_ref().map(|w| w.id) else {
+        debug!("close_gui: no open window");
+        return Ok(());
+    };
+    // Serverbound and clientbound close_window share the same one-field
+    // struct; only the packet id differs.
+    let packet = PacketCloseWindow { window_id };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_CLOSE_WINDOW_ID, &output.freeze())
+        .await?;
+    let events = state
+        .inventory
+        .close_window(&PacketCloseWindow { window_id });
+    state.emit_inventory_events(events);
+    debug!(window_id, "closed window");
+    Ok(())
+}
+
 /// Runs vanilla's per-tick play-entry and movement behavior.
 async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
     let expired = state.inventory.expire_transactions(state.clock.current());
@@ -545,32 +940,97 @@ async fn handle_tick(conn: &mut Connection, state: &mut PlayState) -> Result<()>
         state.player.tick_physics(world)?;
     }
 
-    let Some(packet) = state.player.movement_packet() else {
+    // Vanilla's `LocalPlayer.aiStep` sends `player_input` (the seven movement
+    // keys) whenever the pressed set changes, before `sendPosition`. `drive`
+    // above has finalized this tick's input; send it (on change) before the
+    // movement packet.
+    send_player_input_if_changed(conn, state).await?;
+
+    if let Some(packet) = state.player.movement_packet() {
+        let (id, payload) = match packet {
+            MovementPacket::PositionLook(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_POSITION_LOOK_ID, w.freeze())
+            }
+            MovementPacket::Position(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_POSITION_ID, w.freeze())
+            }
+            MovementPacket::Look(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_LOOK_ID, w.freeze())
+            }
+            MovementPacket::StatusOnly(packet) => {
+                let mut w = PacketWriter::new();
+                packet.encode(&mut w)?;
+                (SERVERBOUND_FLYING_ID, w.freeze())
+            }
+        };
+        conn.send_packet(id, &payload).await?;
+    }
+
+    // Vanilla sends `tick_end` (a fieldless marker) at the very end of every
+    // client tick once the player is in a ticking world — after movement,
+    // once per tick. The `loaded` gate keeps a mid-join client (not yet
+    // ticking in-world) from sending it, matching vanilla, and keeps it out
+    // of pre-spawn packet expectations.
+    if state.player.loaded {
+        conn.send_packet(SERVERBOUND_TICK_END_ID, &[]).await?;
+    }
+    Ok(())
+}
+
+/// The seven-flag `player_input` bitset for the player's current movement
+/// keys, matching `ServerboundPlayerInputPacket`'s flag layout. Forward and
+/// left are the positive impulse directions (vanilla `leftImpulse` is
+/// positive when strafing left).
+fn player_input_flags(input: &crate::minecraft::player::MovementInput) -> u8 {
+    let mut flags = 0u8;
+    if input.forward > 0.0 {
+        flags |= PacketPlayerInputInputs::FORWARD;
+    } else if input.forward < 0.0 {
+        flags |= PacketPlayerInputInputs::BACKWARD;
+    }
+    if input.strafe > 0.0 {
+        flags |= PacketPlayerInputInputs::LEFT;
+    } else if input.strafe < 0.0 {
+        flags |= PacketPlayerInputInputs::RIGHT;
+    }
+    if input.jump {
+        flags |= PacketPlayerInputInputs::JUMP;
+    }
+    if input.sneak {
+        flags |= PacketPlayerInputInputs::SHIFT;
+    }
+    if input.sprint {
+        flags |= PacketPlayerInputInputs::SPRINT;
+    }
+    flags
+}
+
+/// Sends `player_input` only when this tick's movement-key set differs from
+/// the last one sent, exactly like vanilla. Gated on `loaded` by its only
+/// caller (the active-tick path), so a mid-join client sends nothing.
+async fn send_player_input_if_changed(conn: &mut Connection, state: &mut PlayState) -> Result<()> {
+    if !state.player.loaded {
         return Ok(());
+    }
+    let flags = player_input_flags(&state.player.input);
+    if flags == state.last_player_input {
+        return Ok(());
+    }
+    state.last_player_input = flags;
+    let packet = PacketPlayerInput {
+        inputs: PacketPlayerInputInputs(flags),
     };
-    let (id, payload) = match packet {
-        MovementPacket::PositionLook(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_POSITION_LOOK_ID, w.freeze())
-        }
-        MovementPacket::Position(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_POSITION_ID, w.freeze())
-        }
-        MovementPacket::Look(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_LOOK_ID, w.freeze())
-        }
-        MovementPacket::StatusOnly(packet) => {
-            let mut w = PacketWriter::new();
-            packet.encode(&mut w)?;
-            (SERVERBOUND_FLYING_ID, w.freeze())
-        }
-    };
-    conn.send_packet(id, &payload).await?;
+    let mut w = PacketWriter::new();
+    packet.encode(&mut w)?;
+    conn.send_packet(SERVERBOUND_PLAYER_INPUT_ID, &w.freeze())
+        .await?;
+    debug!(flags, tick = state.clock.current(), "sent player_input");
     Ok(())
 }
 
@@ -592,6 +1052,36 @@ async fn handle_clientbound(
             conn.send_packet(SERVERBOUND_KEEP_ALIVE_ID, &w.freeze())
                 .await?;
         }
+        CLIENTBOUND_CUSTOM_PAYLOAD_ID => {
+            // Plugin message. Vanilla reads its own known channels and
+            // ignores the rest — it never blindly replies to a server plugin
+            // channel. The one channel worth reading is `minecraft:brand`,
+            // the server's self-reported implementation name (shown on F3);
+            // store it. Everything else is intentionally ignored (a headless
+            // bot has no mod channels to answer).
+            let mut r = PacketReader::new(&packet.payload);
+            let custom = PacketCustomPayload::decode(&mut r)?;
+            if custom.channel == crate::minecraft::BRAND_CHANNEL {
+                let mut data = PacketReader::new(&custom.data);
+                if let Ok(brand) = data.read_string() {
+                    debug!(%brand, "server brand");
+                    state.server_brand = Some(brand.to_string());
+                }
+            }
+        }
+        CLIENTBOUND_PING_ID => {
+            // Play-state ping/pong: echo the id straight back, exactly like
+            // the vanilla client. Distinct from the status-state ping and
+            // from keep-alive; a server that pings and gets no pong within
+            // its window disconnects the client.
+            let mut r = PacketReader::new(&packet.payload);
+            let ping = PacketPing::decode(&mut r)?;
+            let pong = PacketPong { id: ping.id };
+            let mut w = PacketWriter::new();
+            pong.encode(&mut w)?;
+            conn.send_packet(SERVERBOUND_PONG_ID, &w.freeze()).await?;
+            debug!(id = ping.id, "replied pong to play ping");
+        }
         CLIENTBOUND_POSITION_ID => {
             let mut r = PacketReader::new(&packet.payload);
             let sync = PacketPosition::decode(&mut r)?;
@@ -604,28 +1094,58 @@ async fn handle_clientbound(
             confirm.encode(&mut w)?;
             conn.send_packet(SERVERBOUND_TELEPORT_CONFIRM_ID, &w.freeze())
                 .await?;
+            // Vanilla's `handleMovePlayer` sends a full position+rotation
+            // packet immediately after the teleport confirm — for every
+            // teleport, including this initial spawn one before the world is
+            // loaded — so the server hears the client's acknowledged
+            // absolute position, not just the numeric confirm. Resyncs the
+            // movement baseline so the next tick doesn't resend it.
+            let ack_move = state.player.teleport_ack_movement();
+            let mut w = PacketWriter::new();
+            ack_move.encode(&mut w)?;
+            conn.send_packet(SERVERBOUND_POSITION_LOOK_ID, &w.freeze())
+                .await?;
             debug!(
                 x = state.player.position.x,
                 y = state.player.position.y,
                 z = state.player.position.z,
                 teleport_id = sync.teleport_id,
-                "confirmed teleport"
+                "confirmed teleport and sent position_look"
             );
+        }
+        CLIENTBOUND_CHUNK_BATCH_START_ID => {
+            // Marks the start of a chunk batch: vanilla times how long the
+            // batch takes to process to pace the next one (see
+            // `chunk_batch::ChunkBatchSizeCalculator`).
+            state.chunk_batch_started_at = Some(std::time::Instant::now());
         }
         CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => {
             let mut r = PacketReader::new(&packet.payload);
             let finished = PacketChunkBatchFinished::decode(&mut r)?;
-            // Vanilla reports the desired chunks-per-tick rate; with no chunk
-            // processing of our own yet, the batch size is the correct
-            // initial value (we acknowledged it immediately).
-            let ack = PacketChunkBatchReceived {
-                chunks_per_tick: finished.batch_size as f32,
-            };
+            // Vanilla's chunk-batch pacing: report an adaptive
+            // `chunks_per_tick` (7ms budget / measured nanos-per-chunk),
+            // clamped and rolling-averaged, so a fast client is fed faster
+            // and a slow one throttled — not a naive echo of the batch size.
+            // Fall back to a zero-length elapsed if we never saw the matching
+            // start (the estimate then just carries its current value).
+            let elapsed = state
+                .chunk_batch_started_at
+                .take()
+                .map(|start| start.elapsed())
+                .unwrap_or_default();
+            state
+                .chunk_batch
+                .record_batch(elapsed, finished.batch_size.max(0) as u32);
+            let chunks_per_tick = state.chunk_batch.desired_chunks_per_tick();
+            let ack = PacketChunkBatchReceived { chunks_per_tick };
             let mut w = PacketWriter::new();
             ack.encode(&mut w)?;
             conn.send_packet(SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, &w.freeze())
                 .await?;
-            debug!(batch_size = finished.batch_size, "acknowledged chunk batch");
+            debug!(
+                batch_size = finished.batch_size,
+                chunks_per_tick, "acknowledged chunk batch"
+            );
         }
         CLIENTBOUND_MAP_CHUNK_ID => {
             let mut r = PacketReader::new(&packet.payload);
@@ -1110,6 +1630,62 @@ mod tests {
         assert_eq!(state.next_action_sequence(), 1);
         assert_eq!(state.next_action_sequence(), 2);
         assert_eq!(state.next_action_sequence(), 3);
+    }
+
+    #[test]
+    fn player_input_flags_map_each_movement_key_to_its_vanilla_bit() {
+        use crate::minecraft::player::MovementInput;
+
+        // Idle: no keys, no flags.
+        assert_eq!(player_input_flags(&MovementInput::default()), 0);
+
+        // Forward and backward are the two signs of the forward impulse and
+        // are mutually exclusive.
+        let fwd = MovementInput {
+            forward: 1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&fwd), PacketPlayerInputInputs::FORWARD);
+        let back = MovementInput {
+            forward: -1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&back), PacketPlayerInputInputs::BACKWARD);
+
+        // Left is the positive strafe direction (vanilla leftImpulse).
+        let left = MovementInput {
+            strafe: 1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&left), PacketPlayerInputInputs::LEFT);
+        let right = MovementInput {
+            strafe: -1.0,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&right), PacketPlayerInputInputs::RIGHT);
+
+        // A sprint-jump strafing forward sets exactly its four bits.
+        let combo = MovementInput {
+            forward: 1.0,
+            strafe: 1.0,
+            jump: true,
+            sprint: true,
+            sneak: false,
+        };
+        assert_eq!(
+            player_input_flags(&combo),
+            PacketPlayerInputInputs::FORWARD
+                | PacketPlayerInputInputs::LEFT
+                | PacketPlayerInputInputs::JUMP
+                | PacketPlayerInputInputs::SPRINT
+        );
+
+        // Sneak maps to SHIFT.
+        let sneak = MovementInput {
+            sneak: true,
+            ..Default::default()
+        };
+        assert_eq!(player_input_flags(&sneak), PacketPlayerInputInputs::SHIFT);
     }
 
     #[test]

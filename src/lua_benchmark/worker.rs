@@ -9,7 +9,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
 use super::command::CommandSink;
-use super::event::{BotId, Envelope};
+use super::event::{BenchEvent, BotId, Envelope};
 use super::lua_api::{
     event_to_table, handlers_for, install, DispatchContext, SharedDispatchContext,
 };
@@ -22,13 +22,13 @@ use super::sandbox::{new_sandboxed_lua, SandboxConfig};
 /// `Mutex` + `Condvar` so pushing never needs the worker thread awake, and
 /// the worker thread never busy-polls.
 pub struct WorkerQueue {
-    state: Mutex<QueueDesign>,
+    state: Mutex<QueueDesign<BenchEvent>>,
     condvar: Condvar,
     closed: std::sync::atomic::AtomicBool,
 }
 
 impl WorkerQueue {
-    pub fn new(design: QueueDesign) -> Arc<Self> {
+    pub fn new(design: QueueDesign<BenchEvent>) -> Arc<Self> {
         Arc::new(Self {
             state: Mutex::new(design),
             condvar: Condvar::new(),

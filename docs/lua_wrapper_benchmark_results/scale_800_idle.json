@@ -1,0 +1,27 @@
+{
+  "disclaimer": "Local loopback mock server + local fake SOCKS5 relays only — does not represent real-world public proxy or Minecraft server performance.",
+  "bots": 800,
+  "lua_workers": 4,
+  "scenario": "idle",
+  "warmup_runs": 1,
+  "measured_runs": 5,
+  "time_to_all_connected_ms": {
+    "median": 1091.3124,
+    "min": 1073.2695,
+    "max": 1123.1046000000001,
+    "samples": [
+      1073.2695,
+      1089.3544,
+      1091.3124,
+      1096.286,
+      1123.1046000000001
+    ]
+  },
+  "rss_kib": {
+    "baseline_kib": 61004,
+    "connected_kib": 135340,
+    "scenario_kib": 135384,
+    "shutdown_kib": 134432,
+    "cleanup_kib": 134432
+  }
+}
