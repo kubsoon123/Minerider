@@ -240,13 +240,17 @@ offline test suite.
 
 ## Status
 
-Actively developed alpha. The connection core and generated protocol are
-complete and validated against a local Paper 1.21.4 server and the official
-Mojang vanilla 1.21.4 server (login, encryption, compression, keep-alives, a
-55-minute idle soak). World/tick/physics, player/entity/inventory state, the
-action API, the reconnect supervisor, premium auth, and the Lua runtime have
-landed; see [docs/progress.md](docs/progress.md) for the chronological,
-per-feature log of what is implemented and how it was verified.
+**Alpha, actively developed** — the connection core is validated, the API
+surface is still moving; expect breaking changes between versions.
+
+- **Validated end to end** against a local **Paper 1.21.4** server and the
+  official **Mojang vanilla 1.21.4** server: login, encryption, compression,
+  keep-alives, and a 55-minute idle soak.
+- **Implemented and tested** — generated protocol, world/tick/physics,
+  player/entity/inventory/tab-list state, the action API, the reconnect
+  supervisor, premium auth, and the Lua runtime.
+- **Per-feature history** — what landed, when, and how it was verified — is in
+  [docs/progress.md](docs/progress.md).
 
 ### Honest limitations
 
