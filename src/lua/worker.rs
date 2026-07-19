@@ -278,6 +278,29 @@ impl WorkerState {
     pub fn registry(&self) -> Option<Arc<SwarmRegistry>> {
         self.started.borrow().as_ref().map(|p| p.registry.clone())
     }
+
+    /// Removes a registration by the id `swarm:on`/`bot:on`/`swarm:on_message`
+    /// returned, regardless of which of those three registered it. `id`s
+    /// are allocated from one shared counter (`HandlerRegistry::next_id`)
+    /// across all three, but `on_message` subscriptions live in a
+    /// *separate* collection (`pubsub`, keyed by topic) that
+    /// `HandlerRegistry::remove` never looks at — so `swarm:off(id)` on a
+    /// subscription id previously did nothing at all, leaving it
+    /// registered forever. This is the single choke point both `off`
+    /// methods (`swarm.rs`, `bot.rs`) now go through instead.
+    pub fn remove_handler_or_subscription(&self, id: u64) -> bool {
+        if self.handlers.borrow_mut().remove(id) {
+            return true;
+        }
+        let mut pubsub = self.pubsub.borrow_mut();
+        for handlers in pubsub.values_mut() {
+            if let Some(pos) = handlers.iter().position(|h| h.id == id) {
+                handlers.remove(pos);
+                return true;
+            }
+        }
+        false
+    }
 }
 
 pub struct WorkerReport {

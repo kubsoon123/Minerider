@@ -412,8 +412,6 @@ Scripts should key logic off `code` — the complete, stable set:
 |---|---|
 | `invalid_configuration` | A `swarm:add_*`/`shared:*` call's arguments were invalid. |
 | `duplicate_id` | A server/proxy/bot-id/username/group name was already registered. |
-| `unknown_bot` | Referenced a bot id that doesn't exist. |
-| `unknown_group` | Referenced a group name that doesn't exist. |
 | `unknown_proxy` | A bot/group referenced a proxy name that isn't registered. |
 | `unknown_server` | A bot/group referenced a server name that isn't registered. |
 | `queue_full` | The bounded command queue was full. |
@@ -429,9 +427,15 @@ Scripts should key logic off `code` — the complete, stable set:
 | `inventory_rejected` | The server rejected an inventory transaction. |
 | `script_memory_limit` | A handler exceeded the worker's Lua memory limit. |
 | `script_instruction_limit` | A handler exceeded the per-invocation instruction budget. |
-| `script_disabled` | This bot's script execution has been disabled after too many consecutive errors. |
-| `worker_overloaded` | A worker's critical queue is saturated. |
-| `shutdown` | The swarm is shutting down. |
+| `script_disabled` | This bot's script execution has been disabled after too many consecutive errors. **Currently log-only** (same as the `script_disabled` event above) — a disabled bot's *event handlers* stop running, but its underlying connection and any actions issued against it are deliberately unaffected (see `docs/lua_wrapper.md#sandbox`), so no action currently returns this code; it is emitted as a `tracing::warn!` log line only. |
+| `worker_overloaded` | A worker's critical (high-priority) queue is saturated — either a direct outcome of an action whose result couldn't be delivered, or (rarely) a semaphore-exhausted action rejected before it was even attempted. |
+| `shutdown` | The swarm is shutting down; a pending action/callback was resolved with this instead of being silently dropped. |
+
+`swarm:bot(id)`/`swarm:group(name)` deliberately do **not** have
+corresponding `unknown_bot`/`unknown_group` codes — an unknown id/name
+returns plain `nil` (see the [Configuration](#configuration) table above),
+never a raised or returned error, so there is nothing for those codes to
+carry.
 
 ## Sandbox reference
 

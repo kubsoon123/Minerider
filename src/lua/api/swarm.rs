@@ -341,7 +341,7 @@ impl UserData for LuaSwarm {
             },
         );
         methods.add_method("off", |_, this, id: u64| {
-            Ok(this.state.handlers.borrow_mut().remove(id))
+            Ok(this.state.remove_handler_or_subscription(id))
         });
 
         // ---- Bounded cross-worker pub/sub --------------------------------
@@ -605,6 +605,48 @@ mod tests {
         assert!(
             !ok,
             "a count exceeding MAX_BOTS_PER_GROUP must be rejected outright, before any allocation"
+        );
+    }
+
+    /// `swarm:off(id)` previously only searched `HandlerRegistry`
+    /// (`global`/`per_bot`), never `pubsub` — an `on_message` subscription
+    /// id was silently never found, so `off()` returned `false` and the
+    /// subscription kept running forever with no way to remove it.
+    #[tokio::test]
+    async fn off_also_removes_an_on_message_subscription() {
+        let state = test_state();
+        let lua = install(&state);
+
+        let id: u64 = lua
+            .load(r#"return swarm:on_message("topic1", function(topic, payload) end)"#)
+            .eval()
+            .unwrap();
+        assert_eq!(
+            state
+                .pubsub
+                .borrow()
+                .get("topic1")
+                .map(Vec::len)
+                .unwrap_or(0),
+            1,
+            "the subscription must actually be registered before off() is tested"
+        );
+
+        let removed: bool = lua.load(format!("return swarm:off({id})")).eval().unwrap();
+        assert!(
+            removed,
+            "off() must report the subscription was found and removed"
+        );
+        assert_eq!(
+            state
+                .pubsub
+                .borrow()
+                .get("topic1")
+                .map(Vec::len)
+                .unwrap_or(0),
+            0,
+            "the on_message subscription must actually be gone from pubsub, not just \
+             unrelated HandlerRegistry state"
         );
     }
 }

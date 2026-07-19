@@ -637,7 +637,7 @@ impl UserData for LuaBot {
             },
         );
         methods.add_method("off", |_, this, id: u64| {
-            Ok(this.state.handlers.borrow_mut().remove(id))
+            Ok(this.state.remove_handler_or_subscription(id))
         });
     }
 }

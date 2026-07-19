@@ -40,8 +40,6 @@ pub fn truncate_for_log(s: &str, max_bytes: usize) -> std::borrow::Cow<'_, str> 
 pub const ERROR_CODES: &[&str] = &[
     "invalid_configuration",
     "duplicate_id",
-    "unknown_bot",
-    "unknown_group",
     "unknown_proxy",
     "unknown_server",
     "queue_full",
@@ -95,14 +93,6 @@ impl ScriptError {
     pub fn retryable(mut self, retryable: bool) -> Self {
         self.retryable = retryable;
         self
-    }
-
-    pub fn unknown_bot(id: u32) -> Self {
-        Self::new("unknown_bot", format!("no bot with id {id}"))
-    }
-
-    pub fn unknown_group(name: &str) -> Self {
-        Self::new("unknown_group", format!("no group named `{name}`"))
     }
 
     pub fn script_memory_limit(detail: impl Into<String>) -> Self {
@@ -367,8 +357,6 @@ mod tests {
         for code in [
             "invalid_configuration",
             "duplicate_id",
-            "unknown_bot",
-            "unknown_group",
             "unknown_proxy",
             "unknown_server",
             "queue_full",

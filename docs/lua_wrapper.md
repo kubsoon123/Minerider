@@ -16,6 +16,62 @@ the real production runtime against a local mock Minecraft server and
 local fake SOCKS5 relays — see "Testing" below). Not released, not
 published, `feat/lua-wrapper` stays a draft PR.
 
+## Trust model
+
+Two distinct parties, two distinct trust levels — every design decision
+in this document follows from keeping them separate:
+
+- **The host** is whoever embeds this wrapper: the `minerider-lua` CLI's
+  operator, or any other Rust code calling `crate::lua::runtime::run_swarm`
+  directly. The host is **fully trusted**. It chooses the worker count,
+  sandbox limits (`SandboxConfig`), startup timeout, and — critically —
+  the complete set of proxy profiles (`SwarmRuntimeConfig::proxy_profiles`)
+  a run will ever have access to, all *before* any script executes. None
+  of this is reachable or overridable from Lua.
+- **The script** (the `.lua` file the host points the CLI at, or the
+  `script_body` string an embedder supplies) is treated as **untrusted —
+  potentially buggy, and potentially actively adversarial** — even though
+  in the common case it's written by the same person operating the CLI.
+  Every bound documented in this file (sandbox stdlib allow-list, memory
+  limit, per-invocation instruction budget, consecutive-error disabling,
+  bounded queues/shared-state/pub-sub, bounded concurrent action tasks —
+  see `crate::lua::worker::MAX_CONCURRENT_ACTION_TASKS`) exists
+  specifically to bound what a script can do to the process, to other
+  bots, and to other workers, regardless of whether the misbehavior was
+  intentional.
+
+Concretely, a script — no matter how it's written — can **never**:
+
+- Read or exfiltrate a proxy password, or connect through a proxy
+  endpoint of its own choosing. It may only *reference* a host-registered
+  profile id (`add_bot`/`add_group`'s `proxy` field); the profile ↔
+  credential mapping is resolved entirely on the host side. See "Proxy
+  grouping and credentials" below.
+- Read an arbitrary environment variable, the filesystem, or the network
+  directly, or load a native/`require`d module. See "Sandbox" below.
+- Exceed its memory limit, run past its per-invocation instruction
+  budget, or starve other bots'/workers' progress by monopolizing one
+  worker's dispatch loop indefinitely — a runaway handler is aborted, not
+  the process.
+- Force unbounded Rust-side allocation from a single number/string it
+  supplies (bot/group counts, name/username/label lengths, shared-state
+  keys, pub/sub topics are all explicitly bounded — see
+  `crate::lua::registry`'s `MAX_*` constants).
+- Move a `Lua` value, function, or VM state across a worker boundary —
+  each worker owns one OS thread and one `Lua` VM for its whole lifetime;
+  cross-worker communication only ever happens through plain, deep-copied
+  Rust data (`crate::lua::shared_value::SharedValue`,
+  `crate::lua::dispatcher::ActionResult`), never a shared reference.
+- Crash a worker via a raised error propagating out of a handler — every
+  top-level handler invocation is caught and converted into a typed,
+  logged failure (see "Error model" below), not an unhandled panic.
+
+What a script legitimately *can* do — control every bot's movement/
+look/chat/inventory/GUI actions, read all published game state, register
+handlers for any event, use the bounded cross-worker shared-state and
+pub/sub primitives, and log — is the entire rest of this document and
+`docs/lua_api_reference.md`.
+
 ## Why a fixed pool of 4 Lua workers
 
 `docs/lua_runtime_benchmark.md` measured four candidate architectures —
@@ -32,10 +88,14 @@ to 800 bots. Findings that drove this design:
   pool doesn't spend, for a swarm-orchestration workload that doesn't need
   per-bot Lua isolation in the first place.
 
-**Default: exactly 4 persistent workers.** Configurable
-(`minerider.create_swarm`'s `--lua-workers` / `SwarmRuntimeConfig::worker_count`)
-for testing or advanced use, but the default must not scale with bot
-count, and nothing in this codebase scales it automatically.
+**Default: exactly 4 persistent workers.** Configurable (the
+`minerider-lua` CLI's `--lua-workers <N>` flag, or
+`SwarmRuntimeConfig::worker_count` directly for an embedder calling
+`run_swarm` programmatically) for testing or advanced use, but the
+default must not scale with bot count, and nothing in this codebase
+scales it automatically. There is no Lua-callable `create_swarm`
+function — worker count, like every other host-level setting, is fixed
+before a script ever runs (see "Trust model" below).
 
 ## Two halves: `worker` (sync) and `runtime` (async)
 
