@@ -17,16 +17,16 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow,
     PacketCraftProgressBar, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
     PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
-    PacketGameStateChange, PacketHeldItemSlot, PacketKeepAlive, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
-    PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
-    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
-    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
-    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
-    PacketUpdateTime, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
-    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
-    CLIENTBOUND_CHUNK_BATCH_START_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
-    CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
+    PacketGameStateChange, PacketHeldItemSlot, PacketHeldItemSlotServerbound, PacketKeepAlive,
+    PacketLogin, PacketMapChunk, PacketMultiBlockChange, PacketOpenWindow, PacketPing,
+    PacketPlayerInfo, PacketPlayerInput, PacketPlayerInputInputs, PacketPlayerRemove, PacketPong,
+    PacketPosition, PacketRelEntityMove, PacketResourcePackReceive, PacketRespawn,
+    PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
+    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
+    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseItem, PacketWindowItems,
+    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
+    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CHUNK_BATCH_START_ID,
+    CLIENTBOUND_CLOSE_WINDOW_ID, CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
@@ -40,11 +40,12 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_LIGHT_ID,
     CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_ARM_ANIMATION_ID,
     SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
-    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_KEEP_ALIVE_ID,
-    SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_INPUT_ID, SERVERBOUND_PLAYER_LOADED_ID,
-    SERVERBOUND_PONG_ID, SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID,
-    SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_TICK_END_ID,
-    SERVERBOUND_USE_ITEM_ID, SERVERBOUND_WINDOW_CLICK_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_FLYING_ID, SERVERBOUND_HELD_ITEM_SLOT_ID,
+    SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID, SERVERBOUND_PLAYER_INPUT_ID,
+    SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID, SERVERBOUND_POSITION_ID,
+    SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+    SERVERBOUND_TELEPORT_CONFIRM_ID, SERVERBOUND_TICK_END_ID, SERVERBOUND_USE_ITEM_ID,
+    SERVERBOUND_WINDOW_CLICK_ID,
 };
 use minerider_protocol::generated::v1_21_4::types::{PacketCommonAddResourcePack, Vec2f};
 use minerider_protocol::packet::RawPacket;
@@ -366,6 +367,9 @@ pub async fn run_play(
                     }
                     Some(BotCommand::UseItem(hand)) => send_use_item(conn, &mut state, hand).await?,
                     Some(BotCommand::Swing(hand)) => send_swing(conn, hand).await?,
+                    Some(BotCommand::SelectHotbarSlot(slot)) => {
+                        send_select_hotbar_slot(conn, &mut state, slot).await?
+                    }
                     Some(command) => apply_command(&mut state, command),
                     None => control_open = false,
                 }
@@ -517,6 +521,28 @@ async fn send_swing(conn: &mut Connection, hand: Hand) -> Result<()> {
     packet.encode(&mut output)?;
     conn.send_packet(SERVERBOUND_ARM_ANIMATION_ID, &output.freeze())
         .await
+}
+
+/// Sends `held_item_slot` to select the active hotbar slot (`0..=8`) and
+/// updates the local selection so a following `use_item`/`swing` acts on the
+/// newly held item — mirroring the vanilla client, which tracks its own
+/// selected slot rather than waiting for a server echo. The `0..=8` range is
+/// already enforced by `BotCommand::validate`, but the inventory setter
+/// re-checks it (it is the authority on the tracked selection).
+async fn send_select_hotbar_slot(
+    conn: &mut Connection,
+    state: &mut PlayState,
+    slot: i16,
+) -> Result<()> {
+    let packet = PacketHeldItemSlotServerbound { slot_id: slot };
+    let mut output = PacketWriter::new();
+    packet.encode(&mut output)?;
+    conn.send_packet(SERVERBOUND_HELD_ITEM_SLOT_ID, &output.freeze())
+        .await?;
+    let event = state.inventory.select_hotbar_slot(slot);
+    state.emit_inventory(event);
+    debug!(slot, "selected hotbar slot");
+    Ok(())
 }
 
 /// Runs vanilla's per-tick play-entry and movement behavior.

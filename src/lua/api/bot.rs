@@ -467,6 +467,20 @@ impl UserData for LuaBot {
                 control_outcome(h.swing(hand).await)
             }))
         });
+        methods.add_method("select_hotbar_slot", |_, this, slot: i64| {
+            // Reject out-of-range synchronously (like `parse_hand`), so a
+            // caller bug surfaces at the call site rather than as an async
+            // action error. 0..=8 are the nine hotbar slots.
+            if !(0..=8).contains(&slot) {
+                return Err(mlua::Error::RuntimeError(format!(
+                    "select_hotbar_slot expects 0..=8, got {slot}"
+                )));
+            }
+            let slot = slot as i16;
+            Ok(spawn_action(this, move |h| async move {
+                control_outcome(h.select_hotbar_slot(slot).await)
+            }))
+        });
 
         // ---- State (synchronous, read-only, detached) -----------------
         methods.add_method("state", |lua, this, ()| {

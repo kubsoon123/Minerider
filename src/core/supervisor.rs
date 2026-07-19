@@ -510,6 +510,15 @@ impl SupervisorHandle {
         self.send_command(BotCommand::Swing(hand)).await
     }
 
+    /// Selects the active hotbar slot (`0..=8`), sending vanilla's
+    /// `held_item_slot`. A slot outside `0..=8` is rejected with
+    /// [`ControlError::InvalidAction`] before anything is sent. The client
+    /// tracks the new selection, so a subsequent [`Self::use_item`] acts on
+    /// the newly held item — send this first when switching items.
+    pub async fn select_hotbar_slot(&self, slot: i16) -> Result<(), ControlError> {
+        self.send_command(BotCommand::SelectHotbarSlot(slot)).await
+    }
+
     /// A read-only view of the currently open non-player window, or `None`
     /// if none is open right now. Synchronous: reads the same cached
     /// snapshot [`Self::state`] exposes, so it never blocks on the play

@@ -241,6 +241,7 @@ No pathfinding/obstacle avoidance — `walk_to` is a straight-line
 |---|
 | `bot:use_item(hand) -> request_id` — `hand` is `"main"` or `"off"`; success means the packet was sent, never server confirmation |
 | `bot:swing(hand) -> request_id` |
+| `bot:select_hotbar_slot(slot) -> request_id` — `slot` is `0..=8`; sends `held_item_slot` and updates the tracked selection so a following `use_item`/`swing` acts on the newly held item. A slot outside `0..=8` raises immediately. |
 
 ### State (synchronous, read-only, detached — mutating the returned table never affects Rust state)
 

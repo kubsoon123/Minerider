@@ -585,6 +585,23 @@ impl InventoryState {
         None
     }
 
+    /// Applies our own outgoing `held_item_slot` selection (`0..=8`): the
+    /// vanilla client tracks its selected slot locally the moment it sends
+    /// the packet, rather than waiting for a server echo, so a following
+    /// `use_item` acts on the newly held item. An out-of-range slot leaves
+    /// the selection unchanged (the caller already validates, so this is a
+    /// belt-and-braces guard).
+    pub fn select_hotbar_slot(&mut self, slot: i16) -> InventoryEvent {
+        let applied = (0..=8).contains(&slot);
+        if applied {
+            self.selected_hotbar_slot = slot as i32;
+        }
+        InventoryEvent::SelectedHotbarChanged {
+            slot: self.selected_hotbar_slot,
+            applied,
+        }
+    }
+
     /// Applies `held_item_slot`: the server-selected hotbar slot.
     pub fn held_item_slot(&mut self, p: &PacketHeldItemSlot) -> InventoryEvent {
         let applied = (0..=8).contains(&p.slot);
@@ -1161,6 +1178,27 @@ mod tests {
         let mut inv = InventoryState::new();
         inv.held_item_slot(&PacketHeldItemSlot { slot: 4 });
         assert_eq!(inv.selected_hotbar_slot, 4);
+    }
+
+    #[test]
+    fn selecting_our_own_hotbar_slot_updates_the_tracked_selection() {
+        let mut inv = InventoryState::new();
+        let event = inv.select_hotbar_slot(7);
+        assert_eq!(inv.selected_hotbar_slot, 7);
+        assert!(matches!(
+            event,
+            InventoryEvent::SelectedHotbarChanged {
+                slot: 7,
+                applied: true
+            }
+        ));
+        // An out-of-range slot leaves the selection unchanged.
+        let event = inv.select_hotbar_slot(42);
+        assert_eq!(inv.selected_hotbar_slot, 7);
+        assert!(matches!(
+            event,
+            InventoryEvent::SelectedHotbarChanged { applied: false, .. }
+        ));
     }
 
     fn transaction(id: u64, click: InventoryClick) -> InventoryClickRequest {

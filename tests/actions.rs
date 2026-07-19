@@ -590,6 +590,77 @@ async fn player_input_is_sent_when_the_bot_starts_moving() {
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }
 
+/// `select_hotbar_slot` sends vanilla's `held_item_slot` with the chosen
+/// slot and updates the locally tracked selection so a following action
+/// acts on the newly held item.
+#[tokio::test]
+async fn select_hotbar_slot_sends_held_item_slot_and_tracks_the_selection() {
+    let port = start_and_run(|mut conn| async move {
+        let held = loop {
+            let packet = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+                .await
+                .expect("held_item_slot did not arrive in time")
+                .expect("read packet");
+            if packet.id == play::SERVERBOUND_HELD_ITEM_SLOT_ID {
+                break packet;
+            }
+        };
+        let decoded =
+            play::PacketHeldItemSlotServerbound::decode(&mut PacketReader::new(&held.payload))
+                .expect("decode held_item_slot");
+        assert_eq!(decoded.slot_id, 4, "must send the requested slot");
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "HotbarBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    handle
+        .select_hotbar_slot(4)
+        .await
+        .expect("select_hotbar_slot accepted while connected");
+
+    // The local selection is updated immediately, before any server echo.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if handle.state().borrow().inventory.selected_hotbar_slot == 4 {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "selected_hotbar_slot never updated to 4"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
+/// A slot outside 0..=8 is rejected before anything is sent.
+#[tokio::test]
+async fn select_hotbar_slot_rejects_an_out_of_range_slot() {
+    let port = start_and_run(|mut conn| async move {
+        // Nothing valid should be sent; just drain until close.
+        while conn.read_packet().await.is_ok() {}
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "BadHotbarBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    let result = handle.select_hotbar_slot(9).await;
+    assert!(
+        result.is_err(),
+        "slot 9 is out of the 0..=8 hotbar range and must be rejected"
+    );
+
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 async fn wait_until_gui_open(
     handle: &minerider::core::supervisor::SupervisorHandle,
     window_id: i32,

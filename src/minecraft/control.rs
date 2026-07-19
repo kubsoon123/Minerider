@@ -118,6 +118,8 @@ pub enum ActionValidationError {
     RandomLookPitchOrder,
     #[error("random-look max_yaw_delta must not be negative")]
     RandomLookNegativeYawDelta,
+    #[error("hotbar slot {slot} is out of range; must be 0..=8")]
+    HotbarSlotOutOfRange { slot: i16 },
 }
 
 /// A command sent from a controller to the running play loop.
@@ -167,6 +169,10 @@ pub enum BotCommand {
     /// Not automatically coupled to [`Self::UseItem`] — vanilla sends these
     /// independently, and so does this API.
     Swing(Hand),
+    /// Select the active hotbar slot (`0..=8`), sending vanilla's
+    /// `held_item_slot`. The client tracks the new selection so a later
+    /// `use_item`/`swing` acts on the newly held item.
+    SelectHotbarSlot(i16),
     /// Clear any walk goal and zero all movement input.
     Stop,
 }
@@ -180,6 +186,9 @@ impl BotCommand {
             Self::Chat(message) => validate_chat(message),
             Self::Command(command) => validate_command(command),
             Self::SetRandomLook(Some(config)) => config.validate(),
+            Self::SelectHotbarSlot(slot) if !(0..=8).contains(slot) => {
+                Err(ActionValidationError::HotbarSlotOutOfRange { slot: *slot })
+            }
             _ => Ok(()),
         }
     }
@@ -404,7 +413,8 @@ impl Controller {
             | BotCommand::Command(_)
             | BotCommand::InventoryClick(_)
             | BotCommand::UseItem(_)
-            | BotCommand::Swing(_) => {}
+            | BotCommand::Swing(_)
+            | BotCommand::SelectHotbarSlot(_) => {}
             BotCommand::Stop => {
                 self.goal = None;
                 self.manual = MovementInput::default();
@@ -576,6 +586,19 @@ mod tests {
             pitch: 0.0,
         };
         p
+    }
+
+    #[test]
+    fn select_hotbar_slot_validates_the_zero_to_eight_range() {
+        for slot in 0..=8 {
+            assert!(BotCommand::SelectHotbarSlot(slot).validate().is_ok());
+        }
+        for slot in [-1, 9, 100] {
+            assert!(matches!(
+                BotCommand::SelectHotbarSlot(slot).validate(),
+                Err(ActionValidationError::HotbarSlotOutOfRange { slot: s }) if s == slot
+            ));
+        }
     }
 
     #[test]
