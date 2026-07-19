@@ -4,6 +4,11 @@ local CONFIG = __PANEL_CONFIG__
 
 local contexts = {}
 local modes_by_username = {}
+-- Protocol 769 item ids from the matching minecraft-data 1.21.4 registry.
+-- They are used only as a fallback when a server hides the visible label in
+-- an item component the wrapper cannot render to plain text.
+local COMPASS_ITEM_ID = 961
+local ELYTRA_ITEM_ID = 802
 for _, account in ipairs(CONFIG.accounts) do
     modes_by_username[account.username] = account.mode
 end
@@ -125,7 +130,7 @@ local function click_boxpvp(bot)
         end
         if slot.raw_slot == 1 and not slot.empty then fallback = slot end
     end
-    if fallback and includes(item_text(fallback), "box") then
+    if fallback and (includes(item_text(fallback), "box") or fallback.item_id == ELYTRA_ITEM_ID) then
         bot:click_gui(fallback.raw_slot, "left")
         context(bot).phase = "online"
         emit(bot, "online", "Wybrano BOXPVP przez zweryfikowany slot zapasowy")
@@ -150,7 +155,7 @@ local function try_open_mode_selector(bot)
     if hotbar then
         for index, item in ipairs(hotbar) do
             local text = item_text(item)
-            if includes_any(text, {"wybierz tryb", "ppm", "tryb gry"}) then
+            if includes_any(text, {"wybierz tryb", "ppm", "tryb gry"}) or item.item_id == COMPASS_ITEM_ID then
                 ctx.phase = "selecting_mode"
                 emit(bot, "selecting_mode", "Otwieranie GUI wyboru trybu")
                 bot:select_hotbar_slot(index - 1)

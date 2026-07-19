@@ -41,8 +41,9 @@ pub struct GuiSlotView {
     /// is the documented follow-up; see `docs/wrapper_api_readiness.md`.
     pub registry_name: Option<&'static str>,
     pub count: i32,
-    /// Best-effort plain-text custom name, decoded from the `custom_name`
-    /// data component when present.
+    /// Best-effort plain-text display name, decoded from `custom_name` or
+    /// the vanilla `item_name` data component when present. A custom name
+    /// takes precedence when both components are supplied.
     pub custom_name: Option<String>,
     /// Best-effort plain-text lore lines, decoded from the `lore` data
     /// component when present.
@@ -83,6 +84,9 @@ impl GuiSlotView {
         for component in &data.components {
             match &component.data {
                 SlotComponentData::CustomName(nbt) => {
+                    custom_name = Some(TextComponent::from_nbt(nbt).plain_text());
+                }
+                SlotComponentData::ItemName(nbt) if custom_name.is_none() => {
                     custom_name = Some(TextComponent::from_nbt(nbt).plain_text());
                 }
                 SlotComponentData::Lore(lines) => {
@@ -325,6 +329,16 @@ mod tests {
             view.components, components,
             "raw components preserved verbatim"
         );
+    }
+
+    #[test]
+    fn vanilla_item_name_is_exposed_as_the_display_name() {
+        let components = vec![SlotComponent {
+            r#type: minerider_protocol::generated::v1_21_4::types::SlotComponentType::ItemName,
+            data: SlotComponentData::ItemName(text_component_nbt("Wybierz tryb (PPM)")),
+        }];
+        let view = GuiSlotView::from_slot(0, &item(961, 1, components));
+        assert_eq!(view.custom_name.as_deref(), Some("Wybierz tryb (PPM)"));
     }
 
     #[test]
