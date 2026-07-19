@@ -312,6 +312,22 @@ Pass as `"mode"` or `"mode:param"`:
 
 Example: `bot:click_gui(3, "hotbar_swap:2")`, `bot:click_gui(0, "drag_start:left")`.
 
+**Server-authoritative clicks (by design).** Unlike the vanilla client,
+MineRider does not predict a click's outcome: it sends an empty
+`changed_slots` and the pre-click cursor, and applies only the server's
+authoritative response. This is a deliberate correctness choice. Vanilla
+predicts locally and advances the window revision (`state_id`) in lockstep
+with the server; a *correct* prediction leaves the server silent, so both
+sides must have advanced `state_id` identically or the next click desyncs.
+By predicting nothing, MineRider guarantees the server always replies with
+an authoritative `window_items`/`set_slot` carrying the new `state_id`,
+keeping the two in step without reimplementing that lockstep — or an item
+stack-size registry (needed for correct stack-merge prediction) that a
+headless bot doesn't load. The cost is one extra corrective packet per
+click; the benefit is that an inventory can never desync. `bot:inventory()`
+/`bot:open_gui()` therefore always reflect server-confirmed state, never a
+local guess.
+
 ### Timers (bot-scoped, run on this bot's own worker)
 
 | Call |

@@ -655,9 +655,28 @@ impl InventoryState {
             slot,
             mouse_button,
             mode,
-            // MineRider never applies guessed local mutations. The server's
-            // next authoritative update is retained as confirmation or a
-            // correction instead.
+            // Deliberately server-authoritative: MineRider never predicts the
+            // click's outcome, so it sends no `changed_slots` and the
+            // pre-click cursor. This is a correctness choice, not a stub.
+            //
+            // Vanilla instead predicts the result, applies it locally, sends
+            // the predicted `changed_slots`+cursor, and advances its window
+            // revision (`state_id`) in lockstep with the server via
+            // `AbstractContainerMenu.incrementStateId`. When the client's
+            // prediction matches, the server stays silent — so both sides
+            // must have advanced `state_id` identically or the next click
+            // desyncs (see `StaleState`).
+            //
+            // By predicting *nothing*, the client's prediction never matches
+            // a real change, so the server *always* replies with an
+            // authoritative `window_items`/`set_slot` carrying the new
+            // `state_id` (see `window_items`/`set_slot`, the only places
+            // `state_id` advances). That guaranteed resync is what keeps this
+            // client in step without reimplementing vanilla's `state_id`
+            // lockstep — and without an item stack-size registry, which
+            // correct merge prediction would additionally require and which a
+            // headless bot does not load. The cost is one extra corrective
+            // packet per click, never an inventory desync.
             changed_slots: Vec::new(),
             cursor_item: self.cursor.clone(),
         };
