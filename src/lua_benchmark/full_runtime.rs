@@ -985,7 +985,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn proxy_groups_scenario_routes_every_bot_through_its_assigned_proxy() {
-        let proxy_a = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
+        let proxy_a = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
         let proxy_a_port = proxy_a.port;
         let proxy_a_cfg = Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy_a_port));
 
@@ -1039,7 +1039,7 @@ mod tests {
     /// so a bot that reconnects through it shows up twice.
     #[tokio::test(flavor = "multi_thread")]
     async fn proxy_assignment_persists_across_a_reconnect() {
-        let proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(16).await;
+        let proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
         let proxy_cfg = Arc::new(Socks5ProxyConfig::new("127.0.0.1", proxy.port));
         let proxy_for: Arc<dyn Fn(u32) -> Option<Arc<Socks5ProxyConfig>> + Send + Sync> =
             Arc::new(move |_bot| Some(proxy_cfg.clone()));
@@ -1559,7 +1559,7 @@ mod production_smoke {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn reconnect_preserves_proxy_assignment_in_the_production_runtime() {
-        let proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(16).await;
+        let proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
         let (port, _server_task, kick_tx) =
             spawn_mock_server(ScenarioKind::ReconnectStorm { percent: 100 }, 1).await;
         let script = format!(
@@ -1813,7 +1813,7 @@ mod production_smoke {
 
         let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 1).await;
         // The one and only proxy the host actually registers.
-        let real_proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
+        let real_proxy = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
         let mut proxy_profiles = crate::lua::registry::ProxyProfiles::new();
         proxy_profiles.insert(
             "trusted".to_string(),
@@ -1939,8 +1939,8 @@ mod production_smoke {
         const EXAMPLE: &str = include_str!("../../examples/lua/swarm.lua");
 
         let (port, _server_task, _kick_tx) = spawn_mock_server(ScenarioKind::Idle, 6).await;
-        let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
-        let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(8).await;
+        let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
+        let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
 
         let mut proxy_profiles = crate::lua::registry::ProxyProfiles::new();
         proxy_profiles.insert(
@@ -2453,8 +2453,8 @@ mod production_smoke {
     async fn run_one_combined_cycle(bot_count: u32) -> CombinedCycleResult {
         let (port, _server_task, kick_tx) =
             spawn_mock_server(ScenarioKind::ReconnectStorm { percent: 20 }, bot_count).await;
-        let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(64).await;
-        let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start(64).await;
+        let proxy1 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
+        let proxy2 = crate::lua_benchmark::fake_socks5::FakeSocks5Server::start().await;
 
         let mut add_bots = String::new();
         for i in 0..bot_count {
