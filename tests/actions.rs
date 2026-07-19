@@ -661,6 +661,75 @@ async fn select_hotbar_slot_rejects_an_out_of_range_slot() {
     let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
 }
 
+/// Reconfiguration: a server can send the client back to the configuration
+/// state mid-play (a server transfer, a datapack reload). Vanilla
+/// acknowledges, re-runs configuration, and re-enters play. This drives the
+/// full round trip and proves the play loop resumes afterward by
+/// round-tripping a keep-alive on the other side.
+#[tokio::test]
+async fn reconfiguration_acknowledges_reruns_config_and_resumes_play() {
+    let port = start_and_run(|mut conn| async move {
+        // Mid-play, send the client back to configuration.
+        conn.send_packet(play::CLIENTBOUND_START_CONFIGURATION_ID, &[])
+            .await
+            .expect("send start_configuration");
+
+        // The client acknowledges (play-state serverbound id 14).
+        let ack = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+            .await
+            .expect("configuration_acknowledged did not arrive in time")
+            .expect("read ack");
+        assert_eq!(ack.id, play::SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID);
+
+        // Now back in configuration: the client re-sends brand then settings,
+        // exactly as on the first configuration.
+        let brand = conn.read_packet().await.expect("read brand");
+        assert_eq!(brand.id, configuration::SERVERBOUND_CUSTOM_PAYLOAD_ID);
+        let settings = conn.read_packet().await.expect("read settings");
+        assert_eq!(settings.id, configuration::SERVERBOUND_SETTINGS_ID);
+
+        // Finish configuration again; the client acks and re-enters play.
+        send_dimension_registry(&mut conn).await;
+        conn.send_packet(configuration::CLIENTBOUND_FINISH_CONFIGURATION_ID, &[])
+            .await
+            .expect("send finish configuration");
+        let fin = conn.read_packet().await.expect("read finish ack");
+        assert_eq!(fin.id, configuration::SERVERBOUND_FINISH_CONFIGURATION_ID);
+
+        // Back in play: a keep-alive must be echoed, proving the play loop
+        // resumed on the fresh configuration rather than staying stuck.
+        let mut w = PacketWriter::new();
+        w.put_i64(0x1234_5678);
+        conn.send_packet(play::CLIENTBOUND_KEEP_ALIVE_ID, &w.into_inner())
+            .await
+            .expect("send keep_alive");
+        let echo = loop {
+            let p = tokio::time::timeout(Duration::from_secs(5), conn.read_packet())
+                .await
+                .expect("keep_alive echo did not arrive in time")
+                .expect("read keep_alive echo");
+            if p.id == play::SERVERBOUND_KEEP_ALIVE_ID {
+                break p;
+            }
+        };
+        let mut r = PacketReader::new(&echo.payload);
+        assert_eq!(
+            r.get_i64().unwrap(),
+            0x1234_5678,
+            "the resumed play loop must echo the keep-alive id"
+        );
+    })
+    .await;
+
+    let cfg = ClientConfig::new("127.0.0.1", port, "ReconfigBot");
+    let (supervisor, handle) = ClientSupervisor::new(cfg, ReconnectPolicy::default());
+    let run_handle = tokio::spawn(supervisor.run());
+    wait_until_connected(&handle).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    handle.stop();
+    let _ = tokio::time::timeout(Duration::from_secs(5), run_handle).await;
+}
+
 /// `use_item_on_block` sends vanilla's `block_place` with the target block,
 /// face, hand and cursor position, plus a per-session sequence.
 #[tokio::test]

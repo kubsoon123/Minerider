@@ -160,7 +160,7 @@ or lose an id.
 | 109 | set_title_time | handled | — | — | replace title timing values and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 110 | entity_sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 111 | sound_effect | ignored | — | — | none | NOT IMPLEMENTED |  | none |
-| 112 | start_configuration | ignored | configuration_acknowledged | strict | re-enter configuration state | NOT IMPLEMENTED |  | none |
+| 112 | start_configuration | handled | configuration_acknowledged | strict | acknowledge, re-run configuration, and re-enter play | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 113 | stop_sound | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 114 | store_cookie | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 115 | system_chat | handled | — | — | store system chat or action bar according to packet flag; emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |

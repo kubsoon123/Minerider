@@ -513,12 +513,14 @@ fn play_coverage(id: i32) -> CoverageEntry {
         play::CLIENTBOUND_SCOREBOARD_SCORE_ID => handled(state_only(
             "create/update bounded score with display/number formatting and emit event",
         )),
-        play::CLIENTBOUND_START_CONFIGURATION_ID => ignored(not_implemented(
-            Some("configuration_acknowledged"),
-            TimingClass::Strict,
-            "re-enter configuration state",
-            "",
-        )),
+        play::CLIENTBOUND_START_CONFIGURATION_ID => handled(Obligation {
+            responds_with: Some("configuration_acknowledged"),
+            timing: TimingClass::Strict,
+            state_update: "acknowledge, re-run configuration, and re-enter play",
+            status: ConformanceStatus::Partial,
+            scenario: "",
+            evidence: EVIDENCE_UNIT,
+        }),
         play::CLIENTBOUND_COOKIE_REQUEST_ID => unsupported(Some("cookie_response")),
         play::CLIENTBOUND_CUSTOM_PAYLOAD_ID => ignored(Obligation {
             state_update: "vanilla answers known plugin channels; brand sent voluntarily",

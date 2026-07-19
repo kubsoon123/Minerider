@@ -37,12 +37,13 @@ use minerider_protocol::generated::v1_21_4::play::{
     CLIENTBOUND_PLAYER_REMOVE_ID, CLIENTBOUND_POSITION_ID, CLIENTBOUND_REL_ENTITY_MOVE_ID,
     CLIENTBOUND_REMOVE_RESOURCE_PACK_ID, CLIENTBOUND_RESPAWN_ID, CLIENTBOUND_SET_CURSOR_ITEM_ID,
     CLIENTBOUND_SET_PLAYER_INVENTORY_ID, CLIENTBOUND_SET_SLOT_ID, CLIENTBOUND_SPAWN_ENTITY_ID,
-    CLIENTBOUND_SYNC_ENTITY_POSITION_ID, CLIENTBOUND_TILE_ENTITY_DATA_ID,
-    CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID, CLIENTBOUND_UPDATE_LIGHT_ID,
-    CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID, SERVERBOUND_ARM_ANIMATION_ID,
-    SERVERBOUND_BLOCK_DIG_ID, SERVERBOUND_BLOCK_PLACE_ID, SERVERBOUND_CHAT_COMMAND_ID,
-    SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
-    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_CLOSE_WINDOW_ID, SERVERBOUND_FLYING_ID,
+    CLIENTBOUND_START_CONFIGURATION_ID, CLIENTBOUND_SYNC_ENTITY_POSITION_ID,
+    CLIENTBOUND_TILE_ENTITY_DATA_ID, CLIENTBOUND_UNLOAD_CHUNK_ID, CLIENTBOUND_UPDATE_HEALTH_ID,
+    CLIENTBOUND_UPDATE_LIGHT_ID, CLIENTBOUND_UPDATE_TIME_ID, CLIENTBOUND_WINDOW_ITEMS_ID,
+    SERVERBOUND_ARM_ANIMATION_ID, SERVERBOUND_BLOCK_DIG_ID, SERVERBOUND_BLOCK_PLACE_ID,
+    SERVERBOUND_CHAT_COMMAND_ID, SERVERBOUND_CHAT_MESSAGE_ID, SERVERBOUND_CHUNK_BATCH_RECEIVED_ID,
+    SERVERBOUND_CLIENT_COMMAND_ID, SERVERBOUND_CLOSE_WINDOW_ID,
+    SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID, SERVERBOUND_FLYING_ID,
     SERVERBOUND_HELD_ITEM_SLOT_ID, SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_LOOK_ID,
     SERVERBOUND_PLAYER_INPUT_ID, SERVERBOUND_PLAYER_LOADED_ID, SERVERBOUND_PONG_ID,
     SERVERBOUND_POSITION_ID, SERVERBOUND_POSITION_LOOK_ID, SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
@@ -317,46 +318,69 @@ pub struct StateSnapshot {
 /// only on error/disconnect.
 pub async fn run_play(
     conn: &mut Connection,
-    configuration: &ConfigurationData,
+    mut configuration: ConfigurationData,
+    view_distance: i8,
     mut control_rx: UnboundedReceiver<BotCommand>,
     state_tx: watch::Sender<StateSnapshot>,
     event_tx: broadcast::Sender<BotEvent>,
     world_sharing: Option<SharedWorldContext>,
 ) -> Result<()> {
-    let mut state = PlayState::with_world_sharing(event_tx, world_sharing);
-    // High-frequency ignored packets warn once per id, then drop to debug;
-    // bounded by the number of clientbound play ids, so memory is fixed.
-    let mut warned_ids = std::collections::HashSet::new();
     // Once every control handle is dropped the channel closes; disable its
     // select branch so a permanently-ready `recv` cannot spin the loop.
     let mut control_open = true;
 
-    let mut ticker =
-        tokio::time::interval_at(tokio::time::Instant::now() + TICK_DURATION, TICK_DURATION);
-    // A long send or scheduler hiccup must not trigger a catch-up burst of
-    // ticks; skip missed ticks and resume the cadence.
-    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
+    // Outer session loop: re-entered whenever the server sends
+    // `start_configuration` (a server transfer / reconfiguration). Each
+    // iteration is one Play session with its own fresh `PlayState`; the
+    // control/state/event channels persist across reconfigurations. The only
+    // exits are an error/disconnect (propagated via `?`) or, after a
+    // reconfiguration, a rebuilt session.
     loop {
-        tokio::select! {
-            // Prefer draining the packet stream over advancing the tick.
-            biased;
-            read = conn.read_packet() => {
-                let packet = read?;
-                let result = handle_clientbound(
-                    conn,
-                    &mut state,
-                    configuration,
-                    &packet,
-                    &mut warned_ids,
-                ).await;
-                // Publish promptly on state-changing packets (health, death,
-                // inventory, presentation, entities) rather than waiting up
-                // to one tick. Publish disconnect state before returning its
-                // terminal error as well.
-                let _ = state_tx.send(state.snapshot(state.clock.current()));
-                result?;
-            }
+        let mut state = PlayState::with_world_sharing(event_tx.clone(), world_sharing.clone());
+        // High-frequency ignored packets warn once per id, then drop to debug;
+        // bounded by the number of clientbound play ids, so memory is fixed.
+        let mut warned_ids = std::collections::HashSet::new();
+
+        let mut ticker =
+            tokio::time::interval_at(tokio::time::Instant::now() + TICK_DURATION, TICK_DURATION);
+        // A long send or scheduler hiccup must not trigger a catch-up burst of
+        // ticks; skip missed ticks and resume the cadence.
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                // Prefer draining the packet stream over advancing the tick.
+                biased;
+                read = conn.read_packet() => {
+                    let packet = read?;
+                    // Reconfiguration: the server sends the client back to the
+                    // configuration state mid-play (a server transfer, a
+                    // datapack/dimension reload). Vanilla acknowledges, re-runs
+                    // configuration, and re-enters play. Break the inner loop to
+                    // do exactly that; ignoring this leaves the server waiting
+                    // for the ack and eventually disconnecting the bot.
+                    if packet.id == CLIENTBOUND_START_CONFIGURATION_ID {
+                        conn.send_packet(SERVERBOUND_CONFIGURATION_ACKNOWLEDGED_ID, &[])
+                            .await?;
+                        conn.set_state(ConnectionState::Configuration);
+                        let _ = state_tx.send(state.snapshot(state.clock.current()));
+                        debug!("acknowledged start_configuration; re-entering configuration");
+                        break;
+                    }
+                    let result = handle_clientbound(
+                        conn,
+                        &mut state,
+                        &configuration,
+                        &packet,
+                        &mut warned_ids,
+                    ).await;
+                    // Publish promptly on state-changing packets (health, death,
+                    // inventory, presentation, entities) rather than waiting up
+                    // to one tick. Publish disconnect state before returning its
+                    // terminal error as well.
+                    let _ = state_tx.send(state.snapshot(state.clock.current()));
+                    result?;
+                }
             command = control_rx.recv(), if control_open => {
                 match command {
                     // Outbound chat actions go straight to their distinct
@@ -392,7 +416,17 @@ pub async fn run_play(
                 handle_tick(conn, &mut state).await?;
                 let _ = state_tx.send(state.snapshot(state.clock.current()));
             }
+            }
         }
+
+        // The inner loop only breaks for a reconfiguration (every other exit
+        // propagates an error via `?`). Re-run the configuration exchange —
+        // which re-sends our brand/settings, processes the server's
+        // registry/finish, and leaves the connection back in Play — then loop
+        // to rebuild a fresh play session on the new configuration.
+        configuration =
+            crate::minecraft::configuration::run_configuration(conn, view_distance).await?;
+        debug!("reconfiguration complete; resuming play");
     }
 }
 
