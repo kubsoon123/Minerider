@@ -54,6 +54,19 @@ pub struct WorkerQueue {
     state: std::sync::Mutex<QueueDesign<WorkItem>>,
     condvar: std::sync::Condvar,
     closed: std::sync::atomic::AtomicBool,
+    /// Critical (high-lane) overflows this queue has produced, tracked
+    /// separately from `QueueDesign::dropped()`'s combined total — see
+    /// `push`'s doc comment.
+    critical_overflow: AtomicU64,
+    /// `(request_id, error)` pairs for action results/callback completions
+    /// that could not be delivered (critical overflow) or were rejected
+    /// outright (pushed after `close()`). The owning worker drains this on
+    /// its own thread via `take_failed_requests` and resolves the
+    /// matching pending callback with the given typed error — this Mutex
+    /// (not the Lua-VM-bound `WorkerState::callbacks`) is what lets the
+    /// async/producer side record the failure at all, since it can never
+    /// safely touch a worker's `Rc`-based callback registry directly.
+    failed_requests: std::sync::Mutex<Vec<(u64, ScriptError)>>,
 }
 
 impl WorkerQueue {
@@ -62,10 +75,40 @@ impl WorkerQueue {
             state: std::sync::Mutex::new(design),
             condvar: std::sync::Condvar::new(),
             closed: std::sync::atomic::AtomicBool::new(false),
+            critical_overflow: AtomicU64::new(0),
+            failed_requests: std::sync::Mutex::new(Vec::new()),
         })
     }
 
+    /// Rejects outright once the queue is [`close`](Self::close)d — never
+    /// silently accepted into a queue nothing will ever drain again.
+    ///
+    /// A lost critical (high-lane) item is never silent either: this
+    /// bumps a dedicated `critical_overflow` counter, and — for an
+    /// `ActionResult`/`CallbackCompletion` specifically, since those are
+    /// the only work items a pending Lua callback might be waiting on —
+    /// records `(request_id, worker_overloaded)` (or `(request_id,
+    /// shutdown)` for a post-close rejection) so the owning worker can
+    /// resolve that callback with a typed error instead of leaving it to
+    /// silently expire via the callback-timeout sweep. Also makes one
+    /// best-effort, non-recursive attempt to deliver a `WorkerOverloaded`
+    /// diagnostic — into the *low* lane, a separately-bounded lane
+    /// unaffected by the high lane's saturation, and only ever this one
+    /// attempt, never a retry of the push that just failed.
     pub fn push(&self, bot_id: BotId, event: WorkItem, bot_seq: u64) -> PushOutcome {
+        // Captured *before* `event` is moved into `envelope` below — the
+        // only way to still know what a lost item was without needing it
+        // handed back from a failed `QueueDesign::push`.
+        let resolvable_request_id = match &event {
+            WorkItem::ActionResult(r) | WorkItem::CallbackCompletion(r) => Some(r.request_id),
+            _ => None,
+        };
+        if self.closed.load(Ordering::Acquire) {
+            if let Some(request_id) = resolvable_request_id {
+                self.record_failure(request_id, ScriptError::shutdown());
+            }
+            return PushOutcome::Closed;
+        }
         let envelope = Envelope {
             bot_id,
             event,
@@ -76,8 +119,54 @@ impl WorkerQueue {
             let mut guard = self.state.lock().expect("worker queue mutex poisoned");
             guard.push(envelope)
         };
+        if outcome == PushOutcome::CriticalOverflow {
+            self.critical_overflow.fetch_add(1, Ordering::Relaxed);
+            if let Some(request_id) = resolvable_request_id {
+                self.record_failure(request_id, ScriptError::worker_overloaded());
+            }
+            // Best-effort, non-recursive: exactly one attempt, into the
+            // low lane (a separately-bounded lane the high lane's
+            // saturation can't affect) — never a retry of the push that
+            // just failed, and its own outcome is deliberately ignored
+            // (if the low lane is also saturated, this is simply dropped
+            // like any other low-priority traffic under sustained
+            // overload, which is already an accepted trade-off).
+            let mut guard = self.state.lock().expect("worker queue mutex poisoned");
+            let _ = guard.push(Envelope {
+                bot_id: BotId(0),
+                event: WorkItem::WorkerOverloaded,
+                enqueued_at: std::time::Instant::now(),
+                bot_seq: 0,
+            });
+        }
         self.condvar.notify_one();
         outcome
+    }
+
+    fn record_failure(&self, request_id: u64, err: ScriptError) {
+        self.failed_requests
+            .lock()
+            .expect("worker queue failed-requests mutex poisoned")
+            .push((request_id, err));
+    }
+
+    /// Drains every `(request_id, error)` recorded by a lost/rejected
+    /// action result or callback completion since the last call — see
+    /// `push`'s doc comment. Called once per dispatch-loop iteration by
+    /// the owning worker (`crate::lua::worker::run_worker`).
+    pub fn take_failed_requests(&self) -> Vec<(u64, ScriptError)> {
+        std::mem::take(
+            &mut *self
+                .failed_requests
+                .lock()
+                .expect("worker queue failed-requests mutex poisoned"),
+        )
+    }
+
+    /// Critical (high-lane) items lost to saturation — see `push`'s doc
+    /// comment. Distinct from `QueueDesign::dropped()`'s combined total.
+    pub fn critical_overflow(&self) -> u64 {
+        self.critical_overflow.load(Ordering::Relaxed)
     }
 
     pub fn push_action_result(&self, result: ActionResult) {
@@ -243,6 +332,14 @@ impl DispatcherHandle {
         self.queues.iter().map(|q| q.dropped()).sum()
     }
 
+    /// Critical (high-lane) items lost to saturation, across every worker
+    /// — a distinct, more serious signal than `queue_dropped_total`'s
+    /// combined (high + ordinary low-priority) total. Exposed via
+    /// `swarm:stats()` as `queue_critical_overflow_total`.
+    pub fn queue_critical_overflow_total(&self) -> u64 {
+        self.queues.iter().map(|q| q.critical_overflow()).sum()
+    }
+
     pub fn close_all(&self) {
         for queue in self.queues.iter() {
             queue.close();
@@ -367,5 +464,115 @@ mod tests {
         queue.close();
         let batch = handle.join().unwrap();
         assert!(batch.is_empty());
+    }
+
+    #[test]
+    fn push_rejects_outright_once_the_queue_is_closed() {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(8, 8)));
+        assert_eq!(
+            queue.push(BotId(0), WorkItem::Bot(BotEvent::Connected), 1),
+            PushOutcome::Accepted
+        );
+        queue.close();
+        assert_eq!(
+            queue.push(BotId(0), WorkItem::Bot(BotEvent::Connected), 2),
+            PushOutcome::Closed,
+            "a push after close must never be silently accepted"
+        );
+        assert_eq!(
+            queue.depth(),
+            1,
+            "the post-close push must not have been added to the queue"
+        );
+    }
+
+    #[test]
+    fn critical_overflow_resolves_a_pending_action_result_with_a_typed_worker_overloaded_error() {
+        // High-lane capacity 1: the first ActionResult fits, the second
+        // overflows it.
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(1, 8)));
+        queue.push_action_result(ActionResult {
+            request_id: 1,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+        queue.push_action_result(ActionResult {
+            request_id: 2,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+
+        assert_eq!(queue.critical_overflow(), 1);
+        let failed = queue.take_failed_requests();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(
+            failed[0].0, 2,
+            "the request that overflowed, not the one that fit"
+        );
+        assert_eq!(failed[0].1.code, "worker_overloaded");
+
+        assert!(
+            queue.take_failed_requests().is_empty(),
+            "take_failed_requests must drain, not just peek"
+        );
+    }
+
+    #[test]
+    fn critical_overflow_also_delivers_a_worker_overloaded_notification_into_the_low_lane() {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(1, 8)));
+        queue.push_action_result(ActionResult {
+            request_id: 1,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+        queue.push_action_result(ActionResult {
+            request_id: 2,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+
+        let batch = queue.wait_for_batch();
+        assert!(
+            batch
+                .iter()
+                .any(|e| matches!(e.event, WorkItem::WorkerOverloaded)),
+            "a WorkerOverloaded diagnostic must be delivered alongside the surviving ActionResult"
+        );
+    }
+
+    #[test]
+    fn push_after_close_resolves_a_pending_action_result_with_a_typed_shutdown_error() {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(8, 8)));
+        queue.close();
+        queue.push_action_result(ActionResult {
+            request_id: 42,
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+
+        let failed = queue.take_failed_requests();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].0, 42);
+        assert_eq!(failed[0].1.code, "shutdown");
+    }
+
+    #[test]
+    fn a_bot_event_lost_to_critical_overflow_is_counted_but_has_no_callback_to_resolve() {
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(1, 8)));
+        queue.push(BotId(0), WorkItem::Bot(BotEvent::Connected), 1);
+        let outcome = queue.push(
+            BotId(0),
+            WorkItem::Bot(BotEvent::Disconnected {
+                reason: "test".to_string(),
+            }),
+            2,
+        );
+
+        assert_eq!(outcome, PushOutcome::CriticalOverflow);
+        assert_eq!(queue.critical_overflow(), 1);
+        assert!(
+            queue.take_failed_requests().is_empty(),
+            "a lost lifecycle event has no request_id/callback to resolve"
+        );
     }
 }

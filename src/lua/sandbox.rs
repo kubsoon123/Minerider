@@ -93,7 +93,9 @@ pub fn new_sandboxed_lua(config: &SandboxConfig) -> mlua::Result<(Lua, Arc<Atomi
         move |_lua, _debug| {
             let seen = hook_counter.fetch_add(1, Ordering::Relaxed);
             if seen > budget {
-                return Err(mlua::Error::external(SandboxAbort::InstructionLimit(budget)));
+                return Err(mlua::Error::external(SandboxAbort::InstructionLimit(
+                    budget,
+                )));
             }
             Ok(VmState::Continue)
         },

@@ -60,6 +60,19 @@ pub enum PushOutcome {
     /// Replaced a previously-coalesced, not-yet-delivered entry for the
     /// same `(bot, kind)` key — the old one never reaches a handler.
     Coalesced,
+    /// The high-priority lane was full when a *critical* item (a lifecycle
+    /// event, action result, or callback completion) was pushed — the new
+    /// item was rejected, not an older pending one silently evicted, so
+    /// already-queued critical items keep their relative order. Distinct
+    /// from `DroppedOldest`/`DroppedNewest` (which apply to the
+    /// low-priority lane, where losing state under load is an accepted,
+    /// expected trade-off) specifically so callers can react — see
+    /// `crate::lua::dispatcher::WorkerQueue::push`.
+    CriticalOverflow,
+    /// The queue has already been closed (see `WorkerQueue::close`) —
+    /// pushing into a closed queue is always rejected outright, never
+    /// silently accepted into a queue nothing will ever drain again.
+    Closed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,14 +190,16 @@ impl<E: QueueItem> PriorityQueue<E> {
             Priority::High => {
                 if self.high.len() >= self.high_capacity {
                     // A genuinely full high-priority lane means the whole
-                    // pipeline is saturated far beyond design limits; drop
-                    // oldest rather than newest so the *current* lifecycle
-                    // state (e.g. the latest reconnect attempt) always wins.
-                    self.high.pop_front();
+                    // pipeline is saturated far beyond design limits. Reject
+                    // the new item rather than evicting an older pending
+                    // one: every already-queued critical item (a lifecycle
+                    // event, an action result, a callback completion) keeps
+                    // its place and its relative order, and the caller gets
+                    // a distinct outcome it can react to (see
+                    // `crate::lua::dispatcher::WorkerQueue::push`) instead
+                    // of an older item vanishing with no signal at all.
                     self.stats_high.dropped += 1;
-                    self.high.push_back(envelope);
-                    self.stats_high.peak_depth = self.stats_high.peak_depth.max(self.high.len());
-                    PushOutcome::DroppedOldest
+                    PushOutcome::CriticalOverflow
                 } else {
                     self.high.push_back(envelope);
                     self.stats_high.accepted += 1;
@@ -302,7 +317,9 @@ impl<E: QueueItem> QueueDesign<E> {
         }
     }
 
-    /// Total events dropped due to overflow across every lane.
+    /// Total events dropped due to overflow across every lane (high and
+    /// low combined — see [`critical_overflow`](Self::critical_overflow)
+    /// for the high lane alone).
     pub fn dropped(&self) -> u64 {
         match self {
             Self::Fifo(q) => q.stats().dropped,
@@ -310,6 +327,23 @@ impl<E: QueueItem> QueueDesign<E> {
                 let (high, _, low) = q.stats();
                 high.dropped + low.dropped
             }
+        }
+    }
+
+    /// Events lost specifically to *high-priority* lane saturation — a
+    /// lifecycle event, action result, or callback completion that could
+    /// not be delivered at all. Tracked separately from
+    /// [`dropped`](Self::dropped) (which also includes ordinary
+    /// low-priority overflow, an accepted, expected trade-off under load)
+    /// because a critical drop is a materially more serious condition:
+    /// see `crate::lua::dispatcher::WorkerQueue::push`, which reacts to it
+    /// specifically. `Fifo` has no high/low distinction (it exists only as
+    /// the benchmark's naive-baseline comparison, never used in
+    /// production), so this is always `0` for it.
+    pub fn critical_overflow(&self) -> u64 {
+        match self {
+            Self::Fifo(_) => 0,
+            Self::Priority(q) => q.stats().0.dropped,
         }
     }
 }
@@ -438,6 +472,64 @@ mod tests {
         let (high, _, low) = q.stats();
         assert_eq!(high.dropped, 0);
         assert!(low.dropped > 0);
+    }
+
+    #[test]
+    fn priority_queue_high_lane_rejects_the_newest_item_when_full_not_an_older_one() {
+        let mut q = PriorityQueue::new(2, 8);
+        assert_eq!(
+            q.push(envelope(0, TestEvent::Critical, 0)),
+            PushOutcome::Accepted
+        );
+        assert_eq!(
+            q.push(envelope(0, TestEvent::Critical, 1)),
+            PushOutcome::Accepted
+        );
+        // The lane is now full (capacity 2) — a third critical item must
+        // be rejected outright, never silently evicting one of the two
+        // already-pending ones.
+        assert_eq!(
+            q.push(envelope(0, TestEvent::Critical, 2)),
+            PushOutcome::CriticalOverflow
+        );
+        let (high, _, _) = q.stats();
+        assert_eq!(
+            high.dropped, 1,
+            "exactly one critical overflow must be recorded"
+        );
+        assert_eq!(
+            high.accepted, 2,
+            "the two originally-accepted items must not be retroactively uncounted"
+        );
+
+        // Both original items — in their original order — must still be
+        // exactly what drains, proving nothing was evicted to make room.
+        let drained = q.drain_ready();
+        assert_eq!(drained.len(), 2);
+        assert_eq!(drained[0].bot_seq, 0);
+        assert_eq!(drained[1].bot_seq, 1);
+    }
+
+    #[test]
+    fn critical_overflow_is_tracked_separately_from_ordinary_low_lane_drops() {
+        let mut design: QueueDesign<TestEvent> = QueueDesign::Priority(PriorityQueue::new(1, 1));
+        // Fill, then overflow, the high lane.
+        design.push(envelope(0, TestEvent::Critical, 0));
+        assert_eq!(
+            design.push(envelope(0, TestEvent::Critical, 1)),
+            PushOutcome::CriticalOverflow
+        );
+        // Fill, then overflow, the low lane too — an ordinary, expected
+        // drop that must NOT be counted as a critical overflow.
+        design.push(envelope(0, TestEvent::Chatty, 2));
+        design.push(envelope(0, TestEvent::Chatty, 3));
+
+        assert_eq!(design.critical_overflow(), 1);
+        assert_eq!(
+            design.dropped(),
+            2,
+            "dropped() stays the combined total (1 critical + 1 low)"
+        );
     }
 
     #[test]

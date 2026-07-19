@@ -51,7 +51,14 @@ pub enum WorkItem {
     /// A bot's script execution was disabled after too many consecutive
     /// handler errors.
     ScriptDisabled { reason: String },
-    /// This worker's critical queue is saturated.
+    /// This worker's critical (high-lane) queue is saturated — see
+    /// `crate::lua::dispatcher::WorkerQueue::push`, the sole producer.
+    /// Deliberately `Priority::Low` below, not `High`: it exists
+    /// specifically *because* the high lane just overflowed, so pushing
+    /// it into that same saturated lane would risk exactly the silent
+    /// loss it's meant to report. The low lane is a separately-bounded
+    /// lane the high lane's saturation can't affect, and this is always a
+    /// single best-effort push, never retried.
     WorkerOverloaded,
 }
 
@@ -65,7 +72,7 @@ impl QueueItem for WorkItem {
             WorkItem::TimerFired { .. } => Priority::Low,
             WorkItem::ScriptError { .. } => Priority::High,
             WorkItem::ScriptDisabled { .. } => Priority::High,
-            WorkItem::WorkerOverloaded => Priority::High,
+            WorkItem::WorkerOverloaded => Priority::Low,
         }
     }
 

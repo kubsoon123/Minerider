@@ -188,10 +188,25 @@ doc comment for the exact classification and rationale.
 (`crate::lua::runtime::SwarmRuntimeConfig`). The benchmark report didn't
 specify one mandatory value; 4096 is the "safe default" it suggested,
 chosen from its measured peaks rather than picked arbitrarily — see
-`docs/lua_runtime_benchmark.md#queues`. If the high-priority lane still
-somehow fills, the oldest entry is dropped to make room for the newest
-(never silently discarding forever) and a `WorkItem::WorkerOverloaded`
-diagnostic is logged.
+`docs/lua_runtime_benchmark.md#queues`. This is a genuine finite-capacity
+guarantee, not unconditional delivery: if the high-priority lane still
+somehow fills, the *new* item is rejected outright (`PushOutcome::CriticalOverflow`)
+— already-queued critical items are never evicted to make room — and this
+is never silent:
+- A dedicated `critical_overflow` counter (surfaced as
+  `swarm:stats().queue_critical_overflow_total`, separate from the
+  combined `queue_dropped_total`) is incremented.
+- A `worker_overload` event fires (a real `swarm:on("worker_overload", fn)`-dispatchable
+  event, delivered through the low-priority lane specifically so
+  reporting the high lane's saturation can never itself be lost to that
+  same saturation).
+- If the lost item was an `action_result`/callback completion, its
+  pending one-shot callback (if any) is resolved with a typed
+  `worker_overloaded` error instead of being left to silently expire via
+  the callback-timeout sweep. The same mechanism resolves a callback with
+  a typed `shutdown` error if the push was instead rejected because the
+  queue had already been closed (`PushOutcome::Closed` — pushing into a
+  closed queue is always rejected, never silently accepted).
 
 **Handler dispatch order.** `bot:on` handlers run before `swarm:on`
 handlers for the same event; multiple handlers registered for the same

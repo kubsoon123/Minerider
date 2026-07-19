@@ -377,6 +377,7 @@ pub fn run_worker(
             report.events_processed += 1;
             dispatch_one(&lua, &state, envelope, &mut report);
         }
+        resolve_overflowed_callbacks(&lua, &state, &queue);
         sweep_callback_timeouts(&lua, &state);
         crate::lua::api::timers::fire_due(&lua, &state, &mut report);
     }
@@ -424,12 +425,11 @@ pub(crate) fn invoke_top_level<A: mlua::IntoLuaMulti>(
         .instruction_counter
         .borrow()
         .store(0, Ordering::Relaxed);
-    func.call::<()>(args).map_err(|e| {
-        match crate::lua::error::classify_sandbox_abort(&e) {
+    func.call::<()>(args)
+        .map_err(|e| match crate::lua::error::classify_sandbox_abort(&e) {
             Some(script_err) => HandlerFailure::Sandbox(script_err),
             None => HandlerFailure::Script(e),
-        }
-    })
+        })
 }
 
 /// Updates bot `bot_id`'s consecutive-error counter after a top-level
@@ -475,6 +475,34 @@ fn resolve_callback(lua: &Lua, state: &Rc<WorkerState>, request_id: u64, table: 
             }
         }
         let _ = lua.remove_registry_value(callback.key);
+    }
+}
+
+/// Resolves every pending callback whose action result/callback completion
+/// never actually reached a queue — lost to critical (high-lane) overflow,
+/// or rejected because the queue had already been closed — with the typed
+/// error `WorkerQueue::push` recorded for it (`worker_overloaded` or
+/// `shutdown` respectively) instead of leaving it to silently expire via
+/// `sweep_callback_timeouts`'s generic `inventory_timeout`. Called once per
+/// dispatch-loop iteration; almost always a no-op (an empty drain).
+fn resolve_overflowed_callbacks(lua: &Lua, state: &Rc<WorkerState>, queue: &WorkerQueue) {
+    for (request_id, err) in queue.take_failed_requests() {
+        if let Some(callback) = state.callbacks.borrow_mut().pending.remove(&request_id) {
+            if let Ok(func) = lua.registry_value::<mlua::Function>(&callback.key) {
+                let result = crate::lua::dispatcher::ActionResult {
+                    request_id,
+                    bot_id: callback.bot_id,
+                    outcome: ActionOutcome::Error(err),
+                };
+                if let Ok(table) = crate::lua::convert::events::action_result_to_table(lua, &result)
+                {
+                    if let Err(e) = invoke_top_level(state, &func, table) {
+                        tracing::warn!(worker = state.worker_index, error = %e, "overflow/shutdown callback itself failed");
+                    }
+                }
+            }
+            let _ = lua.remove_registry_value(callback.key);
+        }
     }
 }
 
@@ -587,6 +615,55 @@ fn dispatch_one(
                 worker = state.worker_index,
                 "worker_overload: critical queue saturated"
             );
+            // A genuine `swarm:on("worker_overload", fn)`-fireable event,
+            // not log-only — see `docs/lua_api_reference.md#events`. Uses
+            // `run_global_handlers_for`, not `run_handlers_for`: this
+            // isn't tied to any one bot, so there is no per-bot handler
+            // lookup and — deliberately — no consecutive-error accounting
+            // against any bot (that concept is specifically about a
+            // *bot's* script execution, and attributing an unrelated
+            // worker-level condition to whichever bot happened to have id
+            // 0 would be wrong).
+            run_global_handlers_for(lua, state, "worker_overload", report);
+        }
+    }
+}
+
+/// Runs only *global* handlers (`swarm:on(name, fn)`) for a worker-level
+/// event that isn't tied to any one bot (currently only `worker_overload`)
+/// — no per-bot handler lookup, and deliberately no consecutive-error
+/// accounting, since that concept is specifically about a bot's own
+/// script execution.
+fn run_global_handlers_for(
+    lua: &Lua,
+    state: &Rc<WorkerState>,
+    name: &'static str,
+    report: &mut WorkerReport,
+) {
+    let mut to_remove = Vec::new();
+    let global_keys: Vec<(u64, Rc<RegistryKey>, bool)> = {
+        let reg = state.handlers.borrow();
+        reg.global
+            .get(name)
+            .map(|hs| hs.iter().map(|h| (h.id, h.key.clone(), h.once)).collect())
+            .unwrap_or_default()
+    };
+    for (id, key, once) in global_keys {
+        if let Ok(func) = lua.registry_value::<mlua::Function>(&key) {
+            report.handlers_run += 1;
+            if let Err(e) = invoke_top_level(state, &func, (mlua::Value::Nil, mlua::Value::Nil)) {
+                report.handler_errors += 1;
+                tracing::warn!(worker = state.worker_index, event = name, error = %e, "handler error");
+            }
+        }
+        if once {
+            to_remove.push(id);
+        }
+    }
+    if !to_remove.is_empty() {
+        let mut reg = state.handlers.borrow_mut();
+        for id in to_remove {
+            reg.remove(id);
         }
     }
 }
@@ -622,8 +699,7 @@ fn run_handlers_for(
         if let Ok(func) = lua.registry_value::<mlua::Function>(&key) {
             invoked_any = true;
             report.handlers_run += 1;
-            if let Err(e) =
-                invoke_top_level(state, &func, (bot_value.clone(), event_value.clone()))
+            if let Err(e) = invoke_top_level(state, &func, (bot_value.clone(), event_value.clone()))
             {
                 report.handler_errors += 1;
                 had_error = true;
@@ -1140,6 +1216,59 @@ mod tests {
         assert!(
             !state.disabled_bots.borrow().contains(&0),
             "alternating success/error must never reach the consecutive-error threshold"
+        );
+    }
+
+    /// Bridges `WorkerQueue`'s `(request_id, error)` side-channel (the
+    /// only way the async/producer side can report a lost action result —
+    /// see `WorkerQueue::push`'s doc comment) back to an actual pending
+    /// Lua callback, with a tiny capacity forcing a real critical overflow
+    /// deterministically.
+    #[tokio::test]
+    async fn resolve_overflowed_callbacks_invokes_the_pending_callback_with_a_typed_error() {
+        let state = test_state(SandboxConfig::default());
+        let (lua, counter) = new_sandboxed_lua(&state.sandbox).unwrap();
+        *state.instruction_counter.borrow_mut() = counter;
+        crate::lua::api::install(&lua, state.clone()).unwrap();
+
+        let callback: mlua::Function = lua
+            .load("function(result) _G.ok = result.ok; _G.code = result.error.code end")
+            .eval()
+            .unwrap();
+        let key = lua.create_registry_value(callback).unwrap();
+        state.callbacks.borrow_mut().pending.insert(
+            7,
+            PendingCallback {
+                key,
+                bot_id: 0,
+                registered_at: Instant::now(),
+            },
+        );
+
+        // A dedicated tiny-capacity queue, independent of `state`'s own —
+        // `resolve_overflowed_callbacks` takes it as a separate parameter,
+        // exactly like `run_worker`'s loop does.
+        let queue = WorkerQueue::new(QueueDesign::Priority(PriorityQueue::new(1, 8)));
+        queue.push_action_result(crate::lua::dispatcher::ActionResult {
+            request_id: 99, // fills the lane first; unrelated to our callback
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+        queue.push_action_result(crate::lua::dispatcher::ActionResult {
+            request_id: 7, // overflows -> recorded with a worker_overloaded error
+            bot_id: 0,
+            outcome: ActionOutcome::DeliveredSent,
+        });
+
+        resolve_overflowed_callbacks(&lua, &state, &queue);
+
+        let ok: bool = lua.globals().get("ok").unwrap();
+        let code: String = lua.globals().get("code").unwrap();
+        assert!(!ok);
+        assert_eq!(code, "worker_overloaded");
+        assert!(
+            state.callbacks.borrow().pending.is_empty(),
+            "the resolved callback must be removed"
         );
     }
 }

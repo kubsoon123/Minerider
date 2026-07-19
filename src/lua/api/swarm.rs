@@ -249,6 +249,10 @@ impl UserData for LuaSwarm {
                 "queue_dropped_total",
                 this.state.dispatcher.queue_dropped_total(),
             )?;
+            t.set(
+                "queue_critical_overflow_total",
+                this.state.dispatcher.queue_critical_overflow_total(),
+            )?;
             Ok(t)
         });
 

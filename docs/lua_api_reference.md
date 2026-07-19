@@ -142,7 +142,7 @@ never fire (that bot's events never reach this worker's queue).
 | `swarm:stop()` | Same as `disconnect_all()`, plus signals every worker to shut down its dispatch loop. |
 | `swarm:run()` | No-op marker — the persistent per-worker dispatch loop takes over once the script's top-level chunk returns. |
 | `swarm:status() -> table` | `{worker_count, worker_index, is_coordinator, started, bot_count}`. |
-| `swarm:stats() -> table` | `{queue_depth_total, queue_peak_depth_total, queue_dropped_total}` across all workers. |
+| `swarm:stats() -> table` | `{queue_depth_total, queue_peak_depth_total, queue_dropped_total, queue_critical_overflow_total}` across all workers. `queue_dropped_total` is the combined high+low-lane drop count; `queue_critical_overflow_total` is high-lane (critical) drops alone — see [Queue capacity](../docs/lua_wrapper.md#queue-capacity). |
 
 ### Events
 
