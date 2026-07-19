@@ -132,7 +132,20 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         }
         let policy = ReconnectPolicy {
             enabled: true,
-            max_retries: RetryLimit::Count(3),
+            // Unlimited within this scenario's own `settle_timeout` (the real
+            // bound) rather than a fixed count. A fixed `Count(3)` was the last
+            // remaining cause of the Windows-CI-only "one bot never connects"
+            // flake in `proxy_groups_...`: on a contended 2-core runner a bot's
+            // first few connects (especially the SOCKS5-relayed ones) can each
+            // be slow/refused, so it hit RetriesExhausted and gave up *before*
+            // the settle window elapsed — leaving `bots_connected` one short
+            // with no way to recover. The mock server and fake SOCKS5 both now
+            // accept unboundedly (see their comments), so retrying for the whole
+            // window is safe and lets a transiently-unlucky bot still arrive.
+            // Every assertion over this scenario is a lower bound (`>=`), and
+            // the exact-count combined benchmark uses a different config path,
+            // so more attempts can't over-count anything.
+            max_retries: RetryLimit::Unlimited,
             initial_delay: Duration::from_millis(50),
             max_delay: Duration::from_millis(200),
             ..ReconnectPolicy::default()
