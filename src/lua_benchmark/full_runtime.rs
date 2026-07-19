@@ -120,9 +120,25 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
         metrics.clone(),
     ));
 
+    // One bridge task per bot: tracks connect/reconnect and forwards every
+    // relevant BotEvent into the shared Dispatcher.
+    //
+    // `connected_bots` is a *set of distinct bot ids* that have reached
+    // Connected, not a cumulative count of Connected events: a bot that blips
+    // and reconnects (easy on a contended CI runner) fires Connected more than
+    // once, so a plain counter overshoots `bot_count` and made
+    // `assert_eq!(bots_connected, bot_count)` flake with e.g. 7 == 4. A set
+    // dedupes by bot id, so the metric is exactly "how many distinct bots
+    // connected" regardless of reconnect churn.
+    let connected_bots = Arc::new(std::sync::Mutex::new(
+        std::collections::HashSet::<u32>::new(),
+    ));
+    let reconnects_observed = Arc::new(AtomicUsize::new(0));
+
     let mut handles: HashMap<u32, SupervisorHandle> =
         HashMap::with_capacity(config.bot_count as usize);
     let mut supervisor_tasks = Vec::with_capacity(config.bot_count as usize);
+    let mut bridge_tasks: Vec<JoinHandle<()>> = Vec::with_capacity(config.bot_count as usize);
     for bot in 0..config.bot_count {
         let mut cfg = ClientConfig::new("127.0.0.1", server_port, format!("Bot{bot}"))
             .with_chunk_sharing(config.share_chunk_payloads)
@@ -148,26 +164,12 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
             ..ReconnectPolicy::default()
         };
         let (supervisor, handle) = ClientSupervisor::new(cfg, policy);
-        supervisor_tasks.push(tokio::spawn(supervisor.run()));
-        handles.insert(bot, handle);
-    }
-
-    // One bridge task per bot: tracks connect/reconnect and forwards every
-    // relevant BotEvent into the shared Dispatcher.
-    //
-    // `connected_bots` is a *set of distinct bot ids* that have reached
-    // Connected, not a cumulative count of Connected events: a bot that blips
-    // and reconnects (easy on a contended CI runner) fires Connected more than
-    // once, so a plain counter overshoots `bot_count` and made
-    // `assert_eq!(bots_connected, bot_count)` flake with e.g. 7 == 4. A set
-    // dedupes by bot id, so the metric is exactly "how many distinct bots
-    // connected" regardless of reconnect churn.
-    let connected_bots = Arc::new(std::sync::Mutex::new(
-        std::collections::HashSet::<u32>::new(),
-    ));
-    let reconnects_observed = Arc::new(AtomicUsize::new(0));
-    let mut bridge_tasks: Vec<JoinHandle<()>> = Vec::with_capacity(handles.len());
-    for (&bot, handle) in &handles {
+        // Subscribe to this bot's events (spawn_event_bridge calls
+        // `handle.events()` synchronously) *before* starting its supervisor.
+        // Otherwise a fast connect can fire `Connected` into a broadcast
+        // channel with no receiver yet and be lost — the real cause of the
+        // under-count flake (`bots_connected` coming up short because an early
+        // `Connected` was dropped before the bridge subscribed).
         bridge_tasks.push(spawn_event_bridge(
             BotId(bot),
             handle.clone(),
@@ -175,6 +177,8 @@ pub async fn run_full_runtime_scenario(config: SwarmConfig) -> FullRuntimeResult
             connected_bots.clone(),
             reconnects_observed.clone(),
         ));
+        supervisor_tasks.push(tokio::spawn(supervisor.run()));
+        handles.insert(bot, handle);
     }
 
     // Command router: drains Lua-emitted commands and routes them through
