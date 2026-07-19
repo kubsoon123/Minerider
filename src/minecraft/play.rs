@@ -13,19 +13,19 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::play::{
-    clientbound_packet_name,
-    PacketArmAnimation, PacketBlockChange, PacketBlockDig, PacketBlockPlace, PacketChatCommand,
-    PacketChatMessage, PacketChunkBatchFinished, PacketChunkBatchReceived, PacketClientCommand,
-    PacketCloseWindow, PacketCraftProgressBar, PacketCustomPayload, PacketEntityDestroy,
-    PacketEntityHeadRotation, PacketEntityLook, PacketEntityMoveLook, PacketEntityTeleport,
-    PacketEntityVelocity, PacketExperience, PacketGameStateChange, PacketHeldItemSlot,
-    PacketHeldItemSlotServerbound, PacketKeepAlive, PacketLogin, PacketMapChunk,
-    PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
-    PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
-    PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
-    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
-    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseEntity, PacketUseEntityHand,
-    PacketUseEntityX, PacketUseEntityY, PacketUseEntityZ, PacketUseItem, PacketWindowItems,
+    clientbound_packet_name, PacketArmAnimation, PacketBlockChange, PacketBlockDig,
+    PacketBlockPlace, PacketChatCommand, PacketChatMessage, PacketChunkBatchFinished,
+    PacketChunkBatchReceived, PacketClientCommand, PacketCloseWindow, PacketCraftProgressBar,
+    PacketCustomPayload, PacketEntityDestroy, PacketEntityHeadRotation, PacketEntityLook,
+    PacketEntityMoveLook, PacketEntityTeleport, PacketEntityVelocity, PacketExperience,
+    PacketGameStateChange, PacketHeldItemSlot, PacketHeldItemSlotServerbound, PacketKeepAlive,
+    PacketLogin, PacketMapChunk, PacketMultiBlockChange, PacketOpenWindow, PacketPing,
+    PacketPlayerInfo, PacketPlayerInput, PacketPlayerInputInputs, PacketPlayerRemove, PacketPong,
+    PacketPosition, PacketRelEntityMove, PacketRespawn, PacketSetCursorItem,
+    PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition,
+    PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth,
+    PacketUpdateLight, PacketUpdateTime, PacketUseEntity, PacketUseEntityHand, PacketUseEntityX,
+    PacketUseEntityY, PacketUseEntityZ, PacketUseItem, PacketWindowItems,
     CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
     CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CHUNK_BATCH_START_ID,
     CLIENTBOUND_CLOSE_WINDOW_ID, CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
@@ -1792,7 +1792,7 @@ mod tests {
 
     #[test]
     fn strict_packet_errors_include_id_name_and_length() {
-        let packet = RawPacket::new(CLIENTBOUND_SET_PLAYER_INVENTORY_ID, vec![0xff, 0x00]);
+        let packet = RawPacket::new(CLIENTBOUND_SET_PLAYER_INVENTORY_ID, &[0xff, 0x00][..]);
         let error = with_clientbound_context(
             MineRiderError::Wire(minerider_protocol::ProtocolError::InvalidUtf8),
             &packet,
