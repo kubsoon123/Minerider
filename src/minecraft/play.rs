@@ -21,14 +21,13 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketHeldItemSlotServerbound, PacketKeepAlive, PacketLogin, PacketMapChunk,
     PacketMultiBlockChange, PacketOpenWindow, PacketPing, PacketPlayerInfo, PacketPlayerInput,
     PacketPlayerInputInputs, PacketPlayerRemove, PacketPong, PacketPosition, PacketRelEntityMove,
-    PacketResourcePackReceive, PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory,
-    PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
-    PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
-    PacketUpdateTime, PacketUseEntity, PacketUseEntityHand, PacketUseEntityX, PacketUseEntityY,
-    PacketUseEntityZ, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
-    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
-    CLIENTBOUND_CHUNK_BATCH_START_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
-    CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
+    PacketRespawn, PacketSetCursorItem, PacketSetPlayerInventory, PacketSetSlot, PacketSpawnEntity,
+    PacketSyncEntityPosition, PacketTeleportConfirm, PacketTileEntityData, PacketUnloadChunk,
+    PacketUpdateHealth, PacketUpdateLight, PacketUpdateTime, PacketUseEntity, PacketUseEntityHand,
+    PacketUseEntityX, PacketUseEntityY, PacketUseEntityZ, PacketUseItem, PacketWindowItems,
+    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_BLOCK_CHANGE_ID,
+    CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CHUNK_BATCH_START_ID,
+    CLIENTBOUND_CLOSE_WINDOW_ID, CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_CUSTOM_PAYLOAD_ID,
     CLIENTBOUND_ENTITY_DESTROY_ID, CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
     CLIENTBOUND_ENTITY_VELOCITY_ID, CLIENTBOUND_EXPERIENCE_ID, CLIENTBOUND_GAME_STATE_CHANGE_ID,
@@ -79,7 +78,6 @@ use crate::minecraft::presentation::{
 use crate::minecraft::scoreboard::{decode_update as decode_scoreboard_update, ScoreboardState};
 use crate::minecraft::shared_world::SharedWorldContext;
 use crate::minecraft::world::World;
-use crate::minecraft::RESOURCE_PACK_STATUS_DECLINED;
 
 /// Vanilla `game_state_change` reasons this client acts on. Values match the
 /// declaration order of `ClientboundGameEventPacket.Type` in the 1.21.4
@@ -320,6 +318,13 @@ pub struct StateSnapshot {
     pub server_brand: Option<String>,
 }
 
+/// Client options needed throughout play and any mid-session reconfiguration.
+#[derive(Debug, Clone, Copy)]
+pub struct PlayClientSettings {
+    pub view_distance: i8,
+    pub accept_resource_packs: bool,
+}
+
 /// Runs the play-state loop: a `select!` between the packet stream and a
 /// 20 TPS tick. Answers keep-alives, confirms teleports, acknowledges chunk
 /// batches, folds state-only packets into [`PlayState`], reports
@@ -328,7 +333,7 @@ pub struct StateSnapshot {
 pub async fn run_play(
     conn: &mut Connection,
     mut configuration: ConfigurationData,
-    view_distance: i8,
+    client_settings: PlayClientSettings,
     mut control_rx: UnboundedReceiver<BotCommand>,
     state_tx: watch::Sender<StateSnapshot>,
     event_tx: broadcast::Sender<BotEvent>,
@@ -382,6 +387,7 @@ pub async fn run_play(
                         &configuration,
                         &packet,
                         &mut warned_ids,
+                        client_settings.accept_resource_packs,
                     ).await;
                     // Publish promptly on state-changing packets (health, death,
                     // inventory, presentation, entities) rather than waiting up
@@ -458,8 +464,12 @@ pub async fn run_play(
         // which re-sends our brand/settings, processes the server's
         // registry/finish, and leaves the connection back in Play — then loop
         // to rebuild a fresh play session on the new configuration.
-        configuration =
-            crate::minecraft::configuration::run_configuration(conn, view_distance).await?;
+        configuration = crate::minecraft::configuration::run_configuration(
+            conn,
+            client_settings.view_distance,
+            client_settings.accept_resource_packs,
+        )
+        .await?;
         debug!("reconfiguration complete; resuming play");
     }
 }
@@ -1042,6 +1052,7 @@ async fn handle_clientbound(
     configuration: &ConfigurationData,
     packet: &RawPacket,
     warned_ids: &mut std::collections::HashSet<i32>,
+    accept_resource_packs: bool,
 ) -> Result<()> {
     match packet.id {
         CLIENTBOUND_KEEP_ALIVE_ID => {
@@ -1188,15 +1199,13 @@ async fn handle_clientbound(
         CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
             let mut r = PacketReader::new(&packet.payload);
             let pack = PacketCommonAddResourcePack::decode(&mut r)?;
-            debug!(uuid = %pack.uuid, forced = pack.forced, "declining offered resource pack");
-            let response = PacketResourcePackReceive {
-                uuid: pack.uuid,
-                result: RESOURCE_PACK_STATUS_DECLINED,
-            };
-            let mut w = PacketWriter::new();
-            response.encode(&mut w)?;
-            conn.send_packet(SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, &w.freeze())
-                .await?;
+            crate::minecraft::resource_pack::handle_offer(
+                conn,
+                SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+                pack,
+                accept_resource_packs,
+            )
+            .await?;
         }
         CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
             // No client-side pack state to remove and no wire response.

@@ -6,10 +6,9 @@
 
 use minerider_protocol::buffer::{PacketReader, PacketWriter};
 use minerider_protocol::generated::v1_21_4::configuration::{
-    PacketCustomPayload, PacketDisconnect, PacketRegistryData, PacketResourcePackReceive,
-    CLIENTBOUND_ADD_RESOURCE_PACK_ID, CLIENTBOUND_DISCONNECT_ID,
-    CLIENTBOUND_FINISH_CONFIGURATION_ID, CLIENTBOUND_KEEP_ALIVE_ID, CLIENTBOUND_PING_ID,
-    CLIENTBOUND_REGISTRY_DATA_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
+    PacketCustomPayload, PacketDisconnect, PacketRegistryData, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
+    CLIENTBOUND_DISCONNECT_ID, CLIENTBOUND_FINISH_CONFIGURATION_ID, CLIENTBOUND_KEEP_ALIVE_ID,
+    CLIENTBOUND_PING_ID, CLIENTBOUND_REGISTRY_DATA_ID, CLIENTBOUND_REMOVE_RESOURCE_PACK_ID,
     CLIENTBOUND_SELECT_KNOWN_PACKS_ID, SERVERBOUND_CUSTOM_PAYLOAD_ID,
     SERVERBOUND_FINISH_CONFIGURATION_ID, SERVERBOUND_KEEP_ALIVE_ID, SERVERBOUND_PONG_ID,
     SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, SERVERBOUND_SELECT_KNOWN_PACKS_ID,
@@ -22,10 +21,7 @@ use tracing::{debug, warn};
 use crate::core::error::{MineRiderError, Result};
 use crate::core::state::ConnectionState;
 use crate::minecraft::coverage::{clientbound_coverage, CoverageClass};
-use crate::minecraft::{
-    brand_payload, nbt_reason_text, vanilla_client_information, BRAND_CHANNEL,
-    RESOURCE_PACK_STATUS_DECLINED,
-};
+use crate::minecraft::{brand_payload, nbt_reason_text, vanilla_client_information, BRAND_CHANNEL};
 use crate::network::connection::Connection;
 
 /// Safety bound on packets read during configuration.
@@ -177,6 +173,7 @@ fn store_registry(data: &mut ConfigurationData, packet: PacketRegistryData) -> R
 pub async fn run_configuration(
     conn: &mut Connection,
     view_distance: i8,
+    accept_resource_packs: bool,
 ) -> Result<ConfigurationData> {
     send_client_configuration(conn, view_distance).await?;
     let mut data = ConfigurationData::default();
@@ -214,15 +211,13 @@ pub async fn run_configuration(
             CLIENTBOUND_ADD_RESOURCE_PACK_ID => {
                 let mut r = PacketReader::new(&packet.payload);
                 let pack = PacketCommonAddResourcePack::decode(&mut r)?;
-                debug!(uuid = %pack.uuid, forced = pack.forced, "declining offered resource pack");
-                let response = PacketResourcePackReceive {
-                    uuid: pack.uuid,
-                    result: RESOURCE_PACK_STATUS_DECLINED,
-                };
-                let mut w = PacketWriter::new();
-                response.encode(&mut w)?;
-                conn.send_packet(SERVERBOUND_RESOURCE_PACK_RECEIVE_ID, &w.freeze())
-                    .await?;
+                crate::minecraft::resource_pack::handle_offer(
+                    conn,
+                    SERVERBOUND_RESOURCE_PACK_RECEIVE_ID,
+                    pack,
+                    accept_resource_packs,
+                )
+                .await?;
             }
             CLIENTBOUND_REMOVE_RESOURCE_PACK_ID => {
                 // No client-side pack state to remove and no wire response.

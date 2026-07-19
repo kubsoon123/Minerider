@@ -250,13 +250,13 @@ async fn bot_state_reflects_readiness_during_a_real_play_session() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn declines_offered_resource_pack() {
+async fn answers_resource_pack_like_vanilla() {
     let server = MockServer::start_resource_pack().await;
     let cfg = ClientConfig::new("127.0.0.1", server.port, "TraceBot");
     let mut client = Client::connect(&cfg).await.expect("client connect");
     let _ = tokio::time::timeout(Duration::from_secs(5), client.run()).await;
-    // The mock's own assertions (correct id, echoed uuid, declined result)
-    // surface here: a wiring mistake fails the mock, not just a silent hang.
+    // The mock's assertions verify ACCEPTED then INVALID_URL and the UUID in
+    // both configuration and play state.
     server
         .finish()
         .await

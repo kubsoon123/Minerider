@@ -44,11 +44,14 @@ end)
 | `write_timeout_ms` | number | `10000` |
 | `connect_deadline_ms` | number | `15000` |
 | `shared_chunks` | boolean | `true` |
+| `accept_resource_packs` | boolean | `true` |
 
 Returns `(true, nil)` on success or `(nil, error_table)` — see
 [Errors](#errors). `shared_chunks` maps directly to
 `ClientConfig::with_chunk_sharing`; sharing scope is always derived from
 `host`/`port` only, regardless of any bot's proxy.
+`accept_resource_packs` downloads and validates server packs using the vanilla
+status sequence; set it to `false` to answer `DECLINED`.
 
 **There is no `swarm:add_proxy`.** Proxy endpoints and credentials are
 never Lua-constructible — calling `swarm:add_proxy(table)` (kept callable

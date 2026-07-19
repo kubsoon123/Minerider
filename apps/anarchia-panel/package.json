@@ -1,0 +1,24 @@
+{
+  "name": "minerider-anarchia-panel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Panel sterowania swarmem MineRider z runtime Lua.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node scripts/check.js",
+    "test": "node --test",
+    "migrate": "node scripts/migrate-config.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "luaparse": "^0.3.1"
+  }
+}
