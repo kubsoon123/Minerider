@@ -691,12 +691,23 @@ async fn handle_clientbound(
             confirm.encode(&mut w)?;
             conn.send_packet(SERVERBOUND_TELEPORT_CONFIRM_ID, &w.freeze())
                 .await?;
+            // Vanilla's `handleMovePlayer` sends a full position+rotation
+            // packet immediately after the teleport confirm — for every
+            // teleport, including this initial spawn one before the world is
+            // loaded — so the server hears the client's acknowledged
+            // absolute position, not just the numeric confirm. Resyncs the
+            // movement baseline so the next tick doesn't resend it.
+            let ack_move = state.player.teleport_ack_movement();
+            let mut w = PacketWriter::new();
+            ack_move.encode(&mut w)?;
+            conn.send_packet(SERVERBOUND_POSITION_LOOK_ID, &w.freeze())
+                .await?;
             debug!(
                 x = state.player.position.x,
                 y = state.player.position.y,
                 z = state.player.position.z,
                 teleport_id = sync.teleport_id,
-                "confirmed teleport"
+                "confirmed teleport and sent position_look"
             );
         }
         CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => {

@@ -361,11 +361,11 @@ async fn run_server(
                     ensure(packet.payload.is_empty(), "player_loaded must be empty")?;
                     saw_player_loaded = true;
                 }
-                other => {
-                    return Err(MineRiderError::Protocol(format!(
-                        "mock server: unexpected readiness packet 0x{other:02x}"
-                    )));
-                }
+                // Vanilla sends a full position_look immediately after the
+                // teleport confirm, plus its ordinary per-tick movement /
+                // tick_end / player_input once loaded — all legitimately
+                // interleave with the readiness acks above.
+                _ => ensure_vanilla_movement(&packet)?,
             }
         }
     }

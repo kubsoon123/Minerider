@@ -339,5 +339,24 @@ async fn scenario_4_teleport_correction() {
         find_field(position, "teleport_id"),
         "teleport_confirm must echo the server's teleport id"
     );
+
+    // Vanilla follows the confirm with a full position_look reporting the
+    // acknowledged absolute position; it must appear after the confirm.
+    let confirm_idx = captured
+        .iter()
+        .position(|e| e.dir == Direction::Serverbound && e.state == "play" && e.id == 0)
+        .expect("teleport_confirm index");
+    let pos_look_idx = captured
+        .iter()
+        .position(|e| {
+            e.dir == Direction::Serverbound
+                && e.state == "play"
+                && e.id == play::SERVERBOUND_POSITION_LOOK_ID
+        })
+        .expect("position_look after teleport confirm");
+    assert!(
+        pos_look_idx > confirm_idx,
+        "the post-teleport position_look must follow the teleport_confirm"
+    );
     check_fixture("teleport_correction", &captured);
 }
