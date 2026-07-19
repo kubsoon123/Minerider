@@ -388,9 +388,13 @@ async fn run_server(
             )?;
             let mut r = PacketReader::new(&ack.payload);
             let chunks_per_tick = r.get_f32()?;
+            // Vanilla's adaptive pacing: a positive, finite rate derived from
+            // how long the batch took to process (7ms budget / nanos-per-chunk,
+            // clamped), no longer a naive echo of the batch size. The exact
+            // value depends on wall-clock timing, so assert only the invariant.
             ensure(
-                chunks_per_tick == 1.0,
-                format!("chunks_per_tick {chunks_per_tick}, expected 1.0 (batch size)"),
+                chunks_per_tick.is_finite() && chunks_per_tick > 0.0,
+                format!("chunks_per_tick {chunks_per_tick} must be finite and positive"),
             )?;
             conn.close().await?;
             return Ok(());

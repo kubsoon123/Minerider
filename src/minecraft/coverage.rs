@@ -380,12 +380,14 @@ fn play_coverage(id: i32) -> CoverageEntry {
             scenario: "teleport_correction",
             evidence: EVIDENCE_VALIDATED,
         }),
-        play::CLIENTBOUND_CHUNK_BATCH_START_ID => ignored(not_implemented(
-            None,
-            TimingClass::None,
-            "begin chunk batch",
-            "initial_chunks",
-        )),
+        play::CLIENTBOUND_CHUNK_BATCH_START_ID => handled(Obligation {
+            responds_with: None,
+            timing: TimingClass::None,
+            state_update: "start timing the batch for adaptive chunks-per-tick pacing",
+            status: ConformanceStatus::Partial,
+            scenario: "initial_chunks",
+            evidence: EVIDENCE_UNIT,
+        }),
         play::CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => handled(Obligation {
             responds_with: Some("chunk_batch_received"),
             timing: TimingClass::Strict,

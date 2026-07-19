@@ -61,7 +61,7 @@ or lose an id.
 | 10 | boss_bar | handled | — | — | apply bounded add/update/remove state by stable uuid and emit event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 11 | difficulty | handled | — | — | store difficulty and server lock state; emit HUD event | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 12 | chunk_batch_finished | handled | chunk_batch_received | strict | acknowledge batch with desired chunks-per-tick | PARTIAL | initial_chunks | mock + Paper 1.21.4 b232 + vanilla 1.21.4 server; vanilla client capture pending |
-| 13 | chunk_batch_start | ignored | — | — | begin chunk batch | NOT IMPLEMENTED | initial_chunks | none |
+| 13 | chunk_batch_start | handled | — | — | start timing the batch for adaptive chunks-per-tick pacing | PARTIAL | initial_chunks | unit-tested state projection; mock/vanilla capture pending |
 | 14 | chunk_biomes | ignored | — | — | none | NOT IMPLEMENTED |  | none |
 | 15 | clear_titles | handled | — | — | clear title/subtitle; reset default timings only when requested | PARTIAL |  | unit-tested state projection; mock/vanilla capture pending |
 | 16 | tab_complete | ignored | — | — | none | NOT IMPLEMENTED |  | none |

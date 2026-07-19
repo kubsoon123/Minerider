@@ -24,7 +24,8 @@ use minerider_protocol::generated::v1_21_4::play::{
     PacketSetSlot, PacketSpawnEntity, PacketSyncEntityPosition, PacketTeleportConfirm,
     PacketTileEntityData, PacketUnloadChunk, PacketUpdateHealth, PacketUpdateLight,
     PacketUpdateTime, PacketUseItem, PacketWindowItems, CLIENTBOUND_ADD_RESOURCE_PACK_ID,
-    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
+    CLIENTBOUND_BLOCK_CHANGE_ID, CLIENTBOUND_CHUNK_BATCH_FINISHED_ID,
+    CLIENTBOUND_CHUNK_BATCH_START_ID, CLIENTBOUND_CLOSE_WINDOW_ID,
     CLIENTBOUND_CRAFT_PROGRESS_BAR_ID, CLIENTBOUND_ENTITY_DESTROY_ID,
     CLIENTBOUND_ENTITY_HEAD_ROTATION_ID, CLIENTBOUND_ENTITY_LOOK_ID,
     CLIENTBOUND_ENTITY_MOVE_LOOK_ID, CLIENTBOUND_ENTITY_TELEPORT_ID,
@@ -134,6 +135,12 @@ pub struct PlayState {
     /// keys) every session, matching the server's assumption for a freshly
     /// joined player, so an idle bot sends nothing.
     last_player_input: u8,
+    /// Vanilla's adaptive chunk-batch pacing estimate; drives the
+    /// `chunks_per_tick` sent in `chunk_batch_received`.
+    chunk_batch: crate::minecraft::chunk_batch::ChunkBatchSizeCalculator,
+    /// When the current chunk batch started processing (`chunk_batch_start`),
+    /// used to time it at `chunk_batch_finished`. `None` outside a batch.
+    chunk_batch_started_at: Option<std::time::Instant>,
 }
 
 /// Vanilla `ClientCommandPacket.Action.PERFORM_RESPAWN`: click the death
@@ -174,6 +181,8 @@ impl PlayState {
             was_alive: true,
             next_action_sequence: 0,
             last_player_input: 0,
+            chunk_batch: crate::minecraft::chunk_batch::ChunkBatchSizeCalculator::default(),
+            chunk_batch_started_at: None,
         }
     }
 
@@ -710,20 +719,39 @@ async fn handle_clientbound(
                 "confirmed teleport and sent position_look"
             );
         }
+        CLIENTBOUND_CHUNK_BATCH_START_ID => {
+            // Marks the start of a chunk batch: vanilla times how long the
+            // batch takes to process to pace the next one (see
+            // `chunk_batch::ChunkBatchSizeCalculator`).
+            state.chunk_batch_started_at = Some(std::time::Instant::now());
+        }
         CLIENTBOUND_CHUNK_BATCH_FINISHED_ID => {
             let mut r = PacketReader::new(&packet.payload);
             let finished = PacketChunkBatchFinished::decode(&mut r)?;
-            // Vanilla reports the desired chunks-per-tick rate; with no chunk
-            // processing of our own yet, the batch size is the correct
-            // initial value (we acknowledged it immediately).
-            let ack = PacketChunkBatchReceived {
-                chunks_per_tick: finished.batch_size as f32,
-            };
+            // Vanilla's chunk-batch pacing: report an adaptive
+            // `chunks_per_tick` (7ms budget / measured nanos-per-chunk),
+            // clamped and rolling-averaged, so a fast client is fed faster
+            // and a slow one throttled — not a naive echo of the batch size.
+            // Fall back to a zero-length elapsed if we never saw the matching
+            // start (the estimate then just carries its current value).
+            let elapsed = state
+                .chunk_batch_started_at
+                .take()
+                .map(|start| start.elapsed())
+                .unwrap_or_default();
+            state
+                .chunk_batch
+                .record_batch(elapsed, finished.batch_size.max(0) as u32);
+            let chunks_per_tick = state.chunk_batch.desired_chunks_per_tick();
+            let ack = PacketChunkBatchReceived { chunks_per_tick };
             let mut w = PacketWriter::new();
             ack.encode(&mut w)?;
             conn.send_packet(SERVERBOUND_CHUNK_BATCH_RECEIVED_ID, &w.freeze())
                 .await?;
-            debug!(batch_size = finished.batch_size, "acknowledged chunk batch");
+            debug!(
+                batch_size = finished.batch_size,
+                chunks_per_tick, "acknowledged chunk batch"
+            );
         }
         CLIENTBOUND_MAP_CHUNK_ID => {
             let mut r = PacketReader::new(&packet.payload);
