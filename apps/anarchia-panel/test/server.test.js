@@ -38,6 +38,12 @@ test('panel udostępnia konfigurację, snapshot i nowy interfejs', async (contex
   const snapshotResponse = await fetch(base + '/api/swarm');
   const snapshot = await snapshotResponse.json();
   assert.equal(snapshot.running, false);
+  assert.equal(snapshot.lastError, null);
+
+  const eventsResponse = await fetch(base + '/api/accounts/WebBot01/events');
+  const events = await eventsResponse.json();
+  assert.equal(events.username, 'WebBot01');
+  assert.deepEqual(events.events, []);
 
   const htmlResponse = await fetch(base + '/');
   const html = await htmlResponse.text();

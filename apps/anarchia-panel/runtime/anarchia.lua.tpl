@@ -58,6 +58,14 @@ local function emit(bot, status, message, extra)
     minerider.info("@panel:" .. json_encode(event))
 end
 
+-- No bot object exists yet during swarm:configure (add_server/add_bot can
+-- fail before any bot is created), so this is a distinct, bot-less "scope"
+-- the panel routes to its swarm-wide error slot instead of a per-account
+-- status. Called immediately before the `error()` that aborts configure().
+local function emit_fatal(message, code)
+    minerider.error("@panel:" .. json_encode({scope = "swarm", status = "fatal_error", code = code, message = message, level = "error"}))
+end
+
 local function normalize(value)
     local text = string.lower(tostring(value or ""))
     text = string.gsub(text, "ą", "a")
@@ -243,7 +251,10 @@ swarm:configure(function()
         shared_chunks = CONFIG.server.sharedChunks,
         accept_resource_packs = CONFIG.server.acceptResourcePacks,
     })
-    if not ok then error(err.message) end
+    if not ok then
+        emit_fatal("Nie udało się dodać serwera " .. tostring(CONFIG.server.name) .. ": " .. tostring(err.message), err.code)
+        error(err.message)
+    end
 
     local reconnect = {
         enabled = CONFIG.reconnect.enabled,
@@ -266,7 +277,10 @@ swarm:configure(function()
             server = CONFIG.server.name,
             reconnect = reconnect,
         })
-        if not bot_id then error(bot_err.message) end
+        if not bot_id then
+            emit_fatal("Nie udało się dodać konta " .. tostring(account.username) .. ": " .. tostring(bot_err.message), bot_err.code)
+            error(bot_err.message)
+        end
     end
 end)
 

@@ -10,6 +10,28 @@ const { buildLuaScript } = require('./lua');
 const APP_ROOT = path.resolve(__dirname, '..');
 const PANEL_MARKER = '@panel:';
 const MAX_LOG_LINES = 1000;
+const MAX_ACCOUNT_HISTORY = 50;
+
+// The Rust binary (src/bin/minerider_lua.rs) consistently prefixes every one
+// of its own top-level failures with "error: " on stderr — before the Lua
+// runtime, or even the script file, has been read at all. These patterns
+// turn that free text into a stable `code` so the panel's API/UI can show
+// *why* a run failed without the operator having to read the raw line.
+// Order matters: matched top-to-bottom, first match wins.
+const PROCESS_ERROR_PATTERNS = [
+  { code: 'invalid_arguments', re: /^error: (unrecognized argument|--lua-workers must be|a script path is required)/ },
+  { code: 'script_read_failed', re: /^error: could not read script/ },
+  { code: 'proxy_profile_invalid', re: /^error: proxy profile configuration failed/ },
+  { code: 'tokio_start_failed', re: /^error: could not start the tokio runtime/ },
+  { code: 'swarm_start_failed', re: /^error: swarm failed to start/ }
+];
+
+function classifyProcessError(line) {
+  for (const { code, re } of PROCESS_ERROR_PATTERNS) {
+    if (re.test(line)) return code;
+  }
+  return line.startsWith('error: ') ? 'process_error' : null;
+}
 
 class RuntimeManager extends EventEmitter {
   constructor(options = {}) {
@@ -19,6 +41,8 @@ class RuntimeManager extends EventEmitter {
     this.startedAt = null;
     this.stopping = false;
     this.accounts = new Map();
+    this.accountHistory = new Map();
+    this.lastError = null;
     this.logs = [];
     this.logDir = null;
     this.logFiles = null;
@@ -45,8 +69,32 @@ class RuntimeManager extends EventEmitter {
       logDirectory: this.logDir,
       counts,
       accounts,
+      lastError: this.lastError,
       logs: this.logs.slice(-250)
     };
+  }
+
+  /** Bounded recent event history for one account — the API-queryable
+   * counterpart to scrolling the combined text log for a single username. */
+  getAccountEvents(username) {
+    return this.accountHistory.get(String(username || '')) || [];
+  }
+
+  /** Records the most recent fatal/structured failure that is not (or not
+   * only) attributable to a single account — a crashed process, a rejected
+   * CLI argument, a `swarm:configure` failure before any bot connected, etc.
+   * Kept as one field (not a log) so the API/UI can show "why did this run
+   * fail" without re-deriving it from free text. */
+  recordFatalError(entry) {
+    this.lastError = entry;
+    this.emitSnapshot();
+  }
+
+  recordAccountEvent(username, entry) {
+    if (!this.accountHistory.has(username)) this.accountHistory.set(username, []);
+    const list = this.accountHistory.get(username);
+    list.push(entry);
+    if (list.length > MAX_ACCOUNT_HISTORY) list.splice(0, list.length - MAX_ACCOUNT_HISTORY);
   }
 
   async start(config, requestedUsernames = null) {
@@ -70,6 +118,8 @@ class RuntimeManager extends EventEmitter {
 
     const binary = await resolveExecutable(path.resolve(APP_ROOT, config.runtime.binary));
     this.accounts.clear();
+    this.accountHistory.clear();
+    this.lastError = null;
     for (const account of accounts) {
       this.accounts.set(account.username, {
         username: account.username,
@@ -78,7 +128,8 @@ class RuntimeManager extends EventEmitter {
         message: 'Oczekuje na start procesu',
         updatedAt: new Date().toISOString(),
         workerId: null,
-        reconnectAttempt: null
+        reconnectAttempt: null,
+        lastError: null
       });
     }
     this.logs = [];
@@ -155,25 +206,68 @@ class RuntimeManager extends EventEmitter {
         this.pushLog('warn', `Nieprawidłowe zdarzenie panelu: ${error.message}`);
       }
     }
+    // A `scope: 'swarm'`/`'account'` error (from the Lua template's own
+    // `emit`/`emit_fatal`) is always more specific than this regex guess
+    // over the Rust binary's own top-level `eprintln!` text — and when both
+    // fire for the same failure, the generic one is always the *later*
+    // line (Lua reports first, then the process unwinds and exits). Never
+    // let it clobber an already-attributed reason with a vaguer one.
+    if (source === 'stderr' && (!this.lastError || this.lastError.scope === 'process')) {
+      const code = classifyProcessError(line);
+      if (code) {
+        this.recordFatalError({
+          scope: 'process',
+          username: null,
+          code,
+          message: redact(line),
+          at: new Date().toISOString()
+        });
+      }
+    }
     const level = source === 'stderr' || /\b(error|failed|panic)\b/i.test(line) ? 'error' : /\bwarn\b/i.test(line) ? 'warn' : 'info';
     this.pushLog(level, redact(line));
   }
 
   handlePanelEvent(event) {
     if (!event || typeof event !== 'object') return;
+    const at = new Date().toISOString();
+
+    // A swarm-scoped event (no single bot exists yet — e.g. `swarm:configure`
+    // rejected a server/bot definition before `connect_all()`) carries no
+    // `username`; route it straight to the structured fatal-error slot
+    // instead of being silently dropped by the account lookup below.
+    if (event.scope === 'swarm') {
+      const message = String(event.message || event.status || 'Błąd konfiguracji swarmu');
+      this.recordFatalError({
+        scope: 'swarm',
+        username: null,
+        code: String(event.code || event.status || 'swarm_error'),
+        message: redact(message),
+        at
+      });
+      this.pushLog(event.level || 'error', message);
+      return;
+    }
+
     const username = String(event.username || '');
     const current = this.accounts.get(username);
     if (!current) return;
+    const status = String(event.status || current.status);
+    const message = String(event.message || '');
+    const isError = ['error', 'kicked'].includes(status);
     const next = {
       ...current,
-      status: String(event.status || current.status),
-      message: String(event.message || ''),
-      updatedAt: new Date().toISOString(),
+      status,
+      message,
+      updatedAt: at,
       workerId: Number.isInteger(event.worker_id) ? event.worker_id : current.workerId,
-      reconnectAttempt: Number.isInteger(event.attempt) ? event.attempt : null
+      reconnectAttempt: Number.isInteger(event.attempt) ? event.attempt : null,
+      lastError: isError ? { code: String(event.code || status), message, at } : current.lastError
     };
     this.accounts.set(username, next);
     this.persistBotEvent(username, next, event);
+    this.recordAccountEvent(username, { at, status, message, level: event.level || 'info' });
+    if (isError) this.recordFatalError({ scope: 'account', username, code: next.lastError.code, message, at });
     this.pushLog(event.level || 'info', `[${username}] ${next.message || next.status}`, false);
     this.emitSnapshot();
   }
@@ -184,6 +278,15 @@ class RuntimeManager extends EventEmitter {
     const expected = this.stopping;
     this.stopping = false;
     this.pushLog(expected ? 'info' : 'error', `Runtime zakończył pracę (kod=${code ?? '-'}, sygnał=${signal || '-'}).`);
+    if (!expected && !this.lastError) {
+      this.recordFatalError({
+        scope: 'process',
+        username: null,
+        code: 'process_exit',
+        message: `Proces zakończył się nieoczekiwanie (kod=${code ?? '-'}, sygnał=${signal || '-'}).`,
+        at: new Date().toISOString()
+      });
+    }
     this.markAllRunning(expected ? 'stopped' : 'error', expected ? 'Zatrzymano przez operatora' : 'Proces zakończył się nieoczekiwanie');
     const tempDir = this.tempDir;
     this.tempDir = null;
@@ -344,4 +447,14 @@ function formatDiagnostic(at, source, message) {
   return `[${at}] [${source}] ${redact(String(message || ''))}\n`;
 }
 
-module.exports = { PANEL_MARKER, RuntimeManager, attachLineReader, extractPanelJson, redact, resolveExecutable, safeLogName, stripAnsi };
+module.exports = {
+  PANEL_MARKER,
+  RuntimeManager,
+  attachLineReader,
+  classifyProcessError,
+  extractPanelJson,
+  redact,
+  resolveExecutable,
+  safeLogName,
+  stripAnsi
+};

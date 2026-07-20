@@ -84,6 +84,15 @@ tbody tr:hover { background: rgba(255,255,255,.018); }
 .status-error, .status-kicked { color: var(--red); background: rgba(255,102,120,.1); }
 .status-verification_required, .status-needs_registration, .status-needs_password { color: var(--amber); background: rgba(245,185,66,.1); }
 .empty-state { padding: 70px 20px; color: var(--muted); text-align: center; }
+.table-hint { margin: 0; padding: 10px 22px 16px; color: var(--muted); font-size: 11px; }
+.account-row { cursor: pointer; }
+.error-banner { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; padding: 15px 18px; border: 1px solid rgba(255,102,120,.25); border-radius: 16px; background: rgba(255,102,120,.09); }
+.error-banner-code { display: block; font: 700 10px/1 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .08em; color: var(--red); margin-bottom: 4px; }
+.error-banner p { margin: 0; color: #ffd5da; font-size: 13px; }
+.account-events { max-height: 60vh; overflow: auto; padding: 14px 26px 24px; background: rgba(2,4,8,.33); font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.account-events .log-line { display: grid; grid-template-columns: 68px 110px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,.035); }
+.account-events .log-line time { color: #566174; }
+.account-events .log-message { color: #b9c2cf; word-break: break-word; }
 .log-panel { display: flex; min-height: 580px; flex-direction: column; }
 .log-output { flex: 1; max-height: 570px; overflow: auto; padding: 14px 16px 24px; background: rgba(2,4,8,.33); font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .log-line { display: grid; grid-template-columns: 68px 43px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,.035); }

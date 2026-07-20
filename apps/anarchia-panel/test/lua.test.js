@@ -22,5 +22,7 @@ test('generator tworzy poprawny składniowo skrypt wrappera', async () => {
   assert.match(script, /bot:click_gui/);
   assert.match(script, /verification_required/);
   assert.match(script, /accept_resource_packs\s*=\s*CONFIG\.server\.acceptResourcePacks/);
+  assert.match(script, /emit_fatal/);
+  assert.match(script, /scope\s*=\s*"swarm"/);
   luaparse.parse(script, { luaVersion: '5.3' });
 });

@@ -7,7 +7,9 @@ const elements = Object.fromEntries([
   'cancelSettingsButton', 'serverHost', 'serverPort', 'viewDistance', 'runtimeBinary',
   'runtimeWorkers', 'sharedChunks', 'acceptResourcePacks', 'accountsInput', 'searchInput', 'selectAllButton',
   'masterCheckbox', 'accountsBody', 'emptyAccounts', 'logOutput', 'clearLogsButton', 'downloadLogsButton',
-  'metricOnline', 'metricConnecting', 'metricAttention', 'metricOffline', 'toast'
+  'metricOnline', 'metricConnecting', 'metricAttention', 'metricOffline', 'toast',
+  'errorBanner', 'errorBannerCode', 'errorBannerMessage', 'errorBannerClose',
+  'accountDialog', 'accountDialogTitle', 'accountDialogEvents', 'closeAccountDialogButton'
 ].map((id) => [id, document.getElementById(id)]));
 
 let config = null;
@@ -20,6 +22,7 @@ let snapshot = {
 };
 let selected = new Set();
 let toastTimer = null;
+let dismissedErrorAt = null;
 
 socket.on('connect', () => {
   elements.connectionBadge.classList.add('online');
@@ -68,6 +71,11 @@ elements.settingsButton.addEventListener('click', openSettings);
 elements.closeSettingsButton.addEventListener('click', () => elements.settingsDialog.close());
 elements.cancelSettingsButton.addEventListener('click', () => elements.settingsDialog.close());
 elements.settingsForm.addEventListener('submit', saveSettings);
+elements.errorBannerClose.addEventListener('click', () => {
+  dismissedErrorAt = snapshot.lastError?.at || null;
+  renderErrorBanner();
+});
+elements.closeAccountDialogButton.addEventListener('click', () => elements.accountDialog.close());
 
 async function requestStart(usernames) {
   await runAction('/api/swarm/start', usernames ? { usernames } : {}, 'Uruchamianie runtime MineRider…');
@@ -111,6 +119,19 @@ function render() {
   elements.settingsButton.disabled = snapshot.running;
   renderAccounts();
   renderLogs();
+  renderErrorBanner();
+}
+
+function renderErrorBanner() {
+  const error = snapshot.lastError;
+  if (!error || error.at === dismissedErrorAt) {
+    elements.errorBanner.hidden = true;
+    return;
+  }
+  elements.errorBanner.hidden = false;
+  const scopeLabel = error.scope === 'account' && error.username ? `Konto ${error.username}` : 'Runtime';
+  elements.errorBannerCode.textContent = `${scopeLabel} · ${error.code}`;
+  elements.errorBannerMessage.textContent = error.message;
 }
 
 function mergedAccounts() {
@@ -136,6 +157,7 @@ function renderAccounts() {
   elements.emptyAccounts.hidden = accounts.length > 0;
   for (const account of accounts) {
     const row = document.createElement('tr');
+    row.className = 'account-row';
     row.append(
       cellWithCheckbox(account),
       textCell(account.username, account.workerId === null ? (account.enabled ? 'aktywny' : 'wyłączony') : 'worker ' + account.workerId, 'account-name'),
@@ -143,6 +165,10 @@ function renderAccounts() {
       badgeCell(statusLabel(account.status), 'status-badge status-' + safeClass(account.status)),
       textCell(account.message, account.updatedAt ? formatTime(account.updatedAt) : '—')
     );
+    row.addEventListener('click', (event) => {
+      if (event.target.closest('input')) return;
+      openAccountDialog(account.username);
+    });
     elements.accountsBody.append(row);
   }
   const enabledVisible = accounts.filter((account) => account.enabled);
@@ -208,6 +234,43 @@ function appendLog(entry, scroll = true) {
   elements.logOutput.append(row);
   while (elements.logOutput.childElementCount > 400) elements.logOutput.firstElementChild.remove();
   if (scroll) elements.logOutput.scrollTop = elements.logOutput.scrollHeight;
+}
+
+async function openAccountDialog(username) {
+  elements.accountDialogTitle.textContent = username;
+  elements.accountDialogEvents.replaceChildren();
+  elements.accountDialog.showModal();
+  try {
+    const response = await fetch('/api/accounts/' + encodeURIComponent(username) + '/events');
+    const result = await response.json();
+    const events = Array.isArray(result.events) ? result.events : [];
+    if (events.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Brak zarejestrowanych zdarzeń dla tego konta.';
+      elements.accountDialogEvents.append(empty);
+      return;
+    }
+    for (const entry of events.slice().reverse()) {
+      const row = document.createElement('div');
+      row.className = 'log-line ' + safeClass(entry.level || 'info');
+      const time = document.createElement('time');
+      time.textContent = formatTime(entry.at);
+      const status = document.createElement('span');
+      status.className = 'log-level';
+      status.textContent = statusLabel(entry.status);
+      const message = document.createElement('span');
+      message.className = 'log-message';
+      message.textContent = entry.message || '';
+      row.append(time, status, message);
+      elements.accountDialogEvents.append(row);
+    }
+  } catch (error) {
+    const failure = document.createElement('p');
+    failure.className = 'muted';
+    failure.textContent = 'Nie udało się wczytać historii: ' + error.message;
+    elements.accountDialogEvents.append(failure);
+  }
 }
 
 function openSettings() {

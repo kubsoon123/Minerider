@@ -22,6 +22,11 @@
     </header>
 
     <main>
+      <div id="errorBanner" class="error-banner" hidden role="alert">
+        <div><span id="errorBannerCode" class="error-banner-code"></span><p id="errorBannerMessage"></p></div>
+        <button id="errorBannerClose" class="icon-button" type="button" aria-label="Zamknij">×</button>
+      </div>
+
       <section class="hero-card">
         <div>
           <p class="eyebrow">RUNTIME LUA / MINECRAFT 1.21.4</p>
@@ -58,6 +63,7 @@
             </table>
             <div id="emptyAccounts" class="empty-state" hidden>Dodaj konta w konfiguracji, aby rozpocząć.</div>
           </div>
+          <p class="table-hint">Kliknij konto, aby zobaczyć jego historię zdarzeń.</p>
         </article>
 
         <article class="panel log-panel">
@@ -73,6 +79,11 @@
       </section>
     </main>
   </div>
+
+  <dialog id="accountDialog">
+    <div class="dialog-head"><div><p class="eyebrow">KONTO</p><h3 id="accountDialogTitle">—</h3></div><button id="closeAccountDialogButton" class="icon-button" type="button" aria-label="Zamknij">×</button></div>
+    <div id="accountDialogEvents" class="account-events"></div>
+  </dialog>
 
   <dialog id="settingsDialog">
     <form id="settingsForm" method="dialog">

@@ -40,6 +40,9 @@ async function createPanel() {
     response.json(await runtime.stop());
   }));
   app.get('/api/swarm', (_request, response) => response.json(runtime.getSnapshot()));
+  app.get('/api/accounts/:username/events', (request, response) => {
+    response.json({ username: request.params.username, events: runtime.getAccountEvents(request.params.username) });
+  });
   app.get('/api/logs/download', asyncHandler(async (_request, response) => {
     await runtime.flushLogs();
     const logPath = runtime.getDownloadLogPath();
